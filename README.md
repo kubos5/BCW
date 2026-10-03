@@ -3,7 +3,7 @@ Un client iOS nativo per il registro elettronico [Classeviva](https://web.spaggi
 
 > BCW non è affiliato a Gruppo Spaggiari Parma S.p.A.
 
-### Funzioni
+## Funzioni
 
 BCW ha **parità di funzioni** con il client ufficiale di classeiviva, più extra:
 
@@ -32,7 +32,9 @@ Vengono usati colori morbidi (`#F7F2E8` per lo sfondo chiaro, `#1E1D1C` per lo s
 - Xcode 26 o successivo
 - iOS / iPadOS 26 o successivo
 
-### Installazione
+---
+
+## Installazione
 
 Finché l'app non sarà disponibile su App Store, consiglio usare [AltStore](https://altstore.io/) per firmare l'IPA.
 
@@ -52,7 +54,9 @@ Altrimenti, puoi compilarla in Xcode:
 Il progetto usa le cartelle sincronizzate di Xcode 16, quindi qualsiasi file aggiunto in `BCW/` entra automaticamente nel target.
 In alternativa è incluso un `project.yml` per [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
-### Come funziona
+---
+
+## Come funziona
 
 BCW usa le stesse API REST usate dall'app ufficiale di Classeviva (`https://web.spaggiari.eu/rest/v1`), come il progetto per Windows [ClassevivaPCTO](https://github.com/Gabboxl/ClassevivaPCTO) a cui si ispira.
 
@@ -74,6 +78,8 @@ BCW/
 └── Features/       Dashboard, Voti, Tu (e sottosezioni), Cerca, Impostazioni, Login
 ```
 
-### Licenza
+---
+
+## Licenza
 
 Distribuito con licenza MIT. Vedi [LICENSE](LICENSE).
