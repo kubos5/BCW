@@ -148,7 +148,7 @@ struct CollapsibleCard<Content: View>: View {
     private var isCollapsed: Bool { model.preferences.isCollapsed(section) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 0) {
             Button {
                 withAnimation(.snappy) { model.preferences.toggleCollapsed(section) }
             } label: {
@@ -169,13 +169,12 @@ struct CollapsibleCard<Content: View>: View {
                 }
                 .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HeaderButtonStyle())
             .accessibilityHint(isCollapsed ? "Espande la sezione" : "Comprime la sezione")
             .sensoryFeedback(.selection, trigger: isCollapsed)
 
-            if !isCollapsed {
-                content()
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+            CollapsibleContent(isExpanded: !isCollapsed, spacing: 14) {
+                VStack(alignment: .leading, spacing: 14) { content() }
             }
         }
         .card()

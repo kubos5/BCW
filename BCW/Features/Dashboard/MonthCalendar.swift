@@ -5,6 +5,9 @@ struct MonthCalendar: View {
     @Binding var selectedDay: Date
     /// Mese mostrato: segue lo scorrimento orizzontale a pagine.
     @State private var visibleMonth: Date?
+    /// Settimane mostrate: aggiornate con un'animazione, così il resto della pagina
+    /// sale o scende insieme al calendario invece di scattare.
+    @State private var rowCount: Int
 
     private static let cellHeight: CGFloat = 44
     private static let rowSpacing: CGFloat = 4
@@ -18,7 +21,9 @@ struct MonthCalendar: View {
 
     init(selectedDay: Binding<Date>) {
         _selectedDay = selectedDay
-        _visibleMonth = State(initialValue: Self.month(containing: selectedDay.wrappedValue))
+        let month = Self.month(containing: selectedDay.wrappedValue)
+        _visibleMonth = State(initialValue: month)
+        _rowCount = State(initialValue: Self.rows(of: month).count)
     }
 
     private static func month(containing day: Date) -> Date {
@@ -40,9 +45,9 @@ struct MonthCalendar: View {
 
     private var currentMonth: Date { visibleMonth ?? selectedDay.startOfMonth }
 
-    /// L'altezza segue il numero di settimane del mese visibile (4–6).
+    /// L'altezza segue il numero di settimane del mese visibile (4-6).
     private var gridHeight: CGFloat {
-        let count = CGFloat(Self.rows(of: currentMonth).count)
+        let count = CGFloat(rowCount)
         return count * Self.cellHeight + (count - 1) * Self.rowSpacing
     }
 
@@ -90,13 +95,16 @@ struct MonthCalendar: View {
             .scrollPosition(id: $visibleMonth)
             .scrollIndicators(.hidden)
             .frame(height: gridHeight, alignment: .top)
-            .animation(.snappy, value: gridHeight)
 
             legend
                 .padding(.horizontal, 14)
         }
         .padding(.vertical, 14)
         .card(padding: 0)
+        .onChange(of: visibleMonth) { _, month in
+            let count = Self.rows(of: month ?? currentMonth).count
+            if count != rowCount { withAnimation(.snappy) { rowCount = count } }
+        }
         .onChange(of: selectedDay) { _, day in
             let month = Self.month(containing: day)
             if !currentMonth.isSameDay(as: month) {

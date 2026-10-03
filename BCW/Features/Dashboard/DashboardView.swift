@@ -51,9 +51,12 @@ struct DashboardView: View {
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
 
                     if mode == .list && model.preferences.showUpcomingDays {
+                        // Stessa transizione del contenuto del giorno: cambia insieme a esso.
                         UpcomingDays(after: selectedDay) { day in
                             withAnimation(.snappy) { selectedDay = day }
                         }
+                        .id(selectedDay)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
                 }
                 .padding(.horizontal)
@@ -263,10 +266,9 @@ private struct UpcomingDays: View {
 
     var body: some View {
         if !days.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 0) {
                 Button {
-                    // Solo dissolvenza, rapida: i contenuti non scorrono (la sezione è lunga).
-                    withAnimation(.easeOut(duration: 0.18)) { model.preferences.toggleCollapsed(.upcoming) }
+                    withAnimation(.snappy) { model.preferences.toggleCollapsed(.upcoming) }
                 } label: {
                     SectionHeader(title: "Nei prossimi giorni") {
                         Image(systemName: "chevron.down")
@@ -276,12 +278,11 @@ private struct UpcomingDays: View {
                     }
                     .contentShape(.rect)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HeaderButtonStyle())
                 .sensoryFeedback(.selection, trigger: isCollapsed)
 
-                if !isCollapsed {
+                CollapsibleContent(isExpanded: !isCollapsed, spacing: 12) {
                     upcomingList
-                        .transition(.opacity)
                 }
             }
         }

@@ -60,7 +60,7 @@ struct YouView: View {
                     footer
                 }
                 .padding(.horizontal)
-                .padding(.bottom, 24)
+                .padding(.bottom, Theme.bottomInset)
             }
             .themedBackground()
             .navigationTitle("Tu")
@@ -231,15 +231,11 @@ private struct ProfileCard: View {
                                    startPoint: .topLeading, endPoint: .bottomTrailing),
                     in: .circle
                 )
+            // Solo nome e scuola: la classe è nella pagina Account.
             VStack(alignment: .leading, spacing: 4) {
                 Text(model.displayName)
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(Theme.ink)
-                if let classDescription = model.classDescription {
-                    Text(classDescription.sentenceCased)
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.ink.opacity(0.8))
-                }
                 if let school = model.card?.schoolDescription {
                     Text([school, model.card?.schoolCity?.nameCased].compactMap { $0 }.joined(separator: " · "))
                         .font(.footnote)
@@ -247,12 +243,9 @@ private struct ProfileCard: View {
                 }
             }
             Spacer(minLength: 0)
-        }
-        .overlay(alignment: .topTrailing) {
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Theme.secondaryInk.opacity(0.7))
-                .padding(18)
         }
         .card(padding: 18)
     }

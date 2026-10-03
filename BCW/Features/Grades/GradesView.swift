@@ -325,7 +325,7 @@ struct GradeCard: View {
     let onTap: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 14) {
                 GradeBadge(grade: grade, size: 50)
                 VStack(alignment: .leading, spacing: 3) {
@@ -347,7 +347,7 @@ struct GradeCard: View {
                     .rotationEffect(.degrees(isExpanded ? 180 : 0))
             }
 
-            if isExpanded {
+            CollapsibleContent(isExpanded: isExpanded, spacing: 14) {
                 VStack(alignment: .leading, spacing: 10) {
                     if let notes = grade.notes {
                         Text(notes)
@@ -381,7 +381,6 @@ struct GradeCard: View {
                         .font(.subheadline)
                     }
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .card(padding: 14)

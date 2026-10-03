@@ -55,6 +55,8 @@ struct SearchView: View {
             .themedBackground()
             .navigationTitle("Cerca")
             .searchable(text: $query, prompt: "Compiti, voti, comunicazioni…")
+            // Con la tastiera aperta il titolo "Cerca" resta visibile.
+            .searchPresentationToolbarBehavior(.avoidHidingContent)
             .task { if model.didactics.isEmpty { await model.loadDidactics() } }
         }
     }

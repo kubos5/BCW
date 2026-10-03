@@ -96,6 +96,7 @@ struct SettingsView: View {
             .listRowBackground(Theme.surface)
         }
         .themedList()
+        .contentMargins(.bottom, Theme.bottomInset - 24, for: .scrollContent)
         .navigationTitle("Impostazioni")
         .alert("Notifiche disattivate", isPresented: $notificationsDenied) {
             Button("Apri Impostazioni") {
@@ -129,6 +130,7 @@ struct AccountView: View {
                             .foregroundStyle(Theme.secondaryInk)
                     }
                 }
+                .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
             }
@@ -190,10 +192,12 @@ struct AccountView: View {
             }
 
             Section {
+                // Stesso colore d'accento degli altri pulsanti; il ruolo distruttivo resta nel dialogo.
                 Button(model.isDemo ? "Esci dalla demo" : "Esci da questo account",
-                       systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                       systemImage: "rectangle.portrait.and.arrow.right") {
                     confirmSignOut = true
                 }
+                .foregroundStyle(Theme.accent)
                 // Agganciato al pulsante: il dialogo compare accanto ad esso.
                 .confirmationDialog(signOutTitle, isPresented: $confirmSignOut, titleVisibility: .visible) {
                     Button("Esci", role: .destructive) { model.signOut() }
@@ -204,6 +208,7 @@ struct AccountView: View {
             .listRowBackground(Theme.surface)
         }
         .themedList()
+        .contentMargins(.bottom, Theme.bottomInset - 24, for: .scrollContent)
         .navigationTitle("Account")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $addingAccount) {

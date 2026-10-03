@@ -16,6 +16,7 @@ BCW ha **parità di funzioni** con il client ufficiale di classeiviva, più extr
 - puoi bloccare l'app con FaceID / TouchID
 - puoi consultare l'app anche offline, visualizzando i dati dell'ultima volta che era stata aperta
 - supporto agli account genitore con più figli
+- puoi aggiungere più account e passare dall'uno all'altro
 - bacheca con adesione, firma e risposta alle comunicazioni e apertura degli allegati con Quick Look
 - modalità Demo con dati di esempio, per provare l'app senza un account
 - riepilogo per periodo con le insufficienze
@@ -63,7 +64,8 @@ BCW usa le stesse API REST usate dall'app ufficiale di Classeviva (`https://web.
 Le credenziali sono salvate solo nel Portachiavi del dispositivo e inviate esclusivamente ai server di Classeviva.
 Le risposte vengono salvate nella cache dell'app per l'uso offline.
 
-L'anno precedente viene letto dall'archivio di Classeviva (`webYY.spaggiari.eu`, es. `web25` per il 2025/26) con le stesse credenziali; se la scuola non lo rende disponibile l'app lo segnala.
+Per gli anni precedenti l'app scarica le pagelle dall'archivio di Classeviva (`webYY.spaggiari.eu`, es. `web25` per il 2025/26).
+Voti, assenze e note degli anni passati non sono disponibili tramite le API, quindi l'app apre il sito di Classeviva in un browser integrato.
 
 ### Struttura del codice
 

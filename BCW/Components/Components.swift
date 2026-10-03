@@ -149,6 +149,78 @@ struct FilterChip: View {
     }
 }
 
+// MARK: - Sezioni comprimibili
+
+/// Contenuto di una sezione comprimibile. Chiudendo, il contenuto scorre verso l'alto
+/// restando ritagliato nell'area che occupa da aperto (con una sfumatura sul bordo
+/// superiore), così non invade l'intestazione né il resto della pagina.
+struct CollapsibleContent<Content: View>: View {
+    let isExpanded: Bool
+    /// Spazio tra intestazione e contenuto: fa parte dell'area che si comprime.
+    var spacing: CGFloat = 0
+    /// Altezza massima della sfumatura sul bordo superiore durante l'animazione.
+    var fade: CGFloat = 24
+    @ViewBuilder let content: () -> Content
+    @State private var height: CGFloat = 0
+
+    var body: some View {
+        content()
+            .padding(.top, spacing)
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+            .modifier(CollapseEffect(progress: isExpanded ? 1 : 0, height: height, fade: fade))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .allowsHitTesting(isExpanded)
+            .accessibilityHidden(!isExpanded)
+    }
+}
+
+/// Anima apertura e chiusura: `progress` va da 0 (chiusa) a 1 (aperta).
+private struct CollapseEffect: ViewModifier, Animatable {
+    var progress: CGFloat
+    let height: CGFloat
+    let fade: CGFloat
+
+    nonisolated var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        // Le molle con un po' di rimbalzo (es. `.snappy`) superano l'1: senza limite il
+        // contenuto finirebbe troppo in basso e poi tornerebbe al suo posto con uno scatto.
+        let clamped = min(max(progress, 0), 1)
+        let hidden = (1 - clamped) * height
+        // La sfumatura non supera mai la parte già nascosta: da aperta il bordo è netto
+        // e nessun contenuto al suo posto viene attenuato.
+        let gradient = min(fade, hidden)
+        // Finché il contenuto non è stato misurato (sezione appena creata) non lo si
+        // vincola, così da aperta non parte da altezza zero.
+        let frameHeight: CGFloat? = height == 0 && clamped == 1 ? nil : max(0, height - hidden)
+        content
+            .offset(y: -hidden)
+            .frame(height: frameHeight, alignment: .top)
+            .mask(alignment: .top) {
+                VStack(spacing: 0) {
+                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                        .frame(height: gradient)
+                    Rectangle()
+                }
+                // Il ritaglio serve solo sul bordo superiore: ai lati e in basso
+                // la maschera si allarga per non tagliare le ombre delle card.
+                .padding([.horizontal, .bottom], -40)
+            }
+    }
+}
+
+/// Stile per le intestazioni toccabili: nessuna attenuazione alla pressione,
+/// così il titolo resta sempre pienamente visibile.
+struct HeaderButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+    }
+}
+
 /// Etichetta di stato a capsula. Resta sempre su una riga: se lo spazio non basta
 /// usa la versione abbreviata (`short`), invece di andare a capo.
 struct Pill: View {

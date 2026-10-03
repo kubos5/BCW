@@ -90,7 +90,6 @@ struct DidacticsView: View {
             .padding(.horizontal)
             .padding(.bottom, 24)
             .animation(.snappy, value: teacherFilter)
-            .animation(.snappy, value: expandedFolders)
         }
         .themedBackground()
         .navigationTitle("Materiale didattico")
@@ -133,7 +132,9 @@ struct DidacticsView: View {
         }
         return VStack(alignment: .leading, spacing: 0) {
             Button {
-                if expandedFolders.contains(key) { expandedFolders.remove(key) } else { expandedFolders.insert(key) }
+                withAnimation(.snappy) {
+                    if expandedFolders.contains(key) { expandedFolders.remove(key) } else { expandedFolders.insert(key) }
+                }
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: isExpanded ? "folder.fill" : "folder")
@@ -158,42 +159,44 @@ struct DidacticsView: View {
                 .padding(14)
                 .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HeaderButtonStyle())
 
-            if isExpanded {
-                ForEach(contents) { content in
-                    Divider().overlay(Theme.separator).padding(.leading, 56)
-                    Button {
-                        Task { await open(content) }
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: content.symbol)
-                                .foregroundStyle(Theme.secondaryInk)
-                                .frame(width: 30)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(content.name)
-                                    .font(.subheadline)
-                                    .foregroundStyle(Theme.ink)
-                                    .multilineTextAlignment(.leading)
-                                if let date = content.sharedAt {
-                                    Text(date.shortDayWithYear)
-                                        .font(.caption2)
-                                        .foregroundStyle(Theme.secondaryInk)
+            CollapsibleContent(isExpanded: isExpanded) {
+                VStack(spacing: 0) {
+                    ForEach(contents) { content in
+                        Divider().overlay(Theme.separator).padding(.leading, 56)
+                        Button {
+                            Task { await open(content) }
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: content.symbol)
+                                    .foregroundStyle(Theme.secondaryInk)
+                                    .frame(width: 30)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(content.name)
+                                        .font(.subheadline)
+                                        .foregroundStyle(Theme.ink)
+                                        .multilineTextAlignment(.leading)
+                                    if let date = content.sharedAt {
+                                        Text(date.shortDayWithYear)
+                                            .font(.caption2)
+                                            .foregroundStyle(Theme.secondaryInk)
+                                    }
+                                }
+                                Spacer()
+                                if openingContent == content.id {
+                                    ProgressView()
+                                } else {
+                                    Image(systemName: content.kind == .link ? "arrow.up.right.square" : "arrow.down.circle")
+                                        .foregroundStyle(Theme.accent)
                                 }
                             }
-                            Spacer()
-                            if openingContent == content.id {
-                                ProgressView()
-                            } else {
-                                Image(systemName: content.kind == .link ? "arrow.up.right.square" : "arrow.down.circle")
-                                    .foregroundStyle(Theme.accent)
-                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .contentShape(.rect)
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .contentShape(.rect)
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }

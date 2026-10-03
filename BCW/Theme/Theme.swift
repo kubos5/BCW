@@ -19,6 +19,9 @@ enum Theme {
     static let neutral = dynamic(light: 0x4F6D8F, dark: 0x8FB0D6)
 
     static let corner: CGFloat = 22
+    /// Spazio in fondo alle pagine lunghe: stacca l'ultimo elemento dalla tab bar e rende
+    /// la pagina abbastanza lunga perché iOS rimpicciolisca la tab bar scorrendo.
+    static let bottomInset: CGFloat = 120
 
     /// Colori tenui e distinti per le materie (assegnati in modo stabile).
     private static let subjectPalette: [(Int, Int)] = [
