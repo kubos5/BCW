@@ -118,11 +118,11 @@ struct DidacticsView: View {
         .task {
             if model.didactics.isEmpty {
                 loading = true
-                await model.loadDidactics()
+                error = await model.loadDidactics()
                 loading = false
             }
         }
-        .refreshable { await model.loadDidactics() }
+        .refreshable { error = await model.loadDidactics() }
     }
 
     private func folderCard(_ folder: DidacticFolder, teacher: DidacticTeacher) -> some View {

@@ -56,10 +56,10 @@ struct ReportsView: View {
         .quickLookPreview($previewURL)
         .task {
             loading = true
-            await model.loadDocuments()
+            error = await model.loadDocuments()
             loading = false
         }
-        .refreshable { await model.loadDocuments() }
+        .refreshable { error = await model.loadDocuments() }
     }
 
     /// Riepilogo delle medie per periodo, utile in vista degli scrutini.

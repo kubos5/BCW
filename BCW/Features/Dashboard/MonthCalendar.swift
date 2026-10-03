@@ -3,72 +3,126 @@ import SwiftUI
 struct MonthCalendar: View {
     @Environment(AppModel.self) private var model
     @Binding var selectedDay: Date
-    @State private var month: Date = Date().startOfMonth
+    /// Mese mostrato: segue lo scorrimento orizzontale a pagine.
+    @State private var visibleMonth: Date?
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 7)
+    private static let cellHeight: CGFloat = 44
+    private static let rowSpacing: CGFloat = 4
+    private static let weekdaySymbols = ["L", "M", "M", "G", "V", "S", "D"]
 
-    private var cells: [Date?] {
+    /// Mesi disponibili: due anni prima e dopo il mese corrente.
+    private static let months: [Date] = {
+        let current = Date().startOfMonth
+        return (-24...24).compactMap { CVDate.calendar.date(byAdding: .month, value: $0, to: current)?.startOfMonth }
+    }()
+
+    init(selectedDay: Binding<Date>) {
+        _selectedDay = selectedDay
+        _visibleMonth = State(initialValue: Self.month(containing: selectedDay.wrappedValue))
+    }
+
+    private static func month(containing day: Date) -> Date {
+        let start = day.startOfMonth
+        return months.first { $0.isSameDay(as: start) } ?? start
+    }
+
+    /// Settimane del mese, da lunedì a domenica (`nil` = giorno di un altro mese).
+    private static func rows(of month: Date) -> [[Date?]] {
         let first = month.startOfMonth
         let range = CVDate.calendar.range(of: .day, in: .month, for: first) ?? 1..<31
         // Lunedì = 0
         let offset = (CVDate.calendar.component(.weekday, from: first) + 5) % 7
-        var result: [Date?] = Array(repeating: nil, count: offset)
-        result += range.map { first.adding(days: $0 - 1) }
-        while result.count % 7 != 0 { result.append(nil) }
-        return result
+        var cells: [Date?] = Array(repeating: nil, count: offset)
+        cells += range.map { first.adding(days: $0 - 1) }
+        while cells.count % 7 != 0 { cells.append(nil) }
+        return stride(from: 0, to: cells.count, by: 7).map { Array(cells[$0..<$0 + 7]) }
+    }
+
+    private var currentMonth: Date { visibleMonth ?? selectedDay.startOfMonth }
+
+    /// L'altezza segue il numero di settimane del mese visibile (4–6).
+    private var gridHeight: CGFloat {
+        let count = CGFloat(Self.rows(of: currentMonth).count)
+        return count * Self.cellHeight + (count - 1) * Self.rowSpacing
     }
 
     var body: some View {
         VStack(spacing: 12) {
-            HStack {
-                Text(month.monthYear)
-                    .font(.headline)
-                    .foregroundStyle(Theme.ink)
-                Spacer()
-                HStack(spacing: 4) {
-                    Button { shift(-1) } label: { Image(systemName: "chevron.left") }
-                    Button { shift(1) } label: { Image(systemName: "chevron.right") }
+            VStack(spacing: 12) {
+                HStack {
+                    Text(currentMonth.monthYear)
+                        .font(.headline)
+                        .foregroundStyle(Theme.ink)
+                        .contentTransition(.numericText())
+                        .animation(.snappy, value: visibleMonth)
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Button { shift(-1) } label: { Image(systemName: "chevron.left") }
+                        Button { shift(1) } label: { Image(systemName: "chevron.right") }
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.small)
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .controlSize(.small)
-            }
 
-            LazyVGrid(columns: columns, spacing: 4) {
-                ForEach(["L", "M", "M", "G", "V", "S", "D"].indices, id: \.self) { index in
-                    Text(["L", "M", "M", "G", "V", "S", "D"][index])
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Theme.secondaryInk)
-                        .frame(maxWidth: .infinity)
-                }
-                ForEach(cells.indices, id: \.self) { index in
-                    if let day = cells[index] {
-                        MonthDayCell(day: day, isSelected: day.isSameDay(as: selectedDay)) {
-                            withAnimation(.snappy) { selectedDay = day }
-                        }
-                    } else {
-                        Color.clear.frame(height: 44)
+                HStack(spacing: 2) {
+                    ForEach(Self.weekdaySymbols.indices, id: \.self) { index in
+                        Text(Self.weekdaySymbols[index])
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Theme.secondaryInk)
+                            .frame(maxWidth: .infinity)
                     }
                 }
             }
+            .padding(.horizontal, 14)
+
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: 0) {
+                    ForEach(Self.months, id: \.self) { month in
+                        monthGrid(month)
+                            .padding(.horizontal, 14)
+                            .containerRelativeFrame(.horizontal)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $visibleMonth)
+            .scrollIndicators(.hidden)
+            .frame(height: gridHeight, alignment: .top)
+            .animation(.snappy, value: gridHeight)
 
             legend
+                .padding(.horizontal, 14)
         }
-        .card(padding: 14)
-        .gesture(
-            DragGesture(minimumDistance: 30)
-                .onEnded { value in
-                    if value.translation.width < -40 { shift(1) }
-                    if value.translation.width > 40 { shift(-1) }
-                }
-        )
-        .onAppear { month = selectedDay.startOfMonth }
+        .padding(.vertical, 14)
+        .card(padding: 0)
         .onChange(of: selectedDay) { _, day in
-            if !CVDate.calendar.isDate(day, equalTo: month, toGranularity: .month) {
-                withAnimation(.snappy) { month = day.startOfMonth }
+            let month = Self.month(containing: day)
+            if !currentMonth.isSameDay(as: month) {
+                withAnimation(.snappy) { visibleMonth = month }
             }
         }
         .sensoryFeedback(.selection, trigger: selectedDay)
+    }
+
+    private func monthGrid(_ month: Date) -> some View {
+        VStack(spacing: Self.rowSpacing) {
+            ForEach(Array(Self.rows(of: month).enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 2) {
+                    ForEach(row.indices, id: \.self) { index in
+                        if let day = row[index] {
+                            MonthDayCell(day: day, isSelected: day.isSameDay(as: selectedDay)) {
+                                withAnimation(.snappy) { selectedDay = day }
+                            }
+                        } else {
+                            Color.clear.frame(maxWidth: .infinity).frame(height: Self.cellHeight)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private var legend: some View {
@@ -90,9 +144,8 @@ struct MonthCalendar: View {
     }
 
     private func shift(_ months: Int) {
-        withAnimation(.snappy) {
-            month = CVDate.calendar.date(byAdding: .month, value: months, to: month)?.startOfMonth ?? month
-        }
+        guard let target = CVDate.calendar.date(byAdding: .month, value: months, to: currentMonth) else { return }
+        withAnimation(.snappy) { visibleMonth = Self.month(containing: target) }
     }
 }
 

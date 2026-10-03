@@ -47,7 +47,6 @@ final class URLSessionTransport: Transport {
     static let defaultHeaders = [
         "User-Agent": "CVVS/std/4.2.3 Android/12",
         "Z-Dev-Apikey": "Tg1NWEwNGIgIC0K",
-        "Content-Type": "application/json",
         "Accept": "application/json",
     ]
 
@@ -65,7 +64,15 @@ final class URLSessionTransport: Transport {
         request.httpMethod = method.rawValue
         for (key, value) in Self.defaultHeaders { request.setValue(value, forHTTPHeaderField: key) }
         if let token { request.setValue(token, forHTTPHeaderField: "Z-Auth-Token") }
-        if let body { request.httpBody = body }
+        if method == .post {
+            // Classeviva rifiuta il JSON vuoto `{}` con "101:CvvRestApi/invalid payload",
+            // mentre accetta un corpo vuoto. Una POST senza Content-Length viene invece
+            // bloccata dal CDN, quindi il corpo va sempre impostato (anche vuoto).
+            let payload = Self.isEmptyJSONObject(body) ? Data() : (body ?? Data())
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("\(payload.count)", forHTTPHeaderField: "Content-Length")
+            request.httpBody = payload
+        }
         let (data, response) = try await session.data(for: request)
         let http = response as? HTTPURLResponse
         return HTTPResult(
@@ -74,6 +81,12 @@ final class URLSessionTransport: Transport {
             contentType: http?.value(forHTTPHeaderField: "Content-Type"),
             fileName: Self.fileName(from: http?.value(forHTTPHeaderField: "Content-Disposition"))
         )
+    }
+
+    private static func isEmptyJSONObject(_ body: Data?) -> Bool {
+        guard let body, !body.isEmpty else { return true }
+        let compact = String(decoding: body, as: UTF8.self).filter { !$0.isWhitespace }
+        return compact == "{}"
     }
 
     private static func fileName(from disposition: String?) -> String? {
@@ -166,16 +179,33 @@ final class ClassevivaClient {
         return response
     }
 
+    /// Riusa la sessione di un altro client (es. quello usato per verificare le credenziali).
+    func adoptSession(from other: ClassevivaClient) {
+        token = other.token
+        tokenExpiry = other.tokenExpiry
+        ident = other.ident
+    }
+
     private func ensureToken() async throws {
         if let token, !token.isEmpty, let tokenExpiry, tokenExpiry.timeIntervalSinceNow > 120 { return }
         try await login()
     }
 
-    private static func errorMessage(from data: Data) -> String? {
+    static func errorMessage(from data: Data) -> String? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         if let message = json["message"] as? String, !message.isEmpty { return message }
-        if let error = json["error"] as? String, !error.isEmpty { return error }
+        if let error = json["error"] as? String, !error.isEmpty { return readable(error) }
         return nil
+    }
+
+    /// Traduce i codici d'errore più comuni di Classeviva (es. "101:CvvRestApi/invalid payload").
+    private static func readable(_ error: String) -> String {
+        let lower = error.lowercased()
+        if lower.contains("must first be read") { return "Apri prima la comunicazione, poi riprova a scaricare l'allegato." }
+        if lower.contains("invalid payload") { return "Classeviva ha rifiutato la richiesta (\(error))." }
+        if lower.contains("authentication failed") { return "Nome utente o password non validi." }
+        if lower.contains("not found") { return "Elemento non trovato su Classeviva." }
+        return error
     }
 
     // MARK: Richieste
@@ -220,15 +250,24 @@ final class ClassevivaClient {
 
     /// Prova più endpoint equivalenti in ordine (Classeviva ne versiona alcuni,
     /// es. `grades` / `grades2324`) e usa il primo che risponde.
-    func fetchFirst<T: Decodable>(_ type: T.Type, _ paths: [String]) async throws -> (value: T, fromCache: Bool) {
+    /// Con `accept` si può scartare una risposta valida ma inutile (es. vuota) e provare
+    /// l'endpoint successivo; se nessuna viene accettata si usa la prima ottenuta.
+    func fetchFirst<T: Decodable>(_ type: T.Type, _ paths: [String],
+                                  accept: (T) -> Bool = { _ in true }) async throws -> (value: T, fromCache: Bool) {
         var lastError: Error = APIError.decoding
+        var fallback: (value: T, fromCache: Bool)?
         for path in paths {
             do {
-                return try await fetch(type, path)
+                let result = try await fetch(type, path)
+                if accept(result.value) { return result }
+                if fallback == nil { fallback = result }
             } catch APIError.server(let code, let message) where code == 404 || code == 400 || code == 405 {
                 lastError = APIError.server(code, message)
+            } catch APIError.decoding {
+                lastError = APIError.decoding
             }
         }
+        if let fallback { return fallback }
         throw lastError
     }
 
@@ -240,7 +279,7 @@ final class ClassevivaClient {
 
     /// Scarica un file e lo salva in una cartella temporanea, pronto per Quick Look.
     func download(_ studentPath: String, method: HTTPMethod = .get, suggestedName: String) async throws -> URL {
-        let result = try await raw(method, studentPath, body: method == .post ? Data("{}".utf8) : nil)
+        let result = try await raw(method, studentPath)
         return try Self.writeTemporary(result.data, name: result.fileName ?? suggestedName,
                                        contentType: result.contentType)
     }
@@ -260,11 +299,11 @@ final class ClassevivaClient {
         return url
     }
 
-    func signOut() {
+    func signOut(clearingCache: Bool = true) {
         token = nil
         tokenExpiry = nil
         credentials = nil
-        cache.clear()
+        if clearingCache { cache.clear() }
     }
 }
 
@@ -275,7 +314,6 @@ final class DiskCache {
     init(namespace: String) {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         folder = base.appendingPathComponent("BCW/\(namespace)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     }
 
     private func url(for key: String) -> URL {
@@ -284,6 +322,7 @@ final class DiskCache {
     }
 
     func store(_ data: Data, for key: String) {
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try? data.write(to: url(for: key), options: .atomic)
     }
 
@@ -293,6 +332,11 @@ final class DiskCache {
 
     func clear() {
         try? FileManager.default.removeItem(at: folder)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    }
+
+    /// Elimina del tutto la cartella di una cache (es. quella di un account rimosso).
+    static func remove(namespace: String) {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.removeItem(at: base.appendingPathComponent("BCW/\(namespace)", isDirectory: true))
     }
 }

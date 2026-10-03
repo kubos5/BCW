@@ -197,7 +197,7 @@ private struct AverageHero: View {
                         .foregroundStyle(Theme.secondaryInk)
                     let insufficient = book.subjects(in: selectedPeriod).filter { ($0.average ?? 10) < 6 }.count
                     if insufficient > 0 {
-                        Label("\(insufficient) insufficienze", systemImage: "exclamationmark.triangle.fill")
+                        Label(insufficient == 1 ? "1 insufficienza" : "\(insufficient) insufficienze", systemImage: "exclamationmark.triangle.fill")
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(Theme.poor)
                     } else {
@@ -415,6 +415,8 @@ struct SubjectRow: View {
                     ForEach(summary.grades.prefix(6)) { g in
                         Text(g.displayValue)
                             .font(.caption.weight(.bold))
+                            .lineLimit(1)
+                            .fixedSize()
                             .foregroundStyle(Theme.gradeColor(g))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)

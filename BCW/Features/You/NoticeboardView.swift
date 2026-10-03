@@ -88,6 +88,7 @@ private struct NoticeRow: View {
                     Text(notice.category)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Theme.accent)
+                        .lineLimit(1)
                     if let date = notice.publishedAt {
                         Text(date.shortDayWithYear)
                             .font(.caption)
@@ -100,12 +101,8 @@ private struct NoticeRow: View {
                             .foregroundStyle(Theme.secondaryInk)
                     }
                     if notice.requiresAction {
-                        Text(notice.needsSign ? "Da firmare" : (notice.needsJoin ? "Adesione" : "Risposta"))
-                            .font(.caption2.weight(.bold))
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(Theme.fair.opacity(0.15), in: .capsule)
-                            .foregroundStyle(Theme.fair)
+                        Pill(text: notice.needsSign ? "Da firmare" : (notice.needsJoin ? "Adesione" : "Risposta"),
+                             color: Theme.fair, font: .caption2.weight(.bold))
                     }
                 }
             }
@@ -124,12 +121,10 @@ struct NoticeDetailView: View {
     @State private var previewURL: URL?
     @State private var downloading: Int?
     @State private var replyText = ""
-    @State private var confirmAction: Action?
+    @State private var confirmJoin = false
+    @State private var confirmSign = false
 
-    enum Action: Identifiable {
-        case join, sign
-        var id: Int { self == .join ? 0 : 1 }
-    }
+    enum Action { case join, sign }
 
     var body: some View {
         ScrollView {
@@ -201,16 +196,6 @@ struct NoticeDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .quickLookPreview($previewURL)
         .task { await load() }
-        .confirmationDialog("Confermi?", isPresented: Binding(get: { confirmAction != nil },
-                                                             set: { if !$0 { confirmAction = nil } }),
-                            presenting: confirmAction) { action in
-            Button(action == .join ? "Aderisci" : "Conferma e firma") {
-                Task { await perform(action) }
-            }
-        } message: { action in
-            Text(action == .join ? "La tua adesione verrà inviata alla scuola."
-                                 : "Confermerai la presa visione della comunicazione.")
-        }
     }
 
     @ViewBuilder
@@ -222,16 +207,27 @@ struct NoticeDetailView: View {
                     if detail.joined {
                         Label("Hai aderito", systemImage: "checkmark.seal.fill").foregroundStyle(Theme.good)
                     } else {
-                        Button("Aderisci", systemImage: "hand.thumbsup") { confirmAction = .join }
+                        // Il dialogo è agganciato al pulsante, così appare accanto ad esso.
+                        Button("Aderisci", systemImage: "hand.thumbsup") { confirmJoin = true }
                             .buttonStyle(.glassProminent)
+                            .confirmationDialog("Confermi?", isPresented: $confirmJoin) {
+                                Button("Aderisci") { Task { await perform(.join) } }
+                            } message: {
+                                Text("La tua adesione verrà inviata alla scuola.")
+                            }
                     }
                 }
                 if notice.needsSign {
                     if detail.signed {
                         Label("Presa visione confermata", systemImage: "checkmark.seal.fill").foregroundStyle(Theme.good)
                     } else {
-                        Button("Conferma presa visione", systemImage: "signature") { confirmAction = .sign }
+                        Button("Conferma presa visione", systemImage: "signature") { confirmSign = true }
                             .buttonStyle(.glassProminent)
+                            .confirmationDialog("Confermi?", isPresented: $confirmSign) {
+                                Button("Conferma e firma") { Task { await perform(.sign) } }
+                            } message: {
+                                Text("Confermerai la presa visione della comunicazione.")
+                            }
                     }
                 }
                 if notice.needsReply {

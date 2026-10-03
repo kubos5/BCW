@@ -19,12 +19,7 @@ struct AgendaEventRow: View {
                     SubjectTag(name: event.title, id: event.subjectId)
                     Spacer(minLength: 6)
                     if event.kind == .test {
-                        Text("Verifica")
-                            .font(.caption.weight(.bold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Theme.accent.opacity(0.14), in: .capsule)
-                            .foregroundStyle(Theme.accent)
+                        Pill(text: "Verifica", font: .caption.weight(.bold))
                     }
                 }
                 Text(event.notes.isEmpty ? "Nessuna descrizione" : event.notes)

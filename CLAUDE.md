@@ -19,10 +19,10 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   il resto curato e coerente. L'utente gradisce funzioni extra utili.
 
 ## Stato attuale
-- Codice scritto in una sessione cloud **senza Xcode**: **mai compilato né eseguito**. Primo passo consigliato:
-  `xcodebuild -project BCW.xcodeproj -scheme BCW -destination 'platform=iOS Simulator,name=iPhone 17' build`
-  (adatta il nome del simulatore) e correggi gli errori.
-- Branch di lavoro: `claude/relaxed-faraday-35jvyx`.
+- Il progetto compila e gira sul simulatore. `xcode-select` punta ai Command Line Tools, quindi per compilare da
+  terminale serve `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`:
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project BCW.xcodeproj -scheme BCW -destination 'platform=iOS Simulator,name=iPhone 17' build`
+- Per provare le modifiche visive usare "Prova la demo" (`DemoServer.swift`).
 
 ## Architettura
 - `BCW.xcodeproj` usa **cartelle sincronizzate** (objectVersion 77): i file in `BCW/` entrano nel target da soli.
@@ -32,7 +32,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `DiskCache` per l'offline, `fetchFirst` per endpoint versionati.
 - `Models/`: decodifica **tollerante** via `KeyedDecodingContainer<AnyKey>` (`c.string/int/double/bool/array`),
   perché l'API non è documentata e i tipi cambiano.
-- `Store/AppModel.swift`: stato globale `@Observable`; `Preferences` (UserDefaults); `GradeBook` (medie,
+- `Store/AppModel.swift`: stato globale `@Observable`, con **più account** salvati (`SavedAccount` nel Portachiavi,
+  `activeAccount` in UserDefaults, cache separata per account `live-<id>`); gli errori delle sezioni secondarie
+  (scrutini, didattica, libri) non finiscono nel banner globale `lastError`; `Preferences` (UserDefaults); `GradeBook` (medie,
   andamento, voto necessario); `Reminders` (notifiche locali); `ArchiveModel` (anno precedente);
   `DemoServer.swift` (dati finti deterministici per "Prova la demo").
 - `Theme/Theme.swift`: palette (crema `#F7F2E8` / grafite `#1E1D1C`, accento `#A23E2F`), font New York anche
@@ -42,6 +44,10 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 ## API Classeviva
 - Base `https://web.spaggiari.eu/rest/v1`, header `User-Agent: CVVS/std/4.2.3 Android/12`,
   `Z-Dev-Apikey: Tg1NWEwNGIgIC0K`, token in `Z-Auth-Token`.
+- **Le POST senza dati vanno inviate con corpo vuoto** (Content-Length 0): il server risponde
+  `400 101:CvvRestApi/invalid payload` al JSON `{}` (verificato), e il CDN rifiuta POST senza Content-Length.
+  `URLSessionTransport` normalizza `{}` → corpo vuoto. `noticeboard/attach` richiede di aver prima letto la
+  comunicazione (`item must first be read`).
 - `POST /auth/login` `{uid, pass, ident}` → token, oppure `choices` per account genitore multi-figlio.
 - Endpoint sotto `/students/{id}/` (id = cifre dell'ident, `S1234567X` → `1234567`): `card`, `grades`,
   `periods`, `subjects`, `agenda/all/{yyyyMMdd}/{yyyyMMdd}`, `lessons/{da}/{a}`, `absences/details`,
@@ -50,7 +56,12 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `read/{hash}`), `calendar/all`, `schoolbooks`.
 
 ## Punti NON verificati con un account reale
-- Anno precedente: ipotesi host d'archivio `https://webYY.spaggiari.eu/rest/v1` (es. `web25` per 2025/26).
+- Anni precedenti (verificato): tutti i `webYY.spaggiari.eu` puntano a `storico.spaggiari.eu`. `web22`–`web24`
+  non hanno l'API REST (il login risponde 204 vuoto); `web25` sì, ma accetta solo date dell'anno in corso
+  ("dates must be between 20260901 and …"), quindi voti/assenze/note risultano vuoti. Funzionano solo i documenti
+  (pagelle). Scelta dell'utente: l'app mostra le pagelle e apre il sito di Classeviva in `SFSafariViewController`
+  per il resto ("Vai all'a.s. …" dal menu). Il sito d'archivio rimanda sempre al login principale senza ritorno.
+  Gli archivi vivono in `AppModel.archive(for:)` e si azzerano a ogni cambio di sessione.
 - Endpoint voti: si prova `grades`, poi `grades2324`, poi `grades2`.
 - Verifiche riconosciute con euristica sul testo (`AgendaEvent.kind`), Classeviva non ha un codice dedicato.
 

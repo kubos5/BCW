@@ -327,8 +327,10 @@ final class DemoTransport: Transport {
         var result: [[String: Any]] = []
         let picks = Set((0..<max(3, days.count / 12)).map { _ in rng.next(upTo: days.count) })
         for (n, index) in picks.sorted().enumerated() {
-            let code = ["ABA0", "ABR0", "ABU0", "ABA0", "ABR1"][n % 5]
-            let justified = index < days.count - 4 || n % 2 == 0
+            // L'ultimo evento è sempre un ritardo da giustificare, per mostrare anche quel caso.
+            let isLast = n == picks.count - 1
+            let code = isLast ? "ABR0" : ["ABA0", "ABR0", "ABU0", "ABA0", "ABR1"][n % 5]
+            let justified = !isLast && (index < days.count - 4 || n % 2 == 0)
             let hour: Any
             switch code {
             case "ABU0": hour = 5

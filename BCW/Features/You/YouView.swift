@@ -2,6 +2,7 @@ import SwiftUI
 
 struct YouView: View {
     @Environment(AppModel.self) private var model
+    @State private var addingAccount = false
 
     var body: some View {
         NavigationStack {
@@ -26,7 +27,7 @@ struct YouView: View {
                     menuSection("Valutazioni") {
                         MenuRow(title: "Scrutini e pagelle", subtitle: "Documenti di valutazione",
                                 symbol: "doc.text.magnifyingglass", tint: Theme.neutral) { ReportsView() }
-                        MenuRow(title: "Anno precedente", subtitle: "Voti, assenze e pagelle \(ArchiveModel.defaultTitle)",
+                        MenuRow(title: "Anni precedenti", subtitle: "Pagelle e archivio degli anni passati",
                                 symbol: "clock.arrow.circlepath", tint: Theme.secondaryInk) { PreviousYearView() }
                     }
 
@@ -64,7 +65,51 @@ struct YouView: View {
             .themedBackground()
             .navigationTitle("Tu")
             .refreshable { await model.refreshAll() }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { accountSwitcher }
+            }
+            .sheet(isPresented: $addingAccount) {
+                NavigationStack {
+                    LoginView(isAddingAccount: true)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Annulla", systemImage: "xmark") { addingAccount = false }
+                            }
+                        }
+                }
+            }
         }
+    }
+
+    /// Cambio rapido dell'account attivo.
+    private var accountSwitcher: some View {
+        Menu {
+            Section("Account") {
+                ForEach(model.accounts) { account in
+                    let isActive = !model.isDemo && account.id == model.activeAccountID
+                    Button {
+                        withAnimation { model.switchAccount(to: account.id) }
+                    } label: {
+                        if isActive {
+                            Label(account.name, systemImage: "checkmark")
+                        } else {
+                            Text(account.name)
+                        }
+                        Text(account.school ?? account.credentials.username)
+                    }
+                    .disabled(isActive)
+                }
+                if model.isDemo {
+                    Label("Demo", systemImage: "checkmark")
+                }
+            }
+            Button("Aggiungi account", systemImage: "person.crop.circle.badge.plus") {
+                addingAccount = true
+            }
+        } label: {
+            Image(systemName: model.accounts.count > 1 ? "person.2.circle" : "person.crop.circle.badge.plus")
+        }
+        .accessibilityLabel("Cambia account")
     }
 
     private var stats: some View {
@@ -158,12 +203,7 @@ private struct MenuRow<Destination: View>: View {
                 }
                 Spacer()
                 if badge > 0 {
-                    Text("\(badge)")
-                        .font(.caption.weight(.bold).monospacedDigit())
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Theme.accent, in: .capsule)
+                    Pill(text: "\(badge)", filled: true, font: .caption.weight(.bold).monospacedDigit())
                 }
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))

@@ -110,6 +110,12 @@ extension Date {
         return it("EEEEdMMMM").capitalizedFirst
     }
 
+    /// Come `relativeDayName`, ma in forma breve: "Gio 1 ott".
+    var relativeShortDayName: String {
+        if isToday || isTomorrow || isYesterday { return relativeDayName }
+        return it("EEEdMMM").replacingOccurrences(of: ".", with: "").capitalizedFirst
+    }
+
     var longDay: String { it("EEEEdMMMM").capitalizedFirst }
     var shortDay: String { it("dMMM") }
     var shortDayWithYear: String { it("dMMMyyyy") }

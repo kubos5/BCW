@@ -149,6 +149,40 @@ struct FilterChip: View {
     }
 }
 
+/// Etichetta di stato a capsula. Resta sempre su una riga: se lo spazio non basta
+/// usa la versione abbreviata (`short`), invece di andare a capo.
+struct Pill: View {
+    let text: String
+    var short: String?
+    var color: Color = Theme.accent
+    var filled = false
+    var font: Font = .caption.weight(.semibold)
+
+    var body: some View {
+        if let short {
+            ViewThatFits(in: .horizontal) {
+                label(text)
+                label(short)
+            }
+            .accessibilityElement()
+            .accessibilityLabel(text)
+        } else {
+            label(text)
+        }
+    }
+
+    private func label(_ string: String) -> some View {
+        Text(string)
+            .font(font)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(filled ? color : color.opacity(0.14), in: .capsule)
+            .foregroundStyle(filled ? Color.white : color)
+    }
+}
+
 struct StatTile: View {
     let title: String
     let value: String
@@ -194,6 +228,8 @@ struct IconBadge: View {
 
 struct AbsenceRow: View {
     let absence: AbsenceEvent
+    /// Mostra il motivo della giustificazione sotto il dettaglio.
+    var showsReason = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -209,19 +245,23 @@ struct AbsenceRow: View {
                 Text(absence.detail)
                     .font(.footnote)
                     .foregroundStyle(Theme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                if showsReason, let reason = absence.justificationReason {
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            Spacer()
+            // Il testo ha la precedenza: se non c'è spazio è la pillola ad abbreviarsi.
+            .layoutPriority(1)
+            Spacer(minLength: 4)
             if absence.isJustified {
                 Label("Giustificata", systemImage: "checkmark.seal.fill")
                     .labelStyle(.iconOnly)
                     .foregroundStyle(Theme.good)
             } else {
-                Text("Da giustificare")
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Theme.poor.opacity(0.13), in: .capsule)
-                    .foregroundStyle(Theme.poor)
+                Pill(text: "Da giustificare", short: "Da giust.", color: Theme.poor)
             }
         }
     }

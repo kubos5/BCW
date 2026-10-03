@@ -107,7 +107,7 @@ struct SubjectDetailView: View {
                             .lineStyle(StrokeStyle(lineWidth: 2))
                     }
                     ForEach(sorted) { grade in
-                        PointMark(x: .value("Data", grade.date), y: .value("Voto", grade.value ?? 0))
+                        PointMark(x: .value("Data", grade.date.startOfDay), y: .value("Voto", grade.value ?? 0))
                             .foregroundStyle(Theme.gradeColor(grade))
                             .symbolSize(60)
                     }

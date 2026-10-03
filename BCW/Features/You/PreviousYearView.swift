@@ -1,120 +1,107 @@
 import QuickLook
+import SafariServices
 import SwiftUI
 
+/// Anni precedenti: le pagelle si scaricano nell'app, il resto dell'archivio
+/// (voti, assenze, note) si consulta sul sito di Classeviva, perché l'API non lo fornisce.
 struct PreviousYearView: View {
     @Environment(AppModel.self) private var model
-    @State private var archive = ArchiveModel()
-    @State private var section: Section = .grades
+    @State private var startYear = ArchiveModel.previousStartYear
     @State private var previewURL: URL?
     @State private var downloading: String?
     @State private var error: String?
+    @State private var showingWeb = false
 
-    enum Section: String, CaseIterable, Identifiable {
-        case grades, absences, notes, documents
-        var id: String { rawValue }
-        var title: String {
-            switch self {
-            case .grades: "Voti"
-            case .absences: "Assenze"
-            case .notes: "Note"
-            case .documents: "Pagelle"
-            }
-        }
-    }
+    /// L'archivio appartiene alla sessione: cambiando account o uscendo dalla demo viene azzerato.
+    private var archive: ArchiveModel { model.archive(for: startYear) }
 
     var body: some View {
-        Group {
-            switch archive.state {
-            case .idle, .loading:
-                VStack(spacing: 14) {
-                    ProgressView()
-                    Text("Accesso all'archivio \(archive.title)…")
-                        .foregroundStyle(Theme.secondaryInk)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .failed(let message):
-                ContentUnavailableView {
-                    Label("Archivio non disponibile", systemImage: "archivebox")
-                } description: {
-                    Text(message)
-                } actions: {
-                    Button("Riprova") {
-                        archive.state = .idle
-                        Task { await load() }
-                    }
-                    .buttonStyle(.glass)
-                }
-            case .loaded:
-                content
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                webArchiveCard
+                documentsSection
             }
+            .padding(.horizontal)
+            .padding(.bottom, 24)
         }
         .themedBackground()
         .navigationTitle("Anno \(archive.title)")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(for: SubjectSummary.self) { summary in
-            SubjectDetailView(subjectId: summary.subjectId, book: book)
-        }
         .quickLookPreview($previewURL)
-        .task { await load() }
+        .sheet(isPresented: $showingWeb) {
+            SafariView(url: ArchiveModel.webURL)
+                .ignoresSafeArea()
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Picker("Anno scolastico", selection: $startYear) {
+                        ForEach(ArchiveModel.availableStartYears, id: \.self) { year in
+                            Text(ArchiveModel.title(startYear: year)).tag(year)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "calendar.badge.clock")
+                }
+                .accessibilityLabel("Scegli l'anno")
+            }
+        }
+        .task(id: "\(model.sessionID)-\(startYear)") {
+            error = nil
+            await load()
+        }
     }
 
-    private var book: GradeBook {
-        GradeBook(grades: archive.grades, periods: archive.periods,
-                  mode: model.preferences.averageMode, weighted: model.preferences.weightedAverage)
+    // MARK: Archivio sul web
+
+    private var webArchiveCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                IconBadge(symbol: "safari", tint: Theme.neutral)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Voti, assenze e note")
+                        .font(.headline)
+                        .foregroundStyle(Theme.ink)
+                    Text("Disponibili sul sito di Classeviva")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.secondaryInk)
+                }
+            }
+            Text("Classeviva non rende disponibili all'app i dati degli anni passati. Accedi al sito e, dal menu principale, scegli \"Vai all'a.s. \(archive.title)\".")
+                .font(.subheadline)
+                .foregroundStyle(Theme.ink.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                showingWeb = true
+            } label: {
+                Label("Apri l'archivio di Classeviva", systemImage: "arrow.up.forward.app")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glassProminent)
+            .controlSize(.large)
+        }
+        .card()
     }
+
+    // MARK: Pagelle
 
     @ViewBuilder
-    private var content: some View {
-        VStack(spacing: 0) {
-            Picker("Sezione", selection: $section) {
-                ForEach(Section.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+    private var documentsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader("Pagelle e documenti", subtitle: "Anno scolastico \(archive.title)")
 
-            switch section {
-            case .grades:
-                GradeBookView(book: book)
-            case .absences:
-                list {
-                    if archive.absences.isEmpty {
-                        ContentUnavailableView("Nessuna assenza", systemImage: "checkmark.circle")
-                    }
-                    ForEach(archive.absences) { absence in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(absence.date.longDay + " " + absence.date.it("yyyy"))
-                                .font(.caption)
-                                .foregroundStyle(Theme.secondaryInk)
-                            AbsenceRow(absence: absence)
-                        }
-                        .card(padding: 14)
-                    }
-                }
-            case .notes:
-                list {
-                    if archive.notes.isEmpty {
-                        ContentUnavailableView("Nessuna nota", systemImage: "hand.thumbsup")
-                    }
-                    ForEach(archive.notes) { note in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Label(note.category.singular, systemImage: note.category.symbol)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(Theme.accent)
-                            Text(note.text).foregroundStyle(Theme.ink)
-                            Text("\(note.authorName) · \(note.date.shortDayWithYear)")
-                                .font(.caption)
-                                .foregroundStyle(Theme.secondaryInk)
-                        }
-                        .card(padding: 14)
-                    }
-                }
-            case .documents:
-                list {
-                    if let error { StatusBanner(message: error, symbol: "exclamationmark.triangle") }
-                    if archive.documents.isEmpty {
-                        ContentUnavailableView("Nessun documento", systemImage: "doc.text")
-                    }
+            if let error { StatusBanner(message: error, symbol: "exclamationmark.triangle") }
+
+            switch archive.state {
+            case .idle, .loading:
+                LoadingCard(text: "Accesso all'archivio \(archive.title)…")
+            case .failed(let message):
+                unavailable(message)
+            case .loaded:
+                if archive.documents.isEmpty {
+                    unavailable(archive.documentsError.map { "Classeviva ha risposto: \($0)" }
+                                ?? "La scuola non ha pubblicato documenti per questo anno.")
+                } else {
                     ForEach(archive.documents) { doc in
                         DocumentButton(title: doc.title, isLoading: downloading == doc.id) {
                             Task { await open(doc) }
@@ -125,12 +112,20 @@ struct PreviousYearView: View {
         }
     }
 
-    private func list<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        ScrollView {
-            LazyVStack(spacing: 10) { content() }
-                .padding(.horizontal)
-                .padding(.bottom, 24)
+    private func unavailable(_ message: String) -> some View {
+        ContentUnavailableView {
+            Label("Nessun documento", systemImage: "doc.text")
+        } description: {
+            Text(message)
+        } actions: {
+            Button("Riprova") {
+                _ = model.reloadArchive(for: startYear)
+                Task { await load() }
+            }
+            .buttonStyle(.glass)
         }
+        .frame(maxWidth: .infinity)
+        .card()
     }
 
     private func load() async {
@@ -142,8 +137,23 @@ struct PreviousYearView: View {
         defer { downloading = nil }
         do {
             previewURL = try await archive.downloadDocument(doc)
+            error = nil
         } catch {
             self.error = error.localizedDescription
         }
     }
+}
+
+/// Browser di Safari dentro l'app: condivide le password salvate e i cookie di Safari.
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let controller = SFSafariViewController(url: url)
+        controller.preferredControlTintColor = UIColor(Theme.accent)
+        controller.dismissButtonStyle = .close
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }

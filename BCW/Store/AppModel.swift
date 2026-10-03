@@ -17,6 +17,10 @@ final class AppModel {
     private(set) var client: ClassevivaClient?
     let preferences = Preferences()
 
+    // Account salvati
+    private(set) var accounts: [SavedAccount] = []
+    private(set) var activeAccountID: String?
+
     // Dati
     var loginName: String?
     var card: Card?
@@ -39,49 +43,95 @@ final class AppModel {
     var isOffline = false
     var lastUpdated: Date?
     var lastError: String?
+    /// Client per cui è in corso un aggiornamento completo (cambia quando si cambia account).
+    @ObservationIgnored private var refreshingClient: ClassevivaClient?
+    /// Cambia a ogni cambio di sessione (account, demo, uscita): le viste lo usano per ricaricare.
+    private(set) var sessionID = UUID()
+    /// Archivi degli anni passati caricati in questa sessione.
+    @ObservationIgnored private var archives: [Int: ArchiveModel] = [:]
 
     private static let demoKey = "demoMode"
+    private static let activeAccountKey = "activeAccount"
     static let gradePaths = ["grades", "grades2324", "grades2"]
 
     // MARK: Sessione
 
+    var activeAccount: SavedAccount? {
+        accounts.first { $0.id == activeAccountID }
+    }
+
     func bootstrap() {
+        accounts = Keychain.loadAccounts()
+        // Cache delle versioni precedenti: ora ogni account (e la demo) ha la sua.
+        DiskCache.remove(namespace: "live")
+        for year in ArchiveModel.availableStartYears {
+            DiskCache.remove(namespace: "archive-\(year)")
+            DiskCache.remove(namespace: "archive-\(year)-demo")
+        }
         if UserDefaults.standard.bool(forKey: Self.demoKey) {
             startDemo()
             return
         }
-        guard let credentials = Keychain.load() else {
+        let storedID = UserDefaults.standard.string(forKey: Self.activeAccountKey)
+        guard let account = accounts.first(where: { $0.id == storedID }) ?? accounts.first else {
             phase = .signedOut
             return
         }
-        client = ClassevivaClient(transport: URLSessionTransport(baseURL: ClassevivaClient.officialBaseURL),
-                                  cacheNamespace: "live", credentials: credentials)
-        loadFromCache()
-        phase = .signedIn
-        Task { await refreshAll() }
+        activate(account)
     }
 
-    /// Accede con le credenziali. Lancia `APIError.needsProfileChoice` per gli
-    /// account genitore con più figli: in quel caso richiamare passando `ident`.
+    /// Accede con le credenziali e aggiunge (o aggiorna) l'account tra quelli salvati,
+    /// rendendolo quello attivo. Lancia `APIError.needsProfileChoice` per gli account
+    /// genitore con più figli: in quel caso richiamare passando `ident`.
     func signIn(username: String, password: String, ident: String? = nil) async throws {
         let credentials = Credentials(username: username.trimmingCharacters(in: .whitespaces),
                                       password: password, ident: ident)
-        let client = ClassevivaClient(transport: URLSessionTransport(baseURL: ClassevivaClient.officialBaseURL),
-                                      cacheNamespace: "live", credentials: credentials)
-        let response = try await client.login()
+        let probe = ClassevivaClient(transport: URLSessionTransport(baseURL: ClassevivaClient.officialBaseURL),
+                                     cacheNamespace: "login", credentials: credentials)
+        let response = try await probe.login()
         var stored = credentials
         stored.ident = ident ?? response.ident
-        client.credentials = stored
-        Keychain.save(stored)
-        UserDefaults.standard.set(false, forKey: Self.demoKey)
-        loginName = [response.firstName, response.lastName].compactMap { $0 }.joined(separator: " ").nameCased
-        self.client = client
-        isDemo = false
-        withAnimation { phase = .signedIn }
+        let name = [response.firstName, response.lastName].compactMap { $0 }.joined(separator: " ").nameCased
+
+        var account: SavedAccount
+        if let index = accounts.firstIndex(where: { $0.matches(stored) }) {
+            accounts[index].credentials = stored
+            if !name.isEmpty { accounts[index].name = name }
+            account = accounts[index]
+        } else {
+            account = SavedAccount(credentials: stored, name: name.isEmpty ? stored.username : name)
+            accounts.append(account)
+        }
+        Keychain.saveAccounts(accounts)
+        activate(account, refresh: false)
+        client?.adoptSession(from: probe)
         await refreshAll()
     }
 
+    /// Passa a un altro account salvato.
+    func switchAccount(to id: String) {
+        guard let account = accounts.first(where: { $0.id == id }) else { return }
+        guard isDemo || account.id != activeAccountID else { return }
+        activate(account)
+    }
+
+    /// Rende attivo un account: azzera i dati, mostra subito la cache e aggiorna.
+    private func activate(_ account: SavedAccount, refresh: Bool = true) {
+        resetData()
+        isDemo = false
+        UserDefaults.standard.set(false, forKey: Self.demoKey)
+        activeAccountID = account.id
+        UserDefaults.standard.set(account.id, forKey: Self.activeAccountKey)
+        loginName = account.name
+        client = ClassevivaClient(transport: URLSessionTransport(baseURL: ClassevivaClient.officialBaseURL),
+                                  cacheNamespace: "live-\(account.id)", credentials: account.credentials)
+        loadFromCache()
+        withAnimation { phase = .signedIn }
+        if refresh { Task { await refreshAll() } }
+    }
+
     func startDemo() {
+        resetData()
         isDemo = true
         UserDefaults.standard.set(true, forKey: Self.demoKey)
         client = ClassevivaClient(transport: DemoTransport(), cacheNamespace: "demo",
@@ -90,23 +140,109 @@ final class AppModel {
         Task { await refreshAll() }
     }
 
+    /// Esce dall'account attivo (o dalla demo). Se ci sono altri account salvati
+    /// passa al successivo, altrimenti torna alla schermata di accesso.
     func signOut() {
-        client?.signOut()
+        if isDemo {
+            resetData()
+            removeCaches(owner: "demo")
+            UserDefaults.standard.set(false, forKey: Self.demoKey)
+            isDemo = false
+            if let next = accounts.first(where: { $0.id == activeAccountID }) ?? accounts.first {
+                activate(next)
+            } else {
+                endSession()
+            }
+            return
+        }
+        if let id = activeAccountID {
+            removeAccount(id)
+        } else {
+            endSession()
+        }
+    }
+
+    /// Rimuove un account salvato e la sua cache.
+    func removeAccount(_ id: String) {
+        guard let account = accounts.first(where: { $0.id == id }) else { return }
+        if id == activeAccountID, !isDemo { resetData() }
+        removeCaches(owner: account.id)
+        accounts.removeAll { $0.id == id }
+        Keychain.saveAccounts(accounts)
+        guard id == activeAccountID, !isDemo else { return }
+        if let next = accounts.first {
+            activate(next)
+        } else {
+            endSession()
+        }
+    }
+
+    private func endSession() {
+        resetData()
+        activeAccountID = nil
+        UserDefaults.standard.removeObject(forKey: Self.activeAccountKey)
+        Task { await Reminders.reschedule(events: [], hour: 18, enabled: false, completed: []) }
+        withAnimation { phase = .signedOut }
+    }
+
+    private func resetData() {
+        client?.signOut(clearingCache: false)
         client = nil
-        Keychain.delete()
-        UserDefaults.standard.set(false, forKey: Self.demoKey)
-        isDemo = false
+        archives = [:]
+        sessionID = UUID()
+        refreshingClient = nil
+        isRefreshing = false
+        isOffline = false
+        lastError = nil
         card = nil
         loginName = nil
         grades = []; periods = []; subjects = []; agenda = []; absences = []
         notices = []; notes = []; didactics = []; documents = nil; calendarDays = []; schoolbooks = []
         lessonsByDay = [:]; loadedLessonDays = []
         lastUpdated = nil
-        Task { await Reminders.reschedule(events: [], hour: 18, enabled: false, completed: []) }
-        withAnimation { phase = .signedOut }
+    }
+
+    /// Aggiorna nome e scuola dell'account salvato con i dati della scheda.
+    private func updateActiveAccount(from card: Card) {
+        guard !isDemo, let index = accounts.firstIndex(where: { $0.id == activeAccountID }) else { return }
+        let name = card.fullName.trimmingCharacters(in: .whitespaces)
+        let school = card.schoolDescription
+        guard (!name.isEmpty && accounts[index].name != name) || accounts[index].school != school else { return }
+        if !name.isEmpty { accounts[index].name = name }
+        accounts[index].school = school
+        Keychain.saveAccounts(accounts)
     }
 
     var credentialsForArchive: Credentials? { client?.credentials }
+
+    /// Proprietario della cache su disco della sessione attuale.
+    private var cacheOwner: String { isDemo ? "demo" : (activeAccountID ?? "live") }
+
+    /// Archivio di un anno passato per la sessione attuale (viene azzerato cambiando sessione).
+    func archive(for startYear: Int) -> ArchiveModel {
+        _ = sessionID
+        if let archive = archives[startYear] { return archive }
+        let archive = ArchiveModel(startYear: startYear, owner: cacheOwner)
+        archives[startYear] = archive
+        return archive
+    }
+
+    /// Scarta l'archivio di un anno (e la sua cache) per ricaricarlo da capo.
+    func reloadArchive(for startYear: Int) -> ArchiveModel {
+        archives[startYear] = nil
+        DiskCache.remove(namespace: ArchiveModel.cacheNamespace(owner: cacheOwner, startYear: startYear))
+        return archive(for: startYear)
+    }
+
+    /// Elimina tutti i dati salvati su disco di un account (o della demo): risposte, archivi e file scaricati.
+    private func removeCaches(owner: String) {
+        DiskCache.remove(namespace: owner == "demo" ? "demo" : "live-\(owner)")
+        for year in ArchiveModel.availableStartYears {
+            DiskCache.remove(namespace: ArchiveModel.cacheNamespace(owner: owner, startYear: year))
+        }
+        try? FileManager.default.removeItem(at: FileManager.default.temporaryDirectory
+            .appendingPathComponent("BCWFiles", isDirectory: true))
+    }
 
     // MARK: Caricamento
 
@@ -131,21 +267,32 @@ final class AppModel {
     }
 
     func refreshAll() async {
-        guard client != nil, !isRefreshing else { return }
+        guard let client, refreshingClient !== client else { return }
+        refreshingClient = client
         isRefreshing = true
         lastError = nil
-        defer { isRefreshing = false }
+        defer {
+            if refreshingClient === client {
+                refreshingClient = nil
+                isRefreshing = false
+            }
+        }
 
         // Il primo login serve a tutte le richieste successive.
         do {
-            if client?.token == nil { try await client?.login() }
+            if client.token == nil { try await client.login() }
         } catch let error as URLError {
+            guard client === self.client else { return }
             isOffline = true
             lastError = offlineMessage(error)
             return
         } catch {
-            lastError = error.localizedDescription
-            if let api = error as? APIError, case .wrongCredentials = api { signOut() }
+            guard client === self.client else { return }
+            if let api = error as? APIError, case .wrongCredentials = api {
+                lastError = "Le credenziali di \(displayName) non sono più valide. Accedi di nuovo da Tu › Account › Aggiungi account."
+            } else {
+                lastError = error.localizedDescription
+            }
             return
         }
 
@@ -157,6 +304,7 @@ final class AppModel {
         async let f: Void = loadNotes()
         async let g: Void = loadCalendar()
         _ = await (a, b, c, d, e, f, g)
+        guard client === self.client else { return }
         lessonsByDay = [:]
         loadedLessonDays = []
         lastUpdated = .now
@@ -166,31 +314,43 @@ final class AppModel {
         "Sei offline: stai vedendo gli ultimi dati salvati."
     }
 
+    /// Scarica un endpoint e applica il risultato. Gli errori delle sezioni principali
+    /// finiscono nel banner globale; quelli delle sezioni secondarie (`global: false`)
+    /// vengono solo restituiti, così non compaiono in Dashboard o in Voti.
+    @discardableResult
     private func run<T: Decodable>(_ type: T.Type, _ path: String, method: HTTPMethod = .get,
-                                   apply: (T) -> Void) async {
-        guard let client else { return }
+                                   global: Bool = true, apply: (T) -> Void) async -> String? {
+        guard let client else { return nil }
         do {
-            let result = try await client.fetch(type, path, method: method,
-                                                body: method == .post ? Data("{}".utf8) : nil)
+            let result = try await client.fetch(type, path, method: method)
+            guard client === self.client else { return nil }
             apply(result.value)
-            if result.fromCache {
-                isOffline = true
-                lastError = "Sei offline: stai vedendo gli ultimi dati salvati."
-            } else {
-                isOffline = false
+            if global {
+                if result.fromCache {
+                    isOffline = true
+                    lastError = "Sei offline: stai vedendo gli ultimi dati salvati."
+                } else {
+                    isOffline = false
+                }
             }
+            return nil
         } catch {
-            if lastError == nil { lastError = error.localizedDescription }
+            guard client === self.client else { return nil }
+            if global, lastError == nil { lastError = error.localizedDescription }
+            return error.localizedDescription
         }
     }
 
     func loadCard() async {
-        await run(CardResponse.self, "card") { self.card = $0.card }
+        await run(CardResponse.self, "card") {
+            self.card = $0.card
+            if let card = $0.card { self.updateActiveAccount(from: card) }
+        }
     }
 
     func loadGrades() async {
-        async let p: Void = run(PeriodsResponse.self, "periods") { self.periods = $0.periods }
-        async let s: Void = run(SubjectsResponse.self, "subjects") { self.subjects = $0.subjects }
+        async let p: String? = run(PeriodsResponse.self, "periods") { self.periods = $0.periods }
+        async let s: String? = run(SubjectsResponse.self, "subjects") { self.subjects = $0.subjects }
         async let g: Void = loadGradeList()
         _ = await (p, s, g)
     }
@@ -198,10 +358,12 @@ final class AppModel {
     private func loadGradeList() async {
         guard let client else { return }
         do {
-            let result = try await client.fetchFirst(GradesResponse.self, Self.gradePaths)
+            let result = try await client.fetchFirst(GradesResponse.self, Self.gradePaths) { !$0.grades.isEmpty }
+            guard client === self.client else { return }
             grades = result.value.grades.sorted { $0.date > $1.date }
             if result.fromCache { isOffline = true }
         } catch {
+            guard client === self.client else { return }
             if lastError == nil { lastError = error.localizedDescription }
         }
     }
@@ -225,20 +387,23 @@ final class AppModel {
         await run(NotesResponse.self, "notes/all") { self.notes = $0.notes }
     }
 
-    func loadDidactics() async {
-        await run(DidacticsResponse.self, "didactics") { self.didactics = $0.teachers }
+    @discardableResult
+    func loadDidactics() async -> String? {
+        await run(DidacticsResponse.self, "didactics", global: false) { self.didactics = $0.teachers }
     }
 
-    func loadDocuments() async {
-        await run(DocumentsResponse.self, "documents", method: .post) { self.documents = $0 }
+    @discardableResult
+    func loadDocuments() async -> String? {
+        await run(DocumentsResponse.self, "documents", method: .post, global: false) { self.documents = $0 }
     }
 
     func loadCalendar() async {
         await run(CalendarResponse.self, "calendar/all") { self.calendarDays = $0.days }
     }
 
-    func loadSchoolbooks() async {
-        await run(SchoolbooksResponse.self, "schoolbooks") { self.schoolbooks = $0.courses }
+    @discardableResult
+    func loadSchoolbooks() async -> String? {
+        await run(SchoolbooksResponse.self, "schoolbooks", global: false) { self.schoolbooks = $0.courses }
     }
 
     func rescheduleReminders() async {
@@ -267,6 +432,7 @@ final class AppModel {
         let path = "lessons/\(CVDate.apiString(start))/\(CVDate.apiString(end))"
         do {
             let result = try await client.fetch(LessonsResponse.self, path)
+            guard client === self.client else { return }
             var day = start
             while day <= end {
                 let key = CVDate.dayKey(day)
@@ -297,11 +463,12 @@ final class AppModel {
     /// Apre una comunicazione (segnandola come letta) ed eventualmente aderisce, firma o risponde.
     func openNotice(_ notice: Notice, join: Bool? = nil, sign: Bool? = nil, text: String? = nil) async throws -> NoticeDetail {
         guard let client else { throw APIError.notAuthenticated }
+        // Per la sola lettura si invia un corpo vuoto: `{}` viene rifiutato dal server.
         var body: [String: Any] = [:]
         if let join { body["join"] = join }
         if let sign { body["sign"] = sign }
         if let text { body["text"] = text }
-        let data = try JSONSerialization.data(withJSONObject: body)
+        let data = body.isEmpty ? nil : try JSONSerialization.data(withJSONObject: body)
         let path = "noticeboard/read/\(notice.eventCode)/\(notice.pubId)/101"
         let detail = try await client.fetch(NoticeDetail.self, path, method: .post, body: data, useCache: false).value
         if let index = notices.firstIndex(where: { $0.id == notice.id }) {
@@ -312,6 +479,10 @@ final class AppModel {
 
     func downloadAttachment(_ attachment: NoticeAttachment, of notice: Notice) async throws -> URL {
         guard let client else { throw APIError.notAuthenticated }
+        // Classeviva risponde "item must first be read" se la comunicazione non è stata aperta.
+        if notices.first(where: { $0.id == notice.id })?.isRead != true {
+            _ = try await openNotice(notice)
+        }
         let path = "noticeboard/attach/\(notice.eventCode)/\(notice.pubId)/\(attachment.number)"
         return try await client.download(path, suggestedName: attachment.fileName)
     }
@@ -323,8 +494,7 @@ final class AppModel {
     func readNote(_ note: DisciplinaryNote) async {
         guard let client, !note.isRead else { return }
         let path = "notes/\(note.category.rawValue)/read/\(note.id)"
-        if let response = try? await client.fetch(NoteReadResponse.self, path, method: .post,
-                                                  body: Data("{}".utf8), useCache: false).value,
+        if let response = try? await client.fetch(NoteReadResponse.self, path, method: .post, useCache: false).value,
            let index = notes.firstIndex(where: { $0.id == note.id && $0.category == note.category }) {
             notes[index].isRead = true
             if let text = response.text, !text.isEmpty { notes[index].text = text }
@@ -353,7 +523,7 @@ final class AppModel {
     func downloadDocument(_ document: ReportDocument) async throws -> URL {
         guard let client else { throw APIError.notAuthenticated }
         let check = try await client.fetch(DocumentCheckResponse.self, "documents/check/\(document.documentHash)",
-                                           method: .post, body: Data("{}".utf8), useCache: false).value
+                                           method: .post, useCache: false).value
         guard check.available else {
             throw APIError.unavailable("Il documento non è ancora disponibile.")
         }

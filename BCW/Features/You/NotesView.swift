@@ -69,12 +69,7 @@ private struct NoteCard: View {
                     .foregroundStyle(tint)
                 Spacer()
                 if !note.isRead {
-                    Text("Nuova")
-                        .font(.caption2.weight(.bold))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Theme.accent, in: .capsule)
-                        .foregroundStyle(.white)
+                    Pill(text: "Nuova", filled: true, font: .caption2.weight(.bold))
                 }
             }
             Text(note.text.isEmpty ? "Tocca per leggere il contenuto." : note.text)

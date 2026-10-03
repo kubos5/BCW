@@ -28,7 +28,7 @@ struct DayDetail: View {
             }
 
             if !testsAndEvents.isEmpty {
-                section(title: "Verifiche ed eventi", symbol: "pencil.and.list.clipboard") {
+                section(.testsAndEvents, title: "Verifiche ed eventi", symbol: "pencil.and.list.clipboard") {
                     ForEach(testsAndEvents) { event in
                         AgendaEventRow(event: event)
                         if event.id != testsAndEvents.last?.id { divider }
@@ -37,7 +37,7 @@ struct DayDetail: View {
             }
 
             if !homework.isEmpty {
-                section(title: "Compiti", symbol: "book.closed",
+                section(.homework, title: "Compiti", symbol: "book.closed",
                         trailing: "\(homework.filter { model.preferences.isCompleted($0) }.count)/\(homework.count)") {
                     ForEach(homework) { event in
                         AgendaEventRow(event: event)
@@ -47,7 +47,7 @@ struct DayDetail: View {
             }
 
             if !absences.isEmpty {
-                section(title: "Presenze", symbol: "person.badge.clock") {
+                section(.attendance, title: "Presenze", symbol: "person.badge.clock") {
                     ForEach(absences) { absence in
                         AbsenceRow(absence: absence)
                         if absence.id != absences.last?.id { divider }
@@ -96,7 +96,7 @@ struct DayDetail: View {
     @ViewBuilder
     private var lessonsSection: some View {
         if !lessons.isEmpty {
-            section(title: "Lezioni", symbol: "text.book.closed", trailing: "\(lessons.reduce(0) { $0 + Int($1.duration) }) ore") {
+            section(.lessons, title: "Lezioni", symbol: "text.book.closed", trailing: "\(lessons.reduce(0) { $0 + Int($1.duration) }) ore") {
                 ForEach(lessons) { lesson in
                     LessonRow(lesson: lesson)
                     if lesson.id != lessons.last?.id { divider }
@@ -129,21 +129,54 @@ struct DayDetail: View {
         Divider().overlay(Theme.separator)
     }
 
-    private func section<Content: View>(title: String, symbol: String, trailing: String? = nil,
-                                        @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(_ id: DashboardSection, title: String, symbol: String, trailing: String? = nil,
+                                        @ViewBuilder content: @escaping () -> Content) -> some View {
+        CollapsibleCard(section: id, title: title, symbol: symbol, trailing: trailing, content: content)
+    }
+}
+
+/// Card con intestazione toccabile che comprime o espande il contenuto.
+/// Lo stato è ricordato tra un avvio e l'altro.
+struct CollapsibleCard<Content: View>: View {
+    @Environment(AppModel.self) private var model
+    let section: DashboardSection
+    let title: String
+    let symbol: String
+    var trailing: String?
+    @ViewBuilder let content: () -> Content
+
+    private var isCollapsed: Bool { model.preferences.isCollapsed(section) }
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Label(title, systemImage: symbol)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.secondaryInk)
-                Spacer()
-                if let trailing {
-                    Text(trailing)
-                        .font(.footnote.monospacedDigit())
+            Button {
+                withAnimation(.snappy) { model.preferences.toggleCollapsed(section) }
+            } label: {
+                HStack {
+                    Label(title, systemImage: symbol)
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Theme.secondaryInk)
+                    Spacer()
+                    if let trailing {
+                        Text(trailing)
+                            .font(.footnote.monospacedDigit())
+                            .foregroundStyle(Theme.secondaryInk)
+                    }
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.secondaryInk)
+                        .rotationEffect(.degrees(isCollapsed ? -90 : 0))
                 }
+                .contentShape(.rect)
             }
-            content()
+            .buttonStyle(.plain)
+            .accessibilityHint(isCollapsed ? "Espande la sezione" : "Comprime la sezione")
+            .sensoryFeedback(.selection, trigger: isCollapsed)
+
+            if !isCollapsed {
+                content()
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
         .card()
     }

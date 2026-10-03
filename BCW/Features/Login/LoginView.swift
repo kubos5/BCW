@@ -2,6 +2,9 @@ import SwiftUI
 
 struct LoginView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    /// `true` quando si aggiunge un altro account da dentro l'app (presentata come foglio).
+    var isAddingAccount = false
     @State private var username = ""
     @State private var password = ""
     @State private var isLoading = false
@@ -15,7 +18,7 @@ struct LoginView: View {
         ScrollView {
             VStack(spacing: 28) {
                 header
-                    .padding(.top, 60)
+                    .padding(.top, isAddingAccount ? 24 : 60)
 
                 VStack(spacing: 0) {
                     field(symbol: "person", placeholder: "Codice utente o email") {
@@ -64,15 +67,17 @@ struct LoginView: View {
                 .controlSize(.large)
                 .disabled(username.isEmpty || password.isEmpty || isLoading)
 
-                Button {
-                    model.startDemo()
-                } label: {
-                    Text("Prova la demo")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 4)
+                if !isAddingAccount {
+                    Button {
+                        model.startDemo()
+                    } label: {
+                        Text("Prova la demo")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.glass)
+                    .controlSize(.large)
                 }
-                .buttonStyle(.glass)
-                .controlSize(.large)
 
                 footer
             }
@@ -100,7 +105,7 @@ struct LoginView: View {
             Capsule()
                 .fill(Theme.accent)
                 .frame(width: 56, height: 4)
-            Text("Better ClasseViVa")
+            Text(isAddingAccount ? "Aggiungi un account" : "Better ClasseViVa")
                 .font(.title3.italic())
                 .foregroundStyle(Theme.secondaryInk)
         }
@@ -144,6 +149,7 @@ struct LoginView: View {
             defer { isLoading = false }
             do {
                 try await model.signIn(username: username, password: password, ident: ident)
+                if isAddingAccount { dismiss() }
             } catch APIError.needsProfileChoice(let options) {
                 choices = options
             } catch let error as URLError {

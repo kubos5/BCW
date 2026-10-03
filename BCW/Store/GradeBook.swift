@@ -89,7 +89,9 @@ struct GradeBook {
         .sorted { $0.name < $1.name }
     }
 
-    /// Andamento della media nel tempo, voto dopo voto.
+    /// Andamento della media nel tempo, con un punto per giorno.
+    /// Più voti nello stesso giorno producono un solo punto (la media a fine giornata):
+    /// punti con la stessa data fanno impazzire l'interpolazione del grafico.
     func runningAverage(for subjectId: Int? = nil, period: Int? = nil) -> [(date: Date, value: Double)] {
         var list = grades(in: period).filter(\.countsTowardAverage)
         if let subjectId { list = list.filter { $0.subjectId == subjectId } }
@@ -98,7 +100,13 @@ struct GradeBook {
         var running: [Grade] = []
         for g in list {
             running.append(g)
-            if let avg = Self.average(of: running, weighted: weighted) { points.append((date: g.date, value: avg)) }
+            guard let avg = Self.average(of: running, weighted: weighted) else { continue }
+            let day = g.date.startOfDay
+            if let last = points.last, last.date == day {
+                points[points.count - 1].value = avg
+            } else {
+                points.append((date: day, value: avg))
+            }
         }
         return points
     }

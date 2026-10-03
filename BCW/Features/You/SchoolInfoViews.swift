@@ -112,12 +112,7 @@ struct SchoolbooksView: View {
     }
 
     private func tag(_ text: String, _ color: Color) -> some View {
-        Text(text)
-            .font(.caption2.weight(.bold))
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(color.opacity(0.14), in: .capsule)
-            .foregroundStyle(color)
+        Pill(text: text, color: color, font: .caption2.weight(.bold))
     }
 }
 

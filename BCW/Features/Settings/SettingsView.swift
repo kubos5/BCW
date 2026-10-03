@@ -50,12 +50,24 @@ struct SettingsView: View {
             }
             .listRowBackground(Theme.surface)
 
+            Section {
+                Picker("Vista", selection: $preferences.dashboardMode) {
+                    ForEach(DashboardMode.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
+                }
+                Toggle("Mostra \"Nei prossimi giorni\"", isOn: $preferences.showUpcomingDays)
+                Picker("Abbrevia il titolo", selection: $preferences.titleAbbreviation) {
+                    ForEach(TitleAbbreviation.allCases) { Text($0.title).tag($0) }
+                }
+            } header: {
+                Text("Dashboard")
+            } footer: {
+                Text("Il titolo abbreviato mostra la data in forma breve (es. \"Gio 1 ott\"). In automatico si abbrevia solo se il nome completo non entra.")
+            }
+            .listRowBackground(Theme.surface)
+
             Section("Aspetto e sicurezza") {
                 Picker("Tema", selection: $preferences.appearance) {
                     ForEach(AppearanceMode.allCases) { Text($0.title).tag($0) }
-                }
-                Picker("Vista della dashboard", selection: $preferences.dashboardMode) {
-                    ForEach(DashboardMode.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
                 }
                 Toggle("Blocca con \(BiometricLock.biometryName)", isOn: $preferences.useBiometrics)
             }
@@ -99,6 +111,7 @@ struct SettingsView: View {
 struct AccountView: View {
     @Environment(AppModel.self) private var model
     @State private var confirmSignOut = false
+    @State private var addingAccount = false
 
     var body: some View {
         Form {
@@ -120,6 +133,33 @@ struct AccountView: View {
                 .padding(.vertical, 8)
             }
             .listRowBackground(Color.clear)
+
+            Section {
+                ForEach(model.accounts) { account in
+                    Button {
+                        withAnimation { model.switchAccount(to: account.id) }
+                    } label: {
+                        AccountRow(account: account,
+                                   isActive: !model.isDemo && account.id == model.activeAccountID)
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions {
+                        Button("Rimuovi", systemImage: "trash", role: .destructive) {
+                            withAnimation { model.removeAccount(account.id) }
+                        }
+                    }
+                }
+                Button("Aggiungi account", systemImage: "person.crop.circle.badge.plus") {
+                    addingAccount = true
+                }
+            } header: {
+                Text("Account")
+            } footer: {
+                Text(model.accounts.count > 1
+                     ? "Tocca un account per passare ad esso. Scorri verso sinistra per rimuoverlo."
+                     : "Puoi aggiungere altri account Classeviva (ad esempio quelli di fratelli o sorelle) e passare dall'uno all'altro.")
+            }
+            .listRowBackground(Theme.surface)
 
             if let card = model.card {
                 Section("Profilo") {
@@ -150,19 +190,73 @@ struct AccountView: View {
             }
 
             Section {
-                Button("Esci", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                Button(model.isDemo ? "Esci dalla demo" : "Esci da questo account",
+                       systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
                     confirmSignOut = true
                 }
+                // Agganciato al pulsante: il dialogo compare accanto ad esso.
+                .confirmationDialog(signOutTitle, isPresented: $confirmSignOut, titleVisibility: .visible) {
+                    Button("Esci", role: .destructive) { model.signOut() }
+                }
             } footer: {
-                Text(model.isDemo ? "Stai usando la modalità demo." : "Uscendo, le credenziali verranno rimosse da questo dispositivo.")
+                Text(signOutFooter)
             }
             .listRowBackground(Theme.surface)
         }
         .themedList()
         .navigationTitle("Account")
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("Vuoi uscire da BCW?", isPresented: $confirmSignOut, titleVisibility: .visible) {
-            Button("Esci", role: .destructive) { model.signOut() }
+        .sheet(isPresented: $addingAccount) {
+            NavigationStack {
+                LoginView(isAddingAccount: true)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Annulla", systemImage: "xmark") { addingAccount = false }
+                        }
+                    }
+            }
         }
+    }
+
+    private var signOutTitle: String {
+        model.isDemo ? "Vuoi uscire dalla demo?" : "Vuoi uscire da \(model.displayName)?"
+    }
+
+    private var signOutFooter: String {
+        if model.isDemo { return "Stai usando la modalità demo." }
+        return model.accounts.count > 1
+            ? "Le credenziali di questo account verranno rimosse e passerai a un altro account salvato."
+            : "Uscendo, le credenziali verranno rimosse da questo dispositivo."
+    }
+}
+
+struct AccountRow: View {
+    let account: SavedAccount
+    let isActive: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(account.initials)
+                .font(.numeral(15, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(Theme.subjectColor(StableID.make(account.id)).gradient, in: .circle)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(account.name)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(Theme.ink)
+                Text(account.school ?? account.credentials.username)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.secondaryInk)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            if isActive {
+                Image(systemName: "checkmark")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Theme.accent)
+            }
+        }
+        .contentShape(.rect)
     }
 }

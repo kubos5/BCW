@@ -62,7 +62,9 @@ struct AbsencesView: View {
                                 .padding(.leading, 6)
                             VStack(spacing: 12) {
                                 ForEach(events) { event in
-                                    HStack(alignment: .top, spacing: 12) {
+                                    // Data, icona e stato restano centrati sull'intera riga,
+                                    // anche quando dettaglio e motivo occupano più righe.
+                                    HStack(spacing: 12) {
                                         VStack(spacing: 0) {
                                             Text(event.date.it("d"))
                                                 .font(.numeral(20, weight: .bold))
@@ -71,15 +73,7 @@ struct AbsencesView: View {
                                                 .foregroundStyle(Theme.secondaryInk)
                                         }
                                         .frame(width: 38)
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            AbsenceRow(absence: event)
-                                            if let reason = event.justificationReason {
-                                                Text(reason)
-                                                    .font(.caption)
-                                                    .foregroundStyle(Theme.secondaryInk)
-                                                    .padding(.leading, 48)
-                                            }
-                                        }
+                                        AbsenceRow(absence: event, showsReason: true)
                                     }
                                     if event.id != events.last?.id { Divider().overlay(Theme.separator) }
                                 }
