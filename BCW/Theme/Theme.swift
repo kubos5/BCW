@@ -1,5 +1,9 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#else
 import UIKit
+#endif
 
 /// Palette di BCW: carta color crema di giorno, grafite calda di notte,
 /// con un accento rosso mattone che richiama l'inchiostro delle correzioni.
@@ -19,9 +23,14 @@ enum Theme {
     static let neutral = dynamic(light: 0x4F6D8F, dark: 0x8FB0D6)
 
     static let corner: CGFloat = 22
+    #if os(macOS)
+    /// Su macOS non c'è la tab bar: basta un normale margine in fondo.
+    static let bottomInset: CGFloat = 32
+    #else
     /// Spazio in fondo alle pagine lunghe: stacca l'ultimo elemento dalla tab bar e rende
     /// la pagina abbastanza lunga perché iOS rimpicciolisca la tab bar scorrendo.
     static let bottomInset: CGFloat = 120
+    #endif
 
     /// Colori tenui e distinti per le materie (assegnati in modo stabile).
     private static let subjectPalette: [(Int, Int)] = [
@@ -50,35 +59,28 @@ enum Theme {
     }
 
     static func dynamic(light: Int, dark: Int) -> Color {
+        #if os(macOS)
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            return NSColor(hex: isDark ? dark : light)
+        })
+        #else
         Color(uiColor: UIColor { traits in
             UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light)
         })
+        #endif
     }
 
     /// Imposta i font serif (New York) nelle barre native di UIKit.
+    /// Su macOS i titoli sono già disegnati da BCW (vedi `screenTitle`).
     static func configureAppearance() {
+        #if os(iOS)
         let nav = UINavigationBar.appearance()
         nav.largeTitleTextAttributes = [.font: UIFont.newYork(size: 34, weight: .bold)]
         nav.titleTextAttributes = [.font: UIFont.newYork(size: 17, weight: .semibold)]
         UISegmentedControl.appearance().setTitleTextAttributes(
             [.font: UIFont.newYork(size: 13, weight: .medium)], for: .normal)
-    }
-}
-
-extension UIColor {
-    nonisolated convenience init(hex: Int) {
-        self.init(red: CGFloat((hex >> 16) & 0xFF) / 255,
-                  green: CGFloat((hex >> 8) & 0xFF) / 255,
-                  blue: CGFloat(hex & 0xFF) / 255,
-                  alpha: 1)
-    }
-}
-
-extension UIFont {
-    static func newYork(size: CGFloat, weight: UIFont.Weight) -> UIFont {
-        let base = UIFont.systemFont(ofSize: size, weight: weight)
-        guard let descriptor = base.fontDescriptor.withDesign(.serif) else { return base }
-        return UIFont(descriptor: descriptor, size: size)
+        #endif
     }
 }
 

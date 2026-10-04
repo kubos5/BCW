@@ -5,44 +5,89 @@ import SwiftUI
 struct SubjectsView: View {
     @Environment(AppModel.self) private var model
 
+    private var sortedSubjects: [Subject] { model.subjects.sorted { $0.order < $1.order } }
+
     var body: some View {
+        content
+            .overlay {
+                if model.subjects.isEmpty {
+                    ContentUnavailableView("Nessuna materia", systemImage: "books.vertical")
+                }
+            }
+            .screenTitle("Materie")
+            .refreshable { await model.loadGrades() }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        #if os(macOS)
+        ScrollView {
+            CardGrid(minWidth: 320) {
+                ForEach(sortedSubjects) { subject in
+                    NavigationLink {
+                        SubjectDetailView(subjectId: subject.id, book: model.gradeBook, subjects: model.subjects)
+                    } label: {
+                        SubjectListRow(subject: subject, average: average(of: subject), showsChevron: true)
+                            .card(padding: 14)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .pagePadding()
+            .padding(.bottom, Theme.bottomInset)
+        }
+        .themedBackground()
+        #else
         List {
-            ForEach(model.subjects.sorted { $0.order < $1.order }) { subject in
-                let summary = model.gradeBook.subjects().first { $0.subjectId == subject.id }
+            ForEach(sortedSubjects) { subject in
                 NavigationLink {
                     SubjectDetailView(subjectId: subject.id, book: model.gradeBook, subjects: model.subjects)
                 } label: {
-                    HStack(spacing: 12) {
-                        Circle()
-                            .fill(Theme.subjectColor(subject.id))
-                            .frame(width: 10, height: 10)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(subject.name)
-                                .font(.body.weight(.medium))
-                                .foregroundStyle(Theme.ink)
-                            if !subject.teachers.isEmpty {
-                                Text(subject.teachers.joined(separator: ", "))
-                                    .font(.footnote)
-                                    .foregroundStyle(Theme.secondaryInk)
-                            }
-                        }
-                        Spacer()
-                        Text(GradeFormat.average(summary?.average))
-                            .font(.numeral(17, weight: .bold))
-                            .foregroundStyle(Theme.gradeColor(value: summary?.average))
-                    }
+                    SubjectListRow(subject: subject, average: average(of: subject))
                 }
                 .listRowBackground(Theme.surface)
             }
         }
         .themedList()
-        .overlay {
-            if model.subjects.isEmpty {
-                ContentUnavailableView("Nessuna materia", systemImage: "books.vertical")
+        #endif
+    }
+
+    private func average(of subject: Subject) -> Double? {
+        model.gradeBook.subjects().first { $0.subjectId == subject.id }?.average
+    }
+}
+
+private struct SubjectListRow: View {
+    let subject: Subject
+    let average: Double?
+    var showsChevron = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(Theme.subjectColor(subject.id))
+                .frame(width: 10, height: 10)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(subject.name)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(Theme.ink)
+                if !subject.teachers.isEmpty {
+                    Text(subject.teachers.joined(separator: ", "))
+                        .font(.footnote)
+                        .foregroundStyle(Theme.secondaryInk)
+                }
+            }
+            Spacer()
+            Text(GradeFormat.average(average))
+                .font(.numeral(17, weight: .bold))
+                .foregroundStyle(Theme.gradeColor(value: average))
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Theme.secondaryInk)
             }
         }
-        .navigationTitle("Materie")
-        .refreshable { await model.loadGrades() }
+        .contentShape(.rect)
     }
 }
 
@@ -53,61 +98,96 @@ struct SchoolbooksView: View {
     @State private var loading = false
 
     var body: some View {
+        content
+            .overlay {
+                if loading && model.schoolbooks.isEmpty {
+                    ProgressView()
+                } else if model.schoolbooks.isEmpty {
+                    ContentUnavailableView("Nessun libro", systemImage: "books.vertical",
+                                           description: Text("La scuola non ha pubblicato le adozioni."))
+                }
+            }
+            .screenTitle("Libri di testo")
+            .task {
+                loading = true
+                await model.loadSchoolbooks()
+                loading = false
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        #if os(macOS)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                ForEach(model.schoolbooks) { course in
+                    VStack(alignment: .leading, spacing: 10) {
+                        SectionHeader(course.name)
+                        CardGrid(minWidth: 380) {
+                            ForEach(course.books) { book in
+                                BookRow(book: book)
+                                    .frame(maxHeight: .infinity, alignment: .top)
+                                    .card(padding: 14)
+                            }
+                        }
+                    }
+                }
+            }
+            .pagePadding()
+            .padding(.bottom, Theme.bottomInset)
+        }
+        .themedBackground()
+        #else
         List {
             ForEach(model.schoolbooks) { course in
                 Section(course.name) {
                     ForEach(course.books) { book in
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack(alignment: .firstTextBaseline) {
-                                Text(book.title)
-                                    .font(.body.weight(.semibold))
-                                    .foregroundStyle(Theme.ink)
-                                Spacer()
-                                if let price = book.price, price > 0 {
-                                    Text(price, format: .currency(code: "EUR"))
-                                        .font(.subheadline.monospacedDigit())
-                                        .foregroundStyle(Theme.secondaryInk)
-                                }
-                            }
-                            Text([book.subject, book.volume].compactMap { $0 }.joined(separator: " · "))
-                                .font(.footnote)
-                                .foregroundStyle(Theme.accent)
-                            Text([book.author, book.publisher].compactMap { $0 }.joined(separator: " · "))
-                                .font(.footnote)
-                                .foregroundStyle(Theme.secondaryInk)
-                            HStack(spacing: 6) {
-                                if book.toBuy { tag("Da acquistare", Theme.fair) }
-                                if book.inUse { tag("Già in uso", Theme.good) }
-                                if book.recommended { tag("Consigliato", Theme.neutral) }
-                                Spacer()
-                                if !book.isbn.isEmpty {
-                                    Text("ISBN \(book.isbn)")
-                                        .font(.caption2.monospacedDigit())
-                                        .foregroundStyle(Theme.secondaryInk)
-                                        .textSelection(.enabled)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 4)
-                        .listRowBackground(Theme.surface)
+                        BookRow(book: book)
+                            .padding(.vertical, 4)
+                            .listRowBackground(Theme.surface)
                     }
                 }
             }
         }
         .themedList()
-        .overlay {
-            if loading && model.schoolbooks.isEmpty {
-                ProgressView()
-            } else if model.schoolbooks.isEmpty {
-                ContentUnavailableView("Nessun libro", systemImage: "books.vertical",
-                                       description: Text("La scuola non ha pubblicato le adozioni."))
+        #endif
+    }
+}
+
+private struct BookRow: View {
+    let book: Schoolbook
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(book.title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Theme.ink)
+                Spacer()
+                if let price = book.price, price > 0 {
+                    Text(price, format: .currency(code: "EUR"))
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(Theme.secondaryInk)
+                }
             }
-        }
-        .navigationTitle("Libri di testo")
-        .task {
-            loading = true
-            await model.loadSchoolbooks()
-            loading = false
+            Text([book.subject, book.volume].compactMap { $0 }.joined(separator: " · "))
+                .font(.footnote)
+                .foregroundStyle(Theme.accent)
+            Text([book.author, book.publisher].compactMap { $0 }.joined(separator: " · "))
+                .font(.footnote)
+                .foregroundStyle(Theme.secondaryInk)
+            HStack(spacing: 6) {
+                if book.toBuy { tag("Da acquistare", Theme.fair) }
+                if book.inUse { tag("Già in uso", Theme.good) }
+                if book.recommended { tag("Consigliato", Theme.neutral) }
+                Spacer()
+                if !book.isbn.isEmpty {
+                    Text("ISBN \(book.isbn)")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(Theme.secondaryInk)
+                        .textSelection(.enabled)
+                }
+            }
         }
     }
 
@@ -148,68 +228,92 @@ struct SchoolCalendarView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                if stats.total > 0 {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Eyebrow(text: "Anno scolastico")
-                        HStack(alignment: .firstTextBaseline) {
-                            Text("\(stats.done)")
-                                .font(.numeral(34, weight: .bold))
-                            Text("di \(stats.total) giorni di lezione")
-                                .foregroundStyle(Theme.secondaryInk)
-                        }
-                        ProgressView(value: Double(stats.done), total: Double(max(stats.total, 1)))
-                            .tint(Theme.accent)
-                        Text("Mancano \(stats.total - stats.done) giorni di scuola")
-                            .font(.footnote)
-                            .foregroundStyle(Theme.secondaryInk)
-                    }
-                    .card()
+                #if os(macOS)
+                // Su macOS i due riepiloghi stanno affiancati.
+                HStack(alignment: .top, spacing: 14) {
+                    yearProgress
+                    nextHoliday
                 }
-
-                if let next = holidays.first(where: { $0.end >= Date().startOfDay }) {
-                    let daysLeft = CVDate.calendar.dateComponents([.day], from: Date().startOfDay, to: next.start).day ?? 0
-                    VStack(alignment: .leading, spacing: 8) {
-                        Eyebrow(text: "Prossima vacanza", color: Theme.accent)
-                        Text(range(next))
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(Theme.ink)
-                        Text(daysLeft <= 0 ? "Sei in vacanza!" : "Tra \(daysLeft) giorni")
-                            .foregroundStyle(Theme.secondaryInk)
-                    }
-                    .card()
-                }
-
-                SectionHeader("Vacanze e chiusure")
-                VStack(spacing: 12) {
-                    ForEach(holidays.indices, id: \.self) { i in
-                        let h = holidays[i]
-                        HStack {
-                            Image(systemName: h.end < Date().startOfDay ? "checkmark.circle" : "sun.max")
-                                .foregroundStyle(h.end < Date().startOfDay ? Theme.secondaryInk : Theme.fair)
-                                .frame(width: 26)
-                            Text(range(h))
-                                .foregroundStyle(h.end < Date().startOfDay ? Theme.secondaryInk : Theme.ink)
-                            Spacer()
-                            let count = (CVDate.calendar.dateComponents([.day], from: h.start, to: h.end).day ?? 0) + 1
-                            Text(count == 1 ? "1 giorno" : "\(count) giorni")
-                                .font(.footnote)
-                                .foregroundStyle(Theme.secondaryInk)
-                        }
-                        if i != holidays.count - 1 { Divider().overlay(Theme.separator) }
-                    }
-                    if holidays.isEmpty {
-                        Text("Il calendario non è ancora disponibile.")
-                            .foregroundStyle(Theme.secondaryInk)
-                    }
-                }
-                .card()
+                .fixedSize(horizontal: false, vertical: true)
+                #else
+                yearProgress
+                nextHoliday
+                #endif
+                holidayList
             }
-            .padding(.horizontal)
+            .pagePadding()
             .padding(.bottom, 24)
         }
         .themedBackground()
-        .navigationTitle("Calendario")
+        .screenTitle("Calendario")
         .task { if model.calendarDays.isEmpty { await model.loadCalendar() } }
+    }
+
+    @ViewBuilder
+    private var yearProgress: some View {
+        if stats.total > 0 {
+            VStack(alignment: .leading, spacing: 12) {
+                Eyebrow(text: "Anno scolastico")
+                HStack(alignment: .firstTextBaseline) {
+                    Text("\(stats.done)")
+                        .font(.numeral(34, weight: .bold))
+                    Text("di \(stats.total) giorni di lezione")
+                        .foregroundStyle(Theme.secondaryInk)
+                }
+                ProgressView(value: Double(stats.done), total: Double(max(stats.total, 1)))
+                    .tint(Theme.accent)
+                Text("Mancano \(stats.total - stats.done) giorni di scuola")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.secondaryInk)
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
+            .card()
+        }
+    }
+
+    @ViewBuilder
+    private var nextHoliday: some View {
+        if let next = holidays.first(where: { $0.end >= Date().startOfDay }) {
+            let daysLeft = CVDate.calendar.dateComponents([.day], from: Date().startOfDay, to: next.start).day ?? 0
+            VStack(alignment: .leading, spacing: 8) {
+                Eyebrow(text: "Prossima vacanza", color: Theme.accent)
+                Text(range(next))
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(Theme.ink)
+                Text(daysLeft <= 0 ? "Sei in vacanza!" : "Tra \(daysLeft) giorni")
+                    .foregroundStyle(Theme.secondaryInk)
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
+            .card()
+        }
+    }
+
+    @ViewBuilder
+    private var holidayList: some View {
+        SectionHeader("Vacanze e chiusure")
+        VStack(spacing: 12) {
+            ForEach(holidays.indices, id: \.self) { i in
+                let h = holidays[i]
+                HStack {
+                    Image(systemName: h.end < Date().startOfDay ? "checkmark.circle" : "sun.max")
+                        .foregroundStyle(h.end < Date().startOfDay ? Theme.secondaryInk : Theme.fair)
+                        .frame(width: 26)
+                    Text(range(h))
+                        .foregroundStyle(h.end < Date().startOfDay ? Theme.secondaryInk : Theme.ink)
+                    Spacer()
+                    let count = (CVDate.calendar.dateComponents([.day], from: h.start, to: h.end).day ?? 0) + 1
+                    Text(count == 1 ? "1 giorno" : "\(count) giorni")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.secondaryInk)
+                }
+                if i != holidays.count - 1 { Divider().overlay(Theme.separator) }
+            }
+            if holidays.isEmpty {
+                Text("Il calendario non è ancora disponibile.")
+                    .foregroundStyle(Theme.secondaryInk)
+            }
+        }
+        .card()
     }
 
     private func range(_ h: (start: Date, end: Date)) -> String {

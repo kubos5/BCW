@@ -37,7 +37,7 @@ struct SearchView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        PlatformNavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     if trimmed.isEmpty {
@@ -46,14 +46,16 @@ struct SearchView: View {
                         ContentUnavailableView.search(text: trimmed)
                             .padding(.top, 40)
                     } else {
-                        results
+                        CardGrid(minWidth: 400, spacing: 20) {
+                            results
+                        }
                     }
                 }
-                .padding(.horizontal)
+                .pagePadding()
                 .padding(.bottom, 24)
             }
             .themedBackground()
-            .navigationTitle("Cerca")
+            .screenTitle("Cerca")
             .searchable(text: $query, prompt: "Compiti, voti, comunicazioni…")
             // Con la tastiera aperta il titolo "Cerca" resta visibile.
             .searchPresentationToolbarBehavior(.avoidHidingContent)

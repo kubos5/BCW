@@ -5,7 +5,15 @@ struct YouView: View {
     @State private var addingAccount = false
 
     var body: some View {
-        NavigationStack {
+        #if os(macOS)
+        MacYouView()
+        #else
+        iOSBody
+        #endif
+    }
+
+    private var iOSBody: some View {
+        PlatformNavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     NavigationLink {
@@ -59,14 +67,14 @@ struct YouView: View {
 
                     footer
                 }
-                .padding(.horizontal)
+                .pagePadding()
                 .padding(.bottom, Theme.bottomInset)
             }
             .themedBackground()
-            .navigationTitle("Tu")
+            .screenTitle("Tu")
             .refreshable { await model.refreshAll() }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { accountSwitcher }
+                ToolbarItem(placement: .trailingBar) { accountSwitcher }
             }
             .sheet(isPresented: $addingAccount) {
                 NavigationStack {
@@ -112,7 +120,7 @@ struct YouView: View {
         .accessibilityLabel("Cambia account")
     }
 
-    private var stats: some View {
+    var stats: some View {
         let absences = model.absences.filter { $0.kind == .absence }.count
         let lates = model.absences.filter { $0.kind == .late || $0.kind == .shortLate }.count
         let exits = model.absences.filter { $0.kind == .earlyExit }.count
@@ -217,7 +225,7 @@ private struct MenuRow<Destination: View>: View {
     }
 }
 
-private struct ProfileCard: View {
+struct ProfileCard: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
@@ -250,3 +258,165 @@ private struct ProfileCard: View {
         .card(padding: 18)
     }
 }
+
+#if os(macOS)
+/// "Tu" su macOS: le funzioni sono già nella barra laterale, quindi la pagina diventa
+/// un riepilogo dell'account con lo stato di ogni sezione, a griglia.
+private struct MacYouView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(MacNavigation.self) private var nav
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 26) {
+                // Profilo e statistiche affiancati se c'è spazio, altrimenti uno sotto l'altro.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 14) {
+                        profile
+                            .frame(minWidth: 380)
+                        stats
+                            .frame(width: 520)
+                    }
+                    VStack(spacing: 14) {
+                        profile
+                        stats
+                    }
+                }
+
+                ForEach(MacSection.groups.dropFirst().indices, id: \.self) { index in
+                    let group = MacSection.groups[index]
+                    VStack(alignment: .leading, spacing: 10) {
+                        Eyebrow(text: group.title ?? "")
+                            .padding(.leading, 6)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 270), spacing: 12, alignment: .top)],
+                                  alignment: .leading, spacing: 12) {
+                            ForEach(group.sections) { section in
+                                SectionTile(section: section, subtitle: subtitle(for: section),
+                                            badge: badge(for: section)) {
+                                    nav.section = section
+                                }
+                            }
+                        }
+                    }
+                }
+
+                footer
+            }
+            .pagePadding()
+            .padding(.bottom, Theme.bottomInset)
+        }
+        .themedBackground()
+        .screenTitle("Tu")
+    }
+
+    private var profile: some View {
+        NavigationLink {
+            AccountView()
+        } label: {
+            ProfileCard()
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var stats: some View {
+        let absences = model.absences.filter { $0.kind == .absence }.count
+        let lates = model.absences.filter { $0.kind == .late || $0.kind == .shortLate }.count
+        let exits = model.absences.filter { $0.kind == .earlyExit }.count
+        return HStack(spacing: 10) {
+            StatTile(title: "Media", value: GradeFormat.average(model.gradeBook.average()),
+                     symbol: "graduationcap", tint: Theme.gradeColor(value: model.gradeBook.average()))
+            StatTile(title: "Assenze", value: "\(absences)", symbol: "person.crop.circle.badge.xmark", tint: Theme.poor)
+            StatTile(title: "Ritardi", value: "\(lates)", symbol: "clock", tint: Theme.fair)
+            StatTile(title: "Uscite", value: "\(exits)", symbol: "figure.walk.departure", tint: Theme.neutral)
+        }
+    }
+
+    private func subtitle(for section: MacSection) -> String {
+        switch section {
+        case .noticeboard:
+            let unread = model.unreadNoticesCount
+            return unread == 0 ? "Tutto letto" : (unread == 1 ? "1 comunicazione da leggere" : "\(unread) comunicazioni da leggere")
+        case .notes: return model.notes.isEmpty ? "Nessuna nota" : "\(model.notes.count) in totale"
+        case .reports: return "Documenti di valutazione"
+        case .previousYears: return "Pagelle e archivio degli anni passati"
+        case .absences:
+            let pending = model.unjustifiedAbsences.count
+            return pending == 0 ? "Tutto giustificato" : "\(pending) da giustificare"
+        case .didactics: return "File condivisi dai docenti"
+        case .lessons: return "Argomenti svolti in classe"
+        case .agenda: return "Tutti i compiti e le verifiche"
+        case .subjects: return "\(model.subjects.count) materie"
+        case .schoolbooks: return "Adozioni dell'anno in corso"
+        case .schoolCalendar: return "Vacanze e giorni di lezione"
+        default: return ""
+        }
+    }
+
+    private func badge(for section: MacSection) -> Int {
+        switch section {
+        case .noticeboard: model.unreadNoticesCount
+        case .notes: model.notes.filter { !$0.isRead }.count
+        case .absences: model.unjustifiedAbsences.count
+        default: 0
+        }
+    }
+
+    private var footer: some View {
+        VStack(spacing: 4) {
+            Text("BCW · Better ClasseViVa")
+                .font(.footnote.weight(.semibold))
+            if let updated = model.lastUpdated {
+                Text("Aggiornato alle \(updated.time)")
+            }
+            if model.isDemo {
+                Text("Modalità demo: i dati sono di esempio.")
+            }
+        }
+        .font(.footnote)
+        .foregroundStyle(Theme.secondaryInk)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// Riquadro di una sezione nella pagina "Tu" su macOS.
+private struct SectionTile: View {
+    let section: MacSection
+    let subtitle: String
+    let badge: Int
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                IconBadge(symbol: section.symbol, tint: section.tint, size: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(section.title)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Theme.ink)
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(Theme.secondaryInk)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                if badge > 0 {
+                    Pill(text: "\(badge)", filled: true, font: .caption.weight(.bold).monospacedDigit())
+                }
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Theme.secondaryInk.opacity(hovering ? 1 : 0.6))
+            }
+            .card(padding: 14)
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
+                    .strokeBorder(section.tint.opacity(hovering ? 0.5 : 0), lineWidth: 1)
+            }
+            .contentShape(.rect(cornerRadius: Theme.corner))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(.snappy(duration: 0.2), value: hovering)
+    }
+}
+#endif

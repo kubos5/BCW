@@ -5,9 +5,9 @@ struct GradesView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        NavigationStack {
+        PlatformNavigationStack {
             GradeBookView(book: model.gradeBook, subjects: model.subjects, allowsRefresh: true)
-                .navigationTitle("Voti")
+                .screenTitle("Voti")
                 .navigationDestination(for: SubjectSummary.self) { summary in
                     SubjectDetailView(subjectId: summary.subjectId, book: model.gradeBook, subjects: model.subjects)
                 }
@@ -47,24 +47,100 @@ struct GradeBookView: View {
     }
 
     var body: some View {
+        content
+            .refreshable {
+                if allowsRefresh { await model.loadGrades() }
+            }
+            .toolbar {
+                ToolbarItem(placement: .trailingBar) {
+                    Menu {
+                        Picker("Periodo", selection: $period) {
+                            Text("Tutto l'anno").tag(Int?.none)
+                            ForEach(book.activePeriods) { Text($0.name).tag(Optional($0.position)) }
+                        }
+                        Picker("Materia", selection: $subjectFilter) {
+                            Text("Tutte le materie").tag(Int?.none)
+                            ForEach(allSubjects, id: \.id) { Text($0.name).tag(Optional($0.id)) }
+                        }
+                        .pickerStyle(.menu)
+                        if period != nil || subjectFilter != nil {
+                            Button("Rimuovi filtri", systemImage: "xmark.circle", role: .destructive) {
+                                period = nil
+                                subjectFilter = nil
+                            }
+                        }
+                    } label: {
+                        Image(systemName: period != nil || subjectFilter != nil
+                              ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                    }
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var banner: some View {
+        if allowsRefresh, let error = model.lastError {
+            StatusBanner(message: error, symbol: model.isOffline ? "wifi.slash" : "exclamationmark.triangle")
+        }
+    }
+
+    private var emptyBook: some View {
+        ContentUnavailableView("Nessun voto", systemImage: "graduationcap",
+                               description: Text("I voti appariranno qui non appena verranno registrati."))
+            .padding(.top, 60)
+    }
+
+    private var sectionPicker: some View {
+        Picker("Sezione", selection: $section) {
+            ForEach(Section.allCases) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        #if os(macOS)
+        if book.grades.isEmpty {
+            ScrollView {
+                VStack(spacing: 20) {
+                    banner
+                    emptyBook
+                }
+                .pagePadding()
+            }
+            .themedBackground()
+        } else {
+            // Medie e andamento restano a sinistra; a destra l'elenco, a griglia se c'è spazio.
+            SplitColumns(sideWidth: 350) {
+                AverageHero(book: book, selectedPeriod: $period)
+                TrendCard(book: book, period: period, subjectId: subjectFilter)
+            } main: {
+                banner
+                sectionPicker
+                    .labelsHidden()
+                    .fixedSize()
+                filters
+                switch section {
+                case .recent: recentList
+                case .subjects: subjectList
+                }
+            }
+            .animation(.snappy, value: period)
+            .animation(.snappy, value: subjectFilter)
+            .animation(.snappy, value: section)
+        }
+        #else
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                if allowsRefresh, let error = model.lastError {
-                    StatusBanner(message: error, symbol: model.isOffline ? "wifi.slash" : "exclamationmark.triangle")
-                }
+                banner
 
                 if book.grades.isEmpty {
-                    ContentUnavailableView("Nessun voto", systemImage: "graduationcap",
-                                           description: Text("I voti appariranno qui non appena verranno registrati."))
-                        .padding(.top, 60)
+                    emptyBook
                 } else {
                     AverageHero(book: book, selectedPeriod: $period)
                     TrendCard(book: book, period: period, subjectId: subjectFilter)
 
-                    Picker("Sezione", selection: $section) {
-                        ForEach(Section.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
+                    sectionPicker
 
                     filters
 
@@ -74,76 +150,47 @@ struct GradeBookView: View {
                     }
                 }
             }
-            .padding(.horizontal)
+            .pagePadding()
             .padding(.bottom, 24)
             .animation(.snappy, value: period)
             .animation(.snappy, value: subjectFilter)
             .animation(.snappy, value: section)
         }
         .themedBackground()
-        .refreshable {
-            if allowsRefresh { await model.loadGrades() }
-        }
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Picker("Periodo", selection: $period) {
-                        Text("Tutto l'anno").tag(Int?.none)
-                        ForEach(book.activePeriods) { Text($0.name).tag(Optional($0.position)) }
-                    }
-                    Picker("Materia", selection: $subjectFilter) {
-                        Text("Tutte le materie").tag(Int?.none)
-                        ForEach(allSubjects, id: \.id) { Text($0.name).tag(Optional($0.id)) }
-                    }
-                    .pickerStyle(.menu)
-                    if period != nil || subjectFilter != nil {
-                        Button("Rimuovi filtri", systemImage: "xmark.circle", role: .destructive) {
-                            period = nil
-                            subjectFilter = nil
-                        }
-                    }
-                } label: {
-                    Image(systemName: period != nil || subjectFilter != nil
-                          ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                }
-            }
-        }
+        #endif
     }
 
     @ViewBuilder
     private var filters: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                FilterChip(title: "Tutto l'anno", isSelected: period == nil) { period = nil }
-                ForEach(book.activePeriods) { p in
-                    FilterChip(title: p.name, isSelected: period == p.position) {
-                        period = period == p.position ? nil : p.position
-                    }
-                }
-                Divider().frame(height: 22)
-                Menu {
-                    Button("Tutte le materie") { subjectFilter = nil }
-                    ForEach(allSubjects, id: \.id) { s in
-                        Button(s.name) { subjectFilter = s.id }
-                    }
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "books.vertical").imageScale(.small)
-                        Text(allSubjects.first { $0.id == subjectFilter }?.name ?? "Materia")
-                            .lineLimit(1)
-                        Image(systemName: "chevron.down").imageScale(.small)
-                    }
-                    .font(.subheadline.weight(subjectFilter == nil ? .regular : .semibold))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .foregroundStyle(subjectFilter == nil ? Theme.ink : .white)
-                    .background(subjectFilter == nil ? AnyShapeStyle(Theme.surface) : AnyShapeStyle(Theme.accent), in: .capsule)
-                    .overlay { Capsule().strokeBorder(Theme.separator, lineWidth: subjectFilter == nil ? 0.5 : 0) }
+        ChipRow {
+            FilterChip(title: "Tutto l'anno", isSelected: period == nil) { period = nil }
+            ForEach(book.activePeriods) { p in
+                FilterChip(title: p.name, isSelected: period == p.position) {
+                    period = period == p.position ? nil : p.position
                 }
             }
-            .padding(.vertical, 2)
+            ChipDivider()
+            Menu {
+                Button("Tutte le materie") { subjectFilter = nil }
+                ForEach(allSubjects, id: \.id) { s in
+                    Button(s.name) { subjectFilter = s.id }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "books.vertical").imageScale(.small)
+                    Text(allSubjects.first { $0.id == subjectFilter }?.name ?? "Materia")
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down").imageScale(.small)
+                }
+                .font(.subheadline.weight(subjectFilter == nil ? .regular : .semibold))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .foregroundStyle(subjectFilter == nil ? Theme.ink : .white)
+                .background(subjectFilter == nil ? AnyShapeStyle(Theme.surface) : AnyShapeStyle(Theme.accent), in: .capsule)
+                .overlay { Capsule().strokeBorder(Theme.separator, lineWidth: subjectFilter == nil ? 0.5 : 0) }
+            }
+            .plainMenuOnMac()
         }
-        .scrollClipDisabled()
     }
 
     @ViewBuilder
@@ -152,7 +199,7 @@ struct GradeBookView: View {
             ContentUnavailableView("Nessun voto", systemImage: "line.3.horizontal.decrease.circle",
                                    description: Text("Nessun voto corrisponde ai filtri selezionati."))
         } else {
-            LazyVStack(spacing: 10) {
+            CardGrid(minWidth: 340) {
                 ForEach(filteredGrades) { grade in
                     GradeCard(grade: grade, book: book, isExpanded: expanded.contains(grade.id)) {
                         withAnimation(.snappy) {
@@ -165,7 +212,7 @@ struct GradeBookView: View {
     }
 
     private var subjectList: some View {
-        LazyVStack(spacing: 10) {
+        CardGrid(minWidth: 300) {
             ForEach(book.subjects(in: period).filter { subjectFilter == nil || $0.subjectId == subjectFilter }) { summary in
                 NavigationLink(value: summary) {
                     SubjectRow(summary: summary, target: model.preferences.targetAverage)
@@ -309,7 +356,7 @@ private struct TrendCard: View {
                         AxisValueLabel(format: .dateTime.month(.abbreviated)).font(.caption2)
                     }
                 }
-                .frame(height: 150)
+                .frame(height: Platform.isMac ? 190 : 150)
             }
             .card()
         }

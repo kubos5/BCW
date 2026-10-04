@@ -19,51 +19,93 @@ struct DayDetail: View {
     private var lessons: [Lesson] { model.lessons(on: day) }
     private var isPastOrToday: Bool { day.startOfDay <= Date().startOfDay }
 
+    /// Larghezza disponibile: su macOS, se c'è spazio, le lezioni vanno in una colonna a parte.
+    @State private var width: CGFloat = 0
+
+    private var splitsLessons: Bool {
+        Platform.isMac && isPastOrToday && width >= 580 && !(day.isWeekend && lessons.isEmpty)
+    }
+
+    private var hasAgenda: Bool {
+        !homework.isEmpty || !testsAndEvents.isEmpty || !absences.isEmpty
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             header
 
-            if homework.isEmpty && testsAndEvents.isEmpty && absences.isEmpty && (lessons.isEmpty || !isPastOrToday) {
-                emptyState
-            }
-
-            if !testsAndEvents.isEmpty {
-                section(.testsAndEvents, title: "Verifiche ed eventi", symbol: "pencil.and.list.clipboard") {
-                    ForEach(testsAndEvents) { event in
-                        AgendaEventRow(event: event)
-                        if event.id != testsAndEvents.last?.id { divider }
+            if splitsLessons {
+                HStack(alignment: .top, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        if !hasAgenda { emptyState }
+                        agendaSections
                     }
-                }
-            }
-
-            if !homework.isEmpty {
-                section(.homework, title: "Compiti", symbol: "book.closed",
-                        trailing: "\(homework.filter { model.preferences.isCompleted($0) }.count)/\(homework.count)") {
-                    ForEach(homework) { event in
-                        AgendaEventRow(event: event)
-                        if event.id != homework.last?.id { divider }
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    VStack(alignment: .leading, spacing: 18) {
+                        lessonsSection
+                        if lessons.isEmpty && model.hasLoadedLessons(on: day) {
+                            noLessons
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .top)
                 }
-            }
-
-            if !absences.isEmpty {
-                section(.attendance, title: "Presenze", symbol: "person.badge.clock") {
-                    ForEach(absences) { absence in
-                        AbsenceRow(absence: absence)
-                        if absence.id != absences.last?.id { divider }
-                    }
+            } else {
+                if !hasAgenda && (lessons.isEmpty || !isPastOrToday) {
+                    emptyState
                 }
-            }
-
-            if isPastOrToday {
-                lessonsSection
+                agendaSections
+                if isPastOrToday {
+                    lessonsSection
+                }
             }
         }
-        .task(id: day) {
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        // Anche dopo ogni aggiornamento completo, che azzera le lezioni già scaricate:
+        // altrimenti, aprendo l'app su un giorno passato, resterebbero "in caricamento".
+        .task(id: [day.timeIntervalSince1970, model.lastUpdated?.timeIntervalSince1970 ?? 0]) {
             if isPastOrToday {
                 await model.ensureLessons(from: day.startOfWeek, to: day.startOfWeek.adding(days: 6))
             }
         }
+    }
+
+    @ViewBuilder
+    private var agendaSections: some View {
+        if !testsAndEvents.isEmpty {
+            section(.testsAndEvents, title: "Verifiche ed eventi", symbol: "pencil.and.list.clipboard") {
+                ForEach(testsAndEvents) { event in
+                    AgendaEventRow(event: event)
+                    if event.id != testsAndEvents.last?.id { divider }
+                }
+            }
+        }
+
+        if !homework.isEmpty {
+            section(.homework, title: "Compiti", symbol: "book.closed",
+                    trailing: "\(homework.filter { model.preferences.isCompleted($0) }.count)/\(homework.count)") {
+                ForEach(homework) { event in
+                    AgendaEventRow(event: event)
+                    if event.id != homework.last?.id { divider }
+                }
+            }
+        }
+
+        if !absences.isEmpty {
+            section(.attendance, title: "Presenze", symbol: "person.badge.clock") {
+                ForEach(absences) { absence in
+                    AbsenceRow(absence: absence)
+                    if absence.id != absences.last?.id { divider }
+                }
+            }
+        }
+    }
+
+    private var noLessons: some View {
+        Label("Nessuna lezione registrata", systemImage: "text.book.closed")
+            .font(.subheadline)
+            .foregroundStyle(Theme.secondaryInk)
+            .frame(maxWidth: .infinity)
+            .card()
     }
 
     private var header: some View {

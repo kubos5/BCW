@@ -3,11 +3,21 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(AppModel.self) private var model
     /// Si apre sul giorno dopo, come richiesto: è quello per cui servono i compiti.
-    @State private var selectedDay = Date().adding(days: 1).startOfDay
+    @State private var selectedDay = Date().adding(days: DashboardView.initialOffset).startOfDay
     /// Larghezza della barra di navigazione, per capire se il titolo esteso ci sta.
     @State private var barWidth: CGFloat = 0
 
     private var mode: DashboardMode { model.preferences.dashboardMode }
+
+    private static var initialOffset: Int {
+        #if DEBUG
+        // Per gli screenshot di sviluppo: `-BCWDaysAgo 1` apre su ieri.
+        if UserDefaults.standard.object(forKey: "BCWDaysAgo") != nil {
+            return -UserDefaults.standard.integer(forKey: "BCWDaysAgo")
+        }
+        #endif
+        return 1
+    }
 
     /// Titolo grande: "Giovedì 1 ottobre" oppure, se non entra (o se l'utente lo
     /// preferisce), la forma breve "Gio 1 ott".
@@ -20,84 +30,164 @@ struct DashboardView: View {
     }
 
     private func titleFits(_ text: String) -> Bool {
-        guard barWidth > 0 else { return true }
-        let titleWidth = (text as NSString).size(withAttributes: [.font: UIFont.newYork(size: 34, weight: .bold)]).width
+        // Su macOS il titolo sta nella barra della finestra, dove c'è sempre spazio.
+        guard !Platform.isMac, barWidth > 0 else { return true }
+        let titleWidth = (text as NSString).size(withAttributes: [.font: PlatformFont.newYork(size: 34, weight: .bold)]).width
         // Margini laterali, pulsante del menu e spazio dal titolo.
         var reserved: CGFloat = 16 + 16 + 44 + 16
         if !selectedDay.isTomorrow {
-            let buttonText = ("Domani" as NSString).size(withAttributes: [.font: UIFont.newYork(size: 17, weight: .regular)]).width
+            let buttonText = ("Domani" as NSString).size(withAttributes: [.font: PlatformFont.newYork(size: 17, weight: .regular)]).width
             reserved += buttonText + 32 + 12
         }
         return titleWidth <= barWidth - reserved
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    if let error = model.lastError {
-                        StatusBanner(message: error, symbol: model.isOffline ? "wifi.slash" : "exclamationmark.triangle")
+        PlatformNavigationStack {
+            content
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { barWidth = $0 }
+                .refreshable { await model.refreshAll() }
+                .toolbar {
+                    #if os(macOS)
+                    // Su macOS lo spostamento tra i giorni sta accanto al titolo, con le scorciatoie.
+                    ToolbarItemGroup(placement: .navigation) {
+                        Button("Giorno precedente", systemImage: "chevron.left") { shift(-1) }
+                            .keyboardShortcut(.leftArrow, modifiers: .command)
+                            .help("Giorno precedente (⌘←)")
+                        Button("Giorno successivo", systemImage: "chevron.right") { shift(1) }
+                            .keyboardShortcut(.rightArrow, modifiers: .command)
+                            .help("Giorno successivo (⌘→)")
+                        Button("Oggi") { jump(to: Date()) }
+                            .keyboardShortcut("t")
+                            .disabled(selectedDay.isToday)
+                            .help("Vai a oggi (⌘T)")
+                        Button("Domani") { jump(to: Date().adding(days: 1)) }
+                            .keyboardShortcut("t", modifiers: [.command, .shift])
+                            .disabled(selectedDay.isTomorrow)
+                            .help("Vai a domani (⇧⌘T)")
                     }
-
-                    switch mode {
-                    case .list:
-                        WeekStrip(selectedDay: $selectedDay)
-                    case .calendar:
-                        MonthCalendar(selectedDay: $selectedDay)
-                    }
-
-                    DayDetail(day: selectedDay)
-                        .id(selectedDay)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-
-                    if mode == .list && model.preferences.showUpcomingDays {
-                        // Stessa transizione del contenuto del giorno: cambia insieme a esso.
-                        UpcomingDays(after: selectedDay) { day in
-                            withAnimation(.snappy) { selectedDay = day }
-                        }
-                        .id(selectedDay)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.bottom, 24)
-                .animation(.snappy, value: selectedDay)
-            }
-            .themedBackground()
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { barWidth = $0 }
-            .navigationTitle(title)
-            .toolbarTitleDisplayMode(.inlineLarge)
-            .refreshable { await model.refreshAll() }
-            .toolbar {
-                if !selectedDay.isTomorrow {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Domani") {
-                            withAnimation(.snappy) { selectedDay = Date().adding(days: 1).startOfDay }
-                        }
-                    }
-                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Picker("Vista", selection: Bindable(model.preferences).dashboardMode) {
-                            ForEach(DashboardMode.allCases) { mode in
-                                Label(mode.title, systemImage: mode.symbol).tag(mode)
+                    #else
+                    if !selectedDay.isTomorrow {
+                        ToolbarItem(placement: .trailingBar) {
+                            Button("Domani") {
+                                withAnimation(.snappy) { selectedDay = Date().adding(days: 1).startOfDay }
                             }
                         }
-                        Button("Vai a oggi", systemImage: "sun.max") {
-                            withAnimation(.snappy) { selectedDay = Date().startOfDay }
+                        ToolbarSpacer(.fixed, placement: .trailingBar)
+                    }
+                    #endif
+                    ToolbarItem(placement: .trailingBar) {
+                        Menu {
+                            Picker("Vista", selection: Bindable(model.preferences).dashboardMode) {
+                                ForEach(DashboardMode.allCases) { mode in
+                                    Label(mode.title, systemImage: mode.symbol).tag(mode)
+                                }
+                            }
+                            Button("Vai a oggi", systemImage: "sun.max") {
+                                withAnimation(.snappy) { selectedDay = Date().startOfDay }
+                            }
+                            Toggle("Nascondi compiti fatti", systemImage: "checkmark.circle",
+                                   isOn: Bindable(model.preferences).hideCompletedHomework)
+                            if mode == .list || Platform.isMac {
+                                Toggle("Mostra i prossimi giorni", systemImage: "calendar.day.timeline.right",
+                                       isOn: Bindable(model.preferences).showUpcomingDays)
+                            }
+                        } label: {
+                            Image(systemName: mode.symbol)
                         }
-                        Toggle("Nascondi compiti fatti", systemImage: "checkmark.circle",
-                               isOn: Bindable(model.preferences).hideCompletedHomework)
-                        if mode == .list {
-                            Toggle("Mostra i prossimi giorni", systemImage: "calendar.day.timeline.right",
-                                   isOn: Bindable(model.preferences).showUpcomingDays)
-                        }
-                    } label: {
-                        Image(systemName: mode.symbol)
                     }
                 }
+                // Applicato dopo la barra della pagina: su macOS il titolo resta il primo elemento.
+                .screenTitle(title, subtitle: subtitle)
+                #if os(iOS)
+                .toolbarTitleDisplayMode(.inlineLarge)
+                #endif
+        }
+    }
+
+    /// Su macOS il titolo relativo ("Domani") è accompagnato dalla data completa.
+    private var subtitle: String? {
+        selectedDay.relativeDayName == selectedDay.longDay ? nil : selectedDay.longDay
+    }
+
+    private func jump(to day: Date) {
+        withAnimation(.snappy) { selectedDay = day.startOfDay }
+    }
+
+    private func shift(_ days: Int) {
+        withAnimation(.snappy) { selectedDay = selectedDay.adding(days: days) }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        #if os(macOS)
+        // Calendario e giorni successivi restano a sinistra mentre si legge il giorno scelto.
+        SplitColumns(sideWidth: 340) {
+            calendar
+            // Con le colonne impilate i giorni successivi vanno in fondo, dopo il giorno scelto.
+            StackAware { stacked in
+                if !stacked { upcoming }
             }
+        } main: {
+            if let error = model.lastError {
+                StatusBanner(message: error, symbol: model.isOffline ? "wifi.slash" : "exclamationmark.triangle")
+            }
+            DayDetail(day: selectedDay)
+                .id(selectedDay)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            StackAware { stacked in
+                if stacked { upcoming }
+            }
+        }
+        .animation(.snappy, value: selectedDay)
+        #else
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                if let error = model.lastError {
+                    StatusBanner(message: error, symbol: model.isOffline ? "wifi.slash" : "exclamationmark.triangle")
+                }
+
+                calendar
+
+                DayDetail(day: selectedDay)
+                    .id(selectedDay)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+
+                if mode == .list && model.preferences.showUpcomingDays {
+                    // Stessa transizione del contenuto del giorno: cambia insieme a esso.
+                    UpcomingDays(after: selectedDay) { day in
+                        withAnimation(.snappy) { selectedDay = day }
+                    }
+                    .id(selectedDay)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+            }
+            .pagePadding()
+            .padding(.bottom, 24)
+            .animation(.snappy, value: selectedDay)
+        }
+        .themedBackground()
+        #endif
+    }
+
+    @ViewBuilder
+    private var upcoming: some View {
+        if model.preferences.showUpcomingDays {
+            UpcomingDays(after: selectedDay) { day in
+                withAnimation(.snappy) { selectedDay = day }
+            }
+            .id(selectedDay)
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
+        }
+    }
+
+    @ViewBuilder
+    private var calendar: some View {
+        switch mode {
+        case .list:
+            WeekStrip(selectedDay: $selectedDay)
+        case .calendar:
+            MonthCalendar(selectedDay: $selectedDay)
         }
     }
 }
@@ -138,7 +228,7 @@ struct WeekStrip: View {
                     Button { shift(-7) } label: { Image(systemName: "chevron.left") }
                     Button { shift(7) } label: { Image(systemName: "chevron.right") }
                 }
-                .buttonStyle(.glass)
+                .glassButton()
                 .buttonBorderShape(.circle)
                 .controlSize(.small)
             }
@@ -180,6 +270,10 @@ struct WeekStrip: View {
             }
         }
         .sensoryFeedback(.selection, trigger: selectedDay)
+    }
+
+    private func jump(to day: Date) {
+        withAnimation(.snappy) { selectedDay = day.startOfDay }
     }
 
     private func shift(_ days: Int) {

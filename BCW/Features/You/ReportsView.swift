@@ -10,56 +10,83 @@ struct ReportsView: View {
     @State private var error: String?
 
     var body: some View {
+        content
+            .screenTitle("Scrutini")
+            .quickLookPreview($previewURL)
+            .task {
+                loading = true
+                error = await model.loadDocuments()
+                loading = false
+            }
+            .refreshable { error = await model.loadDocuments() }
+    }
+
+    @ViewBuilder
+    private var errorBanner: some View {
+        if let error {
+            StatusBanner(message: error, symbol: "exclamationmark.triangle")
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        #if os(macOS)
+        // Riepilogo dei periodi a sinistra, documenti a destra.
+        SplitColumns(sideWidth: 360, spacing: 18) {
+            periodSummary
+        } main: {
+            errorBanner
+            documentsList
+        }
+        #else
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                if let error {
-                    StatusBanner(message: error, symbol: "exclamationmark.triangle")
-                }
-
+                errorBanner
                 periodSummary
+                documentsList
+            }
+            .pagePadding()
+            .padding(.bottom, 24)
+        }
+        .themedBackground()
+        #endif
+    }
 
-                if loading && model.documents == nil {
-                    LoadingCard()
-                } else if let documents = model.documents {
-                    if documents.documents.isEmpty && documents.schoolReports.isEmpty {
-                        ContentUnavailableView("Nessun documento", systemImage: "doc.text",
-                                               description: Text("Pagelle e documenti di valutazione appariranno qui dopo gli scrutini."))
-                            .padding(.top, 20)
-                    }
-                    if !documents.documents.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
-                            SectionHeader("Documenti")
-                            ForEach(documents.documents) { doc in
-                                DocumentButton(title: doc.title, isLoading: downloading == doc.id) {
-                                    Task { await open(doc) }
-                                }
-                            }
-                        }
-                    }
-                    if !documents.schoolReports.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
-                            SectionHeader("Pagelle online", subtitle: "Si aprono sul sito di Classeviva")
-                            ForEach(documents.schoolReports) { report in
-                                DocumentButton(title: report.title, symbol: "safari", isLoading: false) {
-                                    if let link = report.viewLink, let url = URL(string: link) { openURL(url) }
-                                }
+    @ViewBuilder
+    private var documentsList: some View {
+        if loading && model.documents == nil {
+            LoadingCard()
+        } else if let documents = model.documents {
+            if documents.documents.isEmpty && documents.schoolReports.isEmpty {
+                ContentUnavailableView("Nessun documento", systemImage: "doc.text",
+                                       description: Text("Pagelle e documenti di valutazione appariranno qui dopo gli scrutini."))
+                    .padding(.top, 20)
+            }
+            if !documents.documents.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    SectionHeader("Documenti")
+                    CardGrid(minWidth: 320) {
+                        ForEach(documents.documents) { doc in
+                            DocumentButton(title: doc.title, isLoading: downloading == doc.id) {
+                                Task { await open(doc) }
                             }
                         }
                     }
                 }
             }
-            .padding(.horizontal)
-            .padding(.bottom, 24)
+            if !documents.schoolReports.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    SectionHeader("Pagelle online", subtitle: "Si aprono sul sito di Classeviva")
+                    CardGrid(minWidth: 320) {
+                        ForEach(documents.schoolReports) { report in
+                            DocumentButton(title: report.title, symbol: "safari", isLoading: false) {
+                                if let link = report.viewLink, let url = URL(string: link) { openURL(url) }
+                            }
+                        }
+                    }
+                }
+            }
         }
-        .themedBackground()
-        .navigationTitle("Scrutini")
-        .quickLookPreview($previewURL)
-        .task {
-            loading = true
-            error = await model.loadDocuments()
-            loading = false
-        }
-        .refreshable { error = await model.loadDocuments() }
     }
 
     /// Riepilogo delle medie per periodo, utile in vista degli scrutini.

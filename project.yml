@@ -4,11 +4,13 @@ options:
   bundleIdPrefix: com.bcw
   deploymentTarget:
     iOS: "26.0"
+    macOS: "26.0"
   developmentLanguage: it
 targets:
   BCW:
     type: application
-    platform: iOS
+    # Un solo target per iPhone, iPad e Mac (app nativa, non Catalyst).
+    supportedDestinations: [iOS, macOS]
     sources: [BCW]
     settings:
       base:
@@ -26,5 +28,14 @@ targets:
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.education
         INFOPLIST_KEY_NSFaceIDUsageDescription: "BCW usa Face ID per proteggere l'accesso al tuo registro elettronico."
-        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_NSCalendarsWriteOnlyAccessUsageDescription: "BCW aggiunge compiti, verifiche ed eventi al tuo calendario quando lo chiedi."
+        INFOPLIST_KEY_NSHumanReadableCopyright: "BCW non è affiliata a Gruppo Spaggiari Parma."
+        "INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphone*]": YES
+        "INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphone*]": YES
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        # macOS: sandbox con accesso a Internet e al Calendario (solo scrittura).
+        "ENABLE_APP_SANDBOX[sdk=macosx*]": YES
+        "ENABLE_HARDENED_RUNTIME[sdk=macosx*]": YES
+        "ENABLE_OUTGOING_NETWORK_CONNECTIONS[sdk=macosx*]": YES
+        "ENABLE_RESOURCE_ACCESS_CALENDARS[sdk=macosx*]": YES

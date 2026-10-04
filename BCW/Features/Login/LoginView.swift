@@ -24,9 +24,12 @@ struct LoginView: View {
                     field(symbol: "person", placeholder: "Codice utente o email") {
                         TextField("Codice utente o email", text: $username)
                             .textContentType(.username)
+                            #if os(iOS)
                             .keyboardType(.emailAddress)
                             .textInputAutocapitalization(.never)
+                            #endif
                             .autocorrectionDisabled()
+                            .textFieldStyle(.plain)
                             .focused($focused, equals: .username)
                             .submitLabel(.next)
                             .onSubmit { focused = .password }
@@ -35,6 +38,7 @@ struct LoginView: View {
                     field(symbol: "key", placeholder: "Password") {
                         SecureField("Password", text: $password)
                             .textContentType(.password)
+                            .textFieldStyle(.plain)
                             .focused($focused, equals: .password)
                             .submitLabel(.go)
                             .onSubmit(submit)
@@ -75,7 +79,7 @@ struct LoginView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 4)
                     }
-                    .buttonStyle(.glass)
+                    .glassButton()
                     .controlSize(.large)
                 }
 
@@ -87,6 +91,10 @@ struct LoginView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .themedBackground()
+        #if os(macOS)
+        // Il logo fa già da titolo: niente titolo di sistema nella barra della finestra.
+        .toolbar(removing: .title)
+        #endif
         .animation(.snappy, value: errorMessage)
         .sheet(isPresented: Binding(get: { !choices.isEmpty }, set: { if !$0 { choices = [] } })) {
             ProfileChoiceSheet(choices: choices) { choice in
@@ -164,6 +172,7 @@ struct LoginView: View {
 }
 
 private struct ProfileChoiceSheet: View {
+    @Environment(\.dismiss) private var dismiss
     let choices: [LoginChoice]
     let onSelect: (LoginChoice) -> Void
 
@@ -186,7 +195,15 @@ private struct ProfileChoiceSheet: View {
             }
             .themedList()
             .navigationTitle("Scegli il profilo")
-            .navigationBarTitleDisplayMode(.inline)
+            #if os(macOS)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annulla") { dismiss() }
+                }
+            }
+            #endif
+            .inlineTitleDisplay()
         }
+        .sheetFrame(width: 420, height: 380)
     }
 }

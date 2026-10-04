@@ -25,39 +25,65 @@ struct SubjectDetailView: View {
     }
 
     var body: some View {
+        content
+            .screenTitle(name)
+            .inlineTitleDisplay()
+    }
+
+    @ViewBuilder
+    private var periodPicker: some View {
+        if book.activePeriods.count > 1 {
+            Picker("Periodo", selection: $period) {
+                Text("Anno").tag(Int?.none)
+                ForEach(book.activePeriods) { Text($0.name).tag(Optional($0.position)) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+        }
+    }
+
+    private var gradeList: some View {
+        CardGrid(minWidth: 340) {
+            ForEach(grades) { grade in
+                GradeCard(grade: grade, book: book, isExpanded: expanded.contains(grade.id)) {
+                    withAnimation(.snappy) {
+                        if expanded.contains(grade.id) { expanded.remove(grade.id) } else { expanded.insert(grade.id) }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        #if os(macOS)
+        SplitColumns(sideWidth: 350) {
+            header
+            periodPicker
+            chart
+            GoalCalculator(grades: grades, weighted: book.weighted)
+        } main: {
+            SectionHeader("Voti", subtitle: "\(grades.count) valutazioni")
+            gradeList
+        }
+        .animation(.snappy, value: period)
+        #else
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
-
-                if book.activePeriods.count > 1 {
-                    Picker("Periodo", selection: $period) {
-                        Text("Anno").tag(Int?.none)
-                        ForEach(book.activePeriods) { Text($0.name).tag(Optional($0.position)) }
-                    }
-                    .pickerStyle(.segmented)
-                }
-
+                periodPicker
                 chart
                 GoalCalculator(grades: grades, weighted: book.weighted)
 
                 SectionHeader("Voti", subtitle: "\(grades.count) valutazioni")
-                LazyVStack(spacing: 10) {
-                    ForEach(grades) { grade in
-                        GradeCard(grade: grade, book: book, isExpanded: expanded.contains(grade.id)) {
-                            withAnimation(.snappy) {
-                                if expanded.contains(grade.id) { expanded.remove(grade.id) } else { expanded.insert(grade.id) }
-                            }
-                        }
-                    }
-                }
+                gradeList
             }
-            .padding(.horizontal)
+            .pagePadding()
             .padding(.bottom, 24)
             .animation(.snappy, value: period)
         }
         .themedBackground()
-        .navigationTitle(name)
-        .navigationBarTitleDisplayMode(.inline)
+        #endif
     }
 
     private var header: some View {
