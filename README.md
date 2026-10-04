@@ -3,9 +3,30 @@ Un client iOS nativo per il registro elettronico [Classeviva](https://web.spaggi
 
 > BCW non è affiliato a Gruppo Spaggiari Parma S.p.A.
 
+---
+
+## Installazione
+
+Finché l'app non sarà disponibile su App Store, consiglio usare [AltStore](https://altstore.io/) per firmare l'IPA.
+
+Altrimenti, puoi compilarla in Xcode:
+
+### Installazione manuale con Xcode
+
+1. installa Xcode dall'App Store
+2. clona `https://github.com/kubos5/BCW` da Xcode
+   - oppure `git clone https://github.com/kubos5/BCW`, poi apri il progetto con Xcode
+4. in Signing & Capabilities scegli il tuo team / creane uno (è sufficiente un qualsiasi Apple ID)
+5. esegui sul simulatore o su un dispositivo collegato via USB
+
+Il progetto usa le cartelle sincronizzate di Xcode 16, quindi qualsiasi file aggiunto in `BCW/` entra automaticamente nel target.
+In alternativa è incluso un `project.yml` per [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+
+---
+
 ## Funzioni
 
-BCW ha **parità di funzioni** con il client ufficiale di classeiviva, più extra:
+BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 
 - puoi segnare i compiti come fatti e, opzionalmente, nasconderli
 - puoi ricevere promemoria la sera prima di compiti o verifiche a un orario specificato
@@ -32,28 +53,6 @@ Vengono usati colori morbidi (`#F7F2E8` per lo sfondo chiaro, `#1E1D1C` per lo s
 
 - Xcode 26 o successivo
 - iOS / iPadOS 26 o successivo
-
----
-
-## Installazione
-
-Finché l'app non sarà disponibile su App Store, consiglio usare [AltStore](https://altstore.io/) per firmare l'IPA.
-
-Altrimenti, puoi compilarla in Xcode:
-
-### Installazione manuale con Xcode
-
-1. Installa Xcode dall'App Store
-2. Clona questa repo
-3. In Signing & Capabilities scegli il tuo team / creane uno (è sufficiente un qualsiasi Apple ID)
-4. Esegui sul simulatore o su un dispositivo collegato via USB
-
-1. Apri `BCW.xcodeproj` in Xcode.
-2. In *Signing & Capabilities* scegli il tuo team (serve anche solo un Apple ID gratuito per il dispositivo).
-3. Esegui sul simulatore o su un iPhone. Senza account puoi toccare **Prova la demo**.
-
-Il progetto usa le cartelle sincronizzate di Xcode 16, quindi qualsiasi file aggiunto in `BCW/` entra automaticamente nel target.
-In alternativa è incluso un `project.yml` per [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
 ---
 
