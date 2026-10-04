@@ -13,37 +13,33 @@ struct NotesView: View {
             VStack(alignment: .leading, spacing: 16) {
                 summary
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        FilterChip(title: "Tutte", isSelected: category == nil) { category = nil }
-                        ForEach(DisciplinaryNote.Category.allCases) { c in
-                            FilterChip(title: c.title, symbol: c.symbol, isSelected: category == c) {
-                                category = category == c ? nil : c
-                            }
+                ChipRow {
+                    FilterChip(title: "Tutte", isSelected: category == nil) { category = nil }
+                    ForEach(DisciplinaryNote.Category.allCases) { c in
+                        FilterChip(title: c.title, symbol: c.symbol, isSelected: category == c) {
+                            category = category == c ? nil : c
                         }
                     }
-                    .padding(.vertical, 2)
                 }
-                .scrollClipDisabled()
 
                 if filtered.isEmpty {
                     ContentUnavailableView("Nessuna nota", systemImage: "hand.thumbsup",
                                            description: Text("Continua così!"))
                         .padding(.top, 40)
                 } else {
-                    LazyVStack(spacing: 10) {
+                    CardGrid(minWidth: 360) {
                         ForEach(filtered) { note in
                             NoteCard(note: note)
                         }
                     }
                 }
             }
-            .padding(.horizontal)
+            .pagePadding()
             .padding(.bottom, 24)
             .animation(.snappy, value: category)
         }
         .themedBackground()
-        .navigationTitle("Note")
+        .screenTitle("Note")
         .refreshable { await model.loadNotes() }
     }
 

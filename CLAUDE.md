@@ -3,7 +3,7 @@
 Contesto del progetto per Claude Code. Rispondi all'utente in **italiano**.
 
 ## Cos'è
-App iOS nativa (SwiftUI, iOS 26+, Xcode 26) per il registro elettronico **Classeviva** di Spaggiari.
+App nativa per iOS e macOS (SwiftUI, iOS/macOS 26+, Xcode 26) per il registro elettronico **Classeviva** di Spaggiari.
 Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.com/Gabboxl/ClassevivaPCTO (client Windows).
 
 ## Requisiti dell'utente (da rispettare)
@@ -22,10 +22,26 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Il progetto compila e gira sul simulatore. `xcode-select` punta ai Command Line Tools, quindi per compilare da
   terminale serve `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`:
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project BCW.xcodeproj -scheme BCW -destination 'platform=iOS Simulator,name=iPhone 17' build`
-- Per provare le modifiche visive usare "Prova la demo" (`DemoServer.swift`).
+  Per il Mac: `-destination 'platform=macOS'` (in locale aggiungere `CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM=`).
+- Per provare le modifiche visive usare "Prova la demo" (`DemoServer.swift`). Si avvia anche con l'argomento
+  `-demoMode YES`.
+- Screenshot del Mac senza permessi di registrazione schermo (solo DEBUG, `App/DebugSnapshots.swift`):
+  avviare con `-demoMode YES -BCWSnapshot YES -BCWSections dashboard,grades -BCWSizes 1280x840,900x640`
+  (facoltativi `-BCWSettings YES`, `-appearance light`, `-BCWDaysAgo 2`, `-BCWOpenNotice YES`); le immagini finiscono in
+  `~/Library/Containers/com.bcw-classeviva.app/Data/tmp/BCWSnapshots` e l'app si chiude da sola.
 
 ## Architettura
 - `BCW.xcodeproj` usa **cartelle sincronizzate** (objectVersion 77): i file in `BCW/` entrano nel target da soli.
+- **Un solo target multipiattaforma** (iOS + macOS nativo, non Catalyst; `SUPPORTED_PLATFORMS`, `SDKROOT = auto`).
+  Su macOS: sandbox con rete in uscita e Calendario (impostazioni `ENABLE_*[sdk=macosx*]`).
+- Differenze tra piattaforme: `Utilities/Platform.swift` (`Platform.copy`, `screenTitle`, `.trailingBar`,
+  `pagePadding`, `CardGrid`, `ChipRow`, `glassButton`, `PlatformNavigationStack`, `SplitColumns`/`StackAware`,
+  `sheetFrame`). Usare questi invece di `#if` sparsi o di API UIKit/AppKit nelle viste.
+- macOS: `App/MacRootView.swift` (NavigationSplitView con `MacSection`, account in fondo alla barra laterale,
+  `BCWCommands` per i menu Vai/Account e le scorciatoie, `MacNavigation` ricorda l'ultima sezione), finestra
+  `Window` singola + scena `Settings` (`MacSettingsView` a schede, con le stesse sezioni di `SettingsView`).
+  I titoli sono etichette in New York nella barra (`screenTitle`): applicarlo dopo `.toolbar` della pagina,
+  così resta il primo elemento. `.primaryAction` su macOS sta a sinistra: per il lato destro usare `.trailingBar`.
   `project.yml` è un'alternativa per XcodeGen.
 - Build settings: `SWIFT_VERSION = 5.0`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, approachable concurrency.
 - `Networking/ClassevivaClient.swift`: client REST, `Transport` sostituibile (live/demo), rinnovo token,
@@ -37,6 +53,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (scrutini, didattica, libri) non finiscono nel banner globale `lastError`; `Preferences` (UserDefaults); `GradeBook` (medie,
   andamento, voto necessario); `Reminders` (notifiche locali); `ArchiveModel` (anno precedente);
   `DemoServer.swift` (dati finti deterministici per "Prova la demo").
+- `Networking/Keychain.swift`: su macOS usa il Portachiavi moderno (data protection) e ripiega su quello di login
+  se l'app non è firmata con un team (`errSecMissingEntitlement`).
 - `Theme/Theme.swift`: palette (crema `#F7F2E8` / grafite `#1E1D1C`, accento `#A23E2F`), font New York anche
   nella UINavigationBar, modificatore `.card()`.
 - `Features/`: Dashboard, Grades, You (sottosezioni), Search, Settings, Login.
@@ -64,6 +82,15 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   Gli archivi vivono in `AppModel.archive(for:)` e si azzerano a ogni cambio di sessione.
 - Endpoint voti: si prova `grades`, poi `grades2324`, poi `grades2`.
 - Verifiche riconosciute con euristica sul testo (`AgendaEvent.kind`), Classeviva non ha un codice dedicato.
+
+## Layout su macOS
+- Barra laterale al posto delle schede; "Tu" diventa un riepilogo (profilo, statistiche, riquadri delle sezioni).
+- Pagine a due colonne con `SplitColumns` (laterale fissa + principale, scorrimento separato; sotto ~780 pt si
+  impilano): Dashboard (calendario + prossimi giorni | giorno, con lezioni in colonna a parte da 580 pt), Voti,
+  dettaglio materia, Scrutini, Anni precedenti, Lezioni. Bacheca: elenco + dettaglio affiancati sopra 820 pt.
+- Elenchi di card in `CardGrid` (una colonna su iOS, griglia adattiva su Mac); filtri in `ChipRow` (a capo su Mac).
+- `.glass` su macOS riempie il pulsante con la tinta: usare `glassButton()`. Anni precedenti apre il sito nel
+  browser (niente `SFSafariViewController`); "Aggiungi al Calendario" salva direttamente con accesso in sola scrittura.
 
 ## Convenzioni
 - Testi UI e commenti in italiano. Stile: card, `Eyebrow`, `FilterChip`, `StatTile`, `GradeBadge`, `AverageRing`,

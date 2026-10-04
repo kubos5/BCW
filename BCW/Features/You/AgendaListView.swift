@@ -29,20 +29,18 @@ struct AgendaListView: View {
                     Text("Passati").tag(true)
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
+                .compactOnMac()
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        FilterChip(title: "Da fare", symbol: "circle", isSelected: onlyPending) { onlyPending.toggle() }
-                        FilterChip(title: "Tutto", isSelected: kind == nil) { kind = nil }
-                        ForEach(AgendaEvent.Kind.allCases) { k in
-                            FilterChip(title: k.title, symbol: k.symbol, isSelected: kind == k) {
-                                kind = kind == k ? nil : k
-                            }
+                ChipRow {
+                    FilterChip(title: "Da fare", symbol: "circle", isSelected: onlyPending) { onlyPending.toggle() }
+                    FilterChip(title: "Tutto", isSelected: kind == nil) { kind = nil }
+                    ForEach(AgendaEvent.Kind.allCases) { k in
+                        FilterChip(title: k.title, symbol: k.symbol, isSelected: kind == k) {
+                            kind = kind == k ? nil : k
                         }
                     }
-                    .padding(.vertical, 2)
                 }
-                .scrollClipDisabled()
 
                 if grouped.isEmpty {
                     ContentUnavailableView("Niente da mostrare", systemImage: "checklist",
@@ -50,7 +48,7 @@ struct AgendaListView: View {
                         .padding(.top, 30)
                 }
 
-                LazyVStack(alignment: .leading, spacing: 14) {
+                CardGrid(minWidth: 380, spacing: 14) {
                     ForEach(grouped, id: \.0) { day, events in
                         VStack(alignment: .leading, spacing: 12) {
                             Eyebrow(text: day.relativeDayName, color: Theme.accent)
@@ -63,13 +61,13 @@ struct AgendaListView: View {
                     }
                 }
             }
-            .padding(.horizontal)
+            .pagePadding()
             .padding(.bottom, 24)
             .animation(.snappy, value: kind)
             .animation(.snappy, value: showPast)
         }
         .themedBackground()
-        .navigationTitle("Agenda")
+        .screenTitle("Agenda")
         .searchable(text: $search, prompt: "Cerca compiti ed eventi")
         .refreshable { await model.loadAgenda() }
     }

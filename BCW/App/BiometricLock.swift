@@ -31,7 +31,18 @@ final class BiometricLock {
         case .faceID: return "Face ID"
         case .touchID: return "Touch ID"
         case .opticID: return "Optic ID"
-        default: return "codice"
+        default: return Platform.isMac ? "password" : "codice"
+        }
+    }
+
+    static var biometrySymbol: String {
+        let context = LAContext()
+        _ = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
+        switch context.biometryType {
+        case .faceID: return "faceid"
+        case .touchID: return "touchid"
+        case .opticID: return "opticid"
+        default: return "lock.open"
         }
     }
 }
@@ -52,12 +63,13 @@ struct LockView: View {
             Button {
                 Task { await lock.unlock() }
             } label: {
-                Label("Sblocca con \(BiometricLock.biometryName)", systemImage: "faceid")
+                Label("Sblocca con \(BiometricLock.biometryName)", systemImage: BiometricLock.biometrySymbol)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
             }
             .buttonStyle(.glassProminent)
             .controlSize(.large)
+            .frame(maxWidth: 420)
             .padding(.horizontal, 32)
             .padding(.bottom, 40)
         }

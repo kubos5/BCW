@@ -3,12 +3,38 @@ import SwiftUI
 @main
 struct BCWApp: App {
     @State private var model = AppModel()
+    #if os(macOS)
+    @State private var nav = MacNavigation()
+    #endif
 
     init() {
         Theme.configureAppearance()
     }
 
     var body: some Scene {
+        #if os(macOS)
+        // Una sola finestra: il registro è uno, come in Musica o Calendario.
+        Window("BCW", id: "main") {
+            RootView()
+                .environment(model)
+                .environment(nav)
+                .fontDesign(.serif)
+                .tint(Theme.accent)
+                .onChange(of: model.preferences.appearance, initial: true) { _, mode in
+                    MacAppearance.apply(mode)
+                }
+        }
+        .defaultSize(width: 1280, height: 840)
+        .commands { BCWCommands(model: model, nav: nav) }
+
+        Settings {
+            MacSettingsView()
+                .environment(model)
+                .environment(nav)
+                .fontDesign(.serif)
+                .tint(Theme.accent)
+        }
+        #else
         WindowGroup {
             RootView()
                 .environment(model)
@@ -16,6 +42,7 @@ struct BCWApp: App {
                 .tint(Theme.accent)
                 .preferredColorScheme(model.preferences.appearance.colorScheme)
         }
+        #endif
     }
 }
 
@@ -32,9 +59,20 @@ struct RootView: View {
             case .signedOut:
                 LoginView()
                     .transition(.opacity)
+                    #if os(macOS)
+                    .frame(minWidth: 520, minHeight: 640)
+                    #if DEBUG
+                    .task { DebugSnapshots.captureLogin() }
+                    #endif
+                    #endif
             case .signedIn:
+                #if os(macOS)
+                MacRootView()
+                    .transition(.opacity)
+                #else
                 MainTabView()
                     .transition(.opacity)
+                #endif
             }
 
             if lock.isLocked && model.phase == .signedIn {
@@ -59,6 +97,7 @@ struct RootView: View {
     }
 }
 
+#if os(iOS)
 struct MainTabView: View {
     @Environment(AppModel.self) private var model
     @State private var selection: AppTab = .dashboard
@@ -84,3 +123,20 @@ struct MainTabView: View {
         .tabBarMinimizeBehavior(.onScrollDown)
     }
 }
+#endif
+
+#if os(macOS)
+import AppKit
+
+/// Su macOS `preferredColorScheme(nil)` non riporta la finestra all'aspetto di sistema:
+/// si imposta quindi l'aspetto dell'intera app (vale anche per la finestra Impostazioni).
+enum MacAppearance {
+    static func apply(_ mode: AppearanceMode) {
+        switch mode {
+        case .system: NSApp.appearance = nil
+        case .light: NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+    }
+}
+#endif

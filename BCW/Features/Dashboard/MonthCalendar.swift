@@ -65,7 +65,7 @@ struct MonthCalendar: View {
                         Button { shift(-1) } label: { Image(systemName: "chevron.left") }
                         Button { shift(1) } label: { Image(systemName: "chevron.right") }
                     }
-                    .buttonStyle(.glass)
+                    .glassButton()
                     .buttonBorderShape(.circle)
                     .controlSize(.small)
                 }

@@ -1,5 +1,5 @@
 # BCW: Better ClasseViVa
-Un client iOS nativo per il registro elettronico [Classeviva](https://web.spaggiari.eu) di Gruppo Spaggiari Parma.
+Un client nativo per iPhone, iPad e Mac per il registro elettronico [Classeviva](https://web.spaggiari.eu) di Gruppo Spaggiari Parma.
 
 > BCW non è affiliato a Gruppo Spaggiari Parma S.p.A.
 
@@ -12,8 +12,8 @@ BCW ha **parità di funzioni** con il client ufficiale di classeiviva, più extr
 - dato un obiettivo di media, puoi calcolare il voto necessario nelle prossime 1-5 prove
 - puoi vedere l'effetto di ogni voto sulla media della materia (▲/▼) e grafici dell'andamento
 - puoi scegliere se calcolare la media come media di tutti i voti o media delle medie, con o senza pesi
-- integrazione con il calendario di iOS per compiti, verifiche ed eventi
-- puoi bloccare l'app con FaceID / TouchID
+- integrazione con il Calendario di iOS e macOS per compiti, verifiche ed eventi
+- puoi bloccare l'app con FaceID / TouchID (anche su Mac)
 - puoi consultare l'app anche offline, visualizzando i dati dell'ultima volta che era stata aperta
 - supporto agli account genitore con più figli
 - puoi aggiungere più account e passare dall'uno all'altro
@@ -22,9 +22,22 @@ BCW ha **parità di funzioni** con il client ufficiale di classeiviva, più extr
 - riepilogo per periodo con le insufficienze
 - conto alla rovescia alle prossime vacanze
 
+### Su Mac
+
+BCW è anche un'app nativa per macOS (non Catalyst), con le stesse funzioni e lo stesso design dell'app per iPhone, ma con un layout pensato per lo schermo grande:
+
+- barra laterale con tutte le sezioni (Dashboard, Voti, Tu, Cerca, Bacheca, Note, Scrutini, Assenze, Didattica…) e i contatori delle cose da leggere o giustificare
+- Dashboard a colonne: calendario e prossimi giorni a sinistra, il giorno scelto a destra, con le lezioni in una colonna a parte
+- Voti con medie e andamento sempre visibili accanto all'elenco
+- Bacheca con elenco e comunicazione aperta affiancati, come in Mail
+- griglie di card per note, assenze, agenda, materiale, materie e libri
+- menu Vai e Account, scorciatoie da tastiera (⌘1…⌘9 per le sezioni, ⌘R per aggiornare, ⌘← ⌘→ ⌘T per spostarsi tra i giorni)
+- finestra Impostazioni (⌘,) a schede
+- le pagine si adattano alla larghezza della finestra: se è stretta, le colonne si impilano
+
 ### Design
 
-L'app usa componenti nativi di iOS per la nav bar e pulsanti.
+L'app usa componenti nativi di iOS e macOS per barre, pulsanti e barra laterale.
 New York è il font usato, una typeface serif creata da Apple.
 Vengono usati colori morbidi (`#F7F2E8` per lo sfondo chiaro, `#1E1D1C` per lo sfondo scuro) in tutta l'interfaccia
 
@@ -32,6 +45,7 @@ Vengono usati colori morbidi (`#F7F2E8` per lo sfondo chiaro, `#1E1D1C` per lo s
 
 - Xcode 26 o successivo
 - iOS / iPadOS 26 o successivo
+- macOS 26 o successivo
 
 ---
 
@@ -51,6 +65,7 @@ Altrimenti, puoi compilarla in Xcode:
 1. Apri `BCW.xcodeproj` in Xcode.
 2. In *Signing & Capabilities* scegli il tuo team (serve anche solo un Apple ID gratuito per il dispositivo).
 3. Esegui sul simulatore o su un iPhone. Senza account puoi toccare **Prova la demo**.
+4. Per la versione Mac scegli "My Mac" come destinazione ed esegui.
 
 Il progetto usa le cartelle sincronizzate di Xcode 16, quindi qualsiasi file aggiunto in `BCW/` entra automaticamente nel target.
 In alternativa è incluso un `project.yml` per [XcodeGen](https://github.com/yonaskolb/XcodeGen).
@@ -71,11 +86,12 @@ Voti, assenze e note degli anni passati non sono disponibili tramite le API, qui
 
 ```
 BCW/
-├── App/            Entry point, tab bar, blocco biometrico
+├── App/            Entry point, tab bar (iOS), finestra con barra laterale e menu (macOS), blocco biometrico
 ├── Networking/     Client Classeviva, cache su disco, Portachiavi
 ├── Models/         Modelli decodificati in modo tollerante
 ├── Store/          Stato dell'app, calcolo medie, preferenze, promemoria, server demo
 ├── Theme/          Colori, font e stili
+├── Utilities/      Date, decodifica e adattatori tra iOS e macOS
 ├── Components/     Componenti riutilizzabili (card, badge voto, anelli, righe agenda…)
 └── Features/       Dashboard, Voti, Tu (e sottosezioni), Cerca, Impostazioni, Login
 ```

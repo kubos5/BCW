@@ -1,11 +1,14 @@
 import QuickLook
+#if os(iOS)
 import SafariServices
+#endif
 import SwiftUI
 
 /// Anni precedenti: le pagelle si scaricano nell'app, il resto dell'archivio
 /// (voti, assenze, note) si consulta sul sito di Classeviva, perché l'API non lo fornisce.
 struct PreviousYearView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openURL) private var openURL
     @State private var startYear = ArchiveModel.previousStartYear
     @State private var previewURL: URL?
     @State private var downloading: String?
@@ -16,24 +19,36 @@ struct PreviousYearView: View {
     private var archive: ArchiveModel { model.archive(for: startYear) }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+        Group {
+            #if os(macOS)
+            SplitColumns(sideWidth: 360) {
                 webArchiveCard
+            } main: {
                 documentsSection
             }
-            .padding(.horizontal)
-            .padding(.bottom, 24)
+            #else
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    webArchiveCard
+                    documentsSection
+                }
+                .pagePadding()
+                .padding(.bottom, 24)
+            }
+            .themedBackground()
+            #endif
         }
-        .themedBackground()
-        .navigationTitle("Anno \(archive.title)")
-        .navigationBarTitleDisplayMode(.inline)
+        .screenTitle("Anno \(archive.title)")
+        .inlineTitleDisplay()
         .quickLookPreview($previewURL)
+        #if os(iOS)
         .sheet(isPresented: $showingWeb) {
             SafariView(url: ArchiveModel.webURL)
                 .ignoresSafeArea()
         }
+        #endif
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .trailingBar) {
                 Menu {
                     Picker("Anno scolastico", selection: $startYear) {
                         ForEach(ArchiveModel.availableStartYears, id: \.self) { year in
@@ -67,12 +82,17 @@ struct PreviousYearView: View {
                         .foregroundStyle(Theme.secondaryInk)
                 }
             }
-            Text("Classeviva non rende disponibili all'app i dati degli anni passati. Accedi al sito e, dal menu principale, scegli \"Vai all'a.s. \(archive.title)\".")
+            Text("Classeviva non rende disponibili all'app i dati degli anni passati. Accedi al sito\(Platform.isMac ? ", che si apre nel browser," : "") e, dal menu principale, scegli \"Vai all'a.s. \(archive.title)\".")
                 .font(.subheadline)
                 .foregroundStyle(Theme.ink.opacity(0.85))
                 .fixedSize(horizontal: false, vertical: true)
             Button {
+                // Su macOS il sito si apre nel browser predefinito, con le sue password salvate.
+                #if os(macOS)
+                openURL(ArchiveModel.webURL)
+                #else
                 showingWeb = true
+                #endif
             } label: {
                 Label("Apri l'archivio di Classeviva", systemImage: "arrow.up.forward.app")
                     .frame(maxWidth: .infinity)
@@ -102,9 +122,11 @@ struct PreviousYearView: View {
                     unavailable(archive.documentsError.map { "Classeviva ha risposto: \($0)" }
                                 ?? "La scuola non ha pubblicato documenti per questo anno.")
                 } else {
-                    ForEach(archive.documents) { doc in
-                        DocumentButton(title: doc.title, isLoading: downloading == doc.id) {
-                            Task { await open(doc) }
+                    CardGrid(minWidth: 320) {
+                        ForEach(archive.documents) { doc in
+                            DocumentButton(title: doc.title, isLoading: downloading == doc.id) {
+                                Task { await open(doc) }
+                            }
                         }
                     }
                 }
@@ -122,7 +144,7 @@ struct PreviousYearView: View {
                 _ = model.reloadArchive(for: startYear)
                 Task { await load() }
             }
-            .buttonStyle(.glass)
+            .glassButton()
         }
         .frame(maxWidth: .infinity)
         .card()
@@ -144,6 +166,7 @@ struct PreviousYearView: View {
     }
 }
 
+#if os(iOS)
 /// Browser di Safari dentro l'app: condivide le password salvate e i cookie di Safari.
 struct SafariView: UIViewControllerRepresentable {
     let url: URL
@@ -157,3 +180,4 @@ struct SafariView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
+#endif

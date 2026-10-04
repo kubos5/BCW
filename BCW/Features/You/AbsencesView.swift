@@ -35,60 +35,58 @@ struct AbsencesView: View {
                         .background(Theme.poor.opacity(0.1), in: .rect(cornerRadius: 16, style: .continuous))
                 }
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        FilterChip(title: "Da giustificare", symbol: "exclamationmark.circle", isSelected: onlyPending) {
-                            onlyPending.toggle()
-                        }
-                        FilterChip(title: "Tutti", isSelected: kind == nil) { kind = nil }
-                        ForEach([AbsenceEvent.Kind.absence, .late, .earlyExit]) { k in
-                            FilterChip(title: k.pluralTitle, symbol: k.symbol, isSelected: kind == k) {
-                                kind = kind == k ? nil : k
-                            }
+                ChipRow {
+                    FilterChip(title: "Da giustificare", symbol: "exclamationmark.circle", isSelected: onlyPending) {
+                        onlyPending.toggle()
+                    }
+                    FilterChip(title: "Tutti", isSelected: kind == nil) { kind = nil }
+                    ForEach([AbsenceEvent.Kind.absence, .late, .earlyExit]) { k in
+                        FilterChip(title: k.pluralTitle, symbol: k.symbol, isSelected: kind == k) {
+                            kind = kind == k ? nil : k
                         }
                     }
-                    .padding(.vertical, 2)
                 }
-                .scrollClipDisabled()
 
                 if filtered.isEmpty {
                     ContentUnavailableView("Nessun evento", systemImage: "checkmark.circle",
                                            description: Text("Nessuna assenza, ritardo o uscita registrati."))
                         .padding(.top, 30)
                 } else {
-                    ForEach(byMonth, id: \.0) { month, events in
-                        VStack(alignment: .leading, spacing: 10) {
-                            Eyebrow(text: month.monthYear)
-                                .padding(.leading, 6)
-                            VStack(spacing: 12) {
-                                ForEach(events) { event in
-                                    // Data, icona e stato restano centrati sull'intera riga,
-                                    // anche quando dettaglio e motivo occupano più righe.
-                                    HStack(spacing: 12) {
-                                        VStack(spacing: 0) {
-                                            Text(event.date.it("d"))
-                                                .font(.numeral(20, weight: .bold))
-                                            Text(event.date.weekdayShort)
-                                                .font(.caption2)
-                                                .foregroundStyle(Theme.secondaryInk)
+                    CardGrid(minWidth: 440, spacing: 18) {
+                        ForEach(byMonth, id: \.0) { month, events in
+                            VStack(alignment: .leading, spacing: 10) {
+                                Eyebrow(text: month.monthYear)
+                                    .padding(.leading, 6)
+                                VStack(spacing: 12) {
+                                    ForEach(events) { event in
+                                        // Data, icona e stato restano centrati sull'intera riga,
+                                        // anche quando dettaglio e motivo occupano più righe.
+                                        HStack(spacing: 12) {
+                                            VStack(spacing: 0) {
+                                                Text(event.date.it("d"))
+                                                    .font(.numeral(20, weight: .bold))
+                                                Text(event.date.weekdayShort)
+                                                    .font(.caption2)
+                                                    .foregroundStyle(Theme.secondaryInk)
+                                            }
+                                            .frame(width: 38)
+                                            AbsenceRow(absence: event, showsReason: true)
                                         }
-                                        .frame(width: 38)
-                                        AbsenceRow(absence: event, showsReason: true)
+                                        if event.id != events.last?.id { Divider().overlay(Theme.separator) }
                                     }
-                                    if event.id != events.last?.id { Divider().overlay(Theme.separator) }
                                 }
+                                .card(padding: 14)
                             }
-                            .card(padding: 14)
                         }
                     }
                 }
             }
-            .padding(.horizontal)
+            .pagePadding()
             .padding(.bottom, 24)
             .animation(.snappy, value: filtered)
         }
         .themedBackground()
-        .navigationTitle("Assenze e ritardi")
+        .screenTitle("Assenze e ritardi")
         .refreshable { await model.loadAbsences() }
     }
 

@@ -68,37 +68,66 @@ enum Keychain {
 
     // MARK: Primitive
 
-    private static func write(_ data: Data, for account: String) {
-        remove(account)
-        let query: [String: Any] = [
+    #if os(macOS)
+    /// Su macOS si usa il Portachiavi "moderno", lo stesso di iOS, che però richiede un'app
+    /// firmata con un team di sviluppo. Con la firma locale si ripiega sul portachiavi di login.
+    private static var usesDataProtection = true
+    #endif
+
+    private static func query(_ account: String) -> [String: Any] {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-            kSecValueData as String: data,
         ]
-        SecItemAdd(query as CFDictionary, nil)
+        #if os(macOS)
+        if usesDataProtection { query[kSecUseDataProtectionKeychain as String] = true }
+        #endif
+        return query
+    }
+
+    /// Esegue un'operazione e, se su macOS manca l'autorizzazione al Portachiavi moderno,
+    /// la ripete sul portachiavi di login.
+    private static func withFallback(_ operation: () -> OSStatus) -> OSStatus {
+        let status = operation()
+        #if os(macOS)
+        if status == errSecMissingEntitlement && usesDataProtection {
+            usesDataProtection = false
+            return operation()
+        }
+        #endif
+        return status
+    }
+
+    private static func write(_ data: Data, for account: String) {
+        remove(account)
+        _ = withFallback {
+            var item = query(account)
+            item[kSecValueData as String] = data
+            #if os(macOS)
+            if usesDataProtection {
+                item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            }
+            #else
+            item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            #endif
+            return SecItemAdd(item as CFDictionary, nil)
+        }
     }
 
     private static func read(_ account: String) -> Data? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
         var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else { return nil }
+        let status = withFallback {
+            var search = query(account)
+            search[kSecReturnData as String] = true
+            search[kSecMatchLimit as String] = kSecMatchLimitOne
+            return SecItemCopyMatching(search as CFDictionary, &result)
+        }
+        guard status == errSecSuccess else { return nil }
         return result as? Data
     }
 
     private static func remove(_ account: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        SecItemDelete(query as CFDictionary)
+        _ = withFallback { SecItemDelete(query(account) as CFDictionary) }
     }
 }

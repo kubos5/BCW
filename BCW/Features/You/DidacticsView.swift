@@ -42,18 +42,14 @@ struct DidacticsView: View {
                 }
 
                 if !model.didactics.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            FilterChip(title: "Tutti i docenti", isSelected: teacherFilter == nil) { teacherFilter = nil }
-                            ForEach(model.didactics) { teacher in
-                                FilterChip(title: teacher.name, isSelected: teacherFilter == teacher.id) {
-                                    teacherFilter = teacherFilter == teacher.id ? nil : teacher.id
-                                }
+                    ChipRow {
+                        FilterChip(title: "Tutti i docenti", isSelected: teacherFilter == nil) { teacherFilter = nil }
+                        ForEach(model.didactics) { teacher in
+                            FilterChip(title: teacher.name, isSelected: teacherFilter == teacher.id) {
+                                teacherFilter = teacherFilter == teacher.id ? nil : teacher.id
                             }
                         }
-                        .padding(.vertical, 2)
                     }
-                    .scrollClipDisabled()
                 }
 
                 if loading && model.didactics.isEmpty {
@@ -80,19 +76,21 @@ struct DidacticsView: View {
                             }
                             .padding(.leading, 4)
 
-                            ForEach(list) { folder in
-                                folderCard(folder, teacher: teacher)
+                            CardGrid(minWidth: 360) {
+                                ForEach(list) { folder in
+                                    folderCard(folder, teacher: teacher)
+                                }
                             }
                         }
                     }
                 }
             }
-            .padding(.horizontal)
+            .pagePadding()
             .padding(.bottom, 24)
             .animation(.snappy, value: teacherFilter)
         }
         .themedBackground()
-        .navigationTitle("Materiale didattico")
+        .screenTitle("Materiale didattico")
         .searchable(text: $search, prompt: "Cerca file o cartelle")
         .quickLookPreview($previewURL)
         .sheet(item: $textItem) { item in
@@ -105,7 +103,7 @@ struct DidacticsView: View {
                 }
                 .themedBackground()
                 .navigationTitle(item.title)
-                .navigationBarTitleDisplayMode(.inline)
+                .inlineTitleDisplay()
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Fine") { textItem = nil }
@@ -113,6 +111,7 @@ struct DidacticsView: View {
                 }
             }
             .presentationDetents([.medium, .large])
+            .sheetFrame(width: 560, height: 480)
         }
         .task {
             if model.didactics.isEmpty {

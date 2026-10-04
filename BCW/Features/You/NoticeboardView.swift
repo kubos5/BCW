@@ -19,35 +19,75 @@ struct NoticeboardView: View {
         }
     }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        FilterChip(title: "Da leggere", symbol: "circle.fill", isSelected: onlyUnread) {
-                            onlyUnread.toggle()
-                        }
-                        FilterChip(title: "Tutte", isSelected: category == nil) { category = nil }
-                        ForEach(categories, id: \.self) { c in
-                            FilterChip(title: c, isSelected: category == c) {
-                                category = category == c ? nil : c
-                            }
-                        }
-                    }
-                    .padding(.vertical, 2)
-                }
-                .scrollClipDisabled()
+    /// Su macOS, comunicazione aperta nel pannello di destra.
+    @State private var selection: Notice.ID?
+    @State private var width: CGFloat = 1000
 
-                if filtered.isEmpty {
-                    ContentUnavailableView(model.notices.isEmpty ? "Bacheca vuota" : "Nessun risultato",
-                                           systemImage: "megaphone",
-                                           description: Text(model.notices.isEmpty
-                                                             ? "Le comunicazioni della scuola appariranno qui."
-                                                             : "Prova a cambiare i filtri."))
-                        .padding(.top, 40)
-                } else {
-                    LazyVStack(spacing: 10) {
-                        ForEach(filtered) { notice in
+    /// Elenco e dettaglio affiancati, come in Mail (solo su macOS e se c'è spazio).
+    private var isSplit: Bool { Platform.isMac && width >= 820 }
+
+    var body: some View {
+        Group {
+            if isSplit {
+                splitView
+            } else {
+                ScrollView {
+                    list
+                        .pagePadding()
+                        .padding(.bottom, 24)
+                }
+            }
+        }
+        .themedBackground()
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        #if DEBUG
+        .onAppear {
+            // Per gli screenshot di sviluppo: `-BCWOpenNotice YES` apre la prima comunicazione.
+            if UserDefaults.standard.bool(forKey: "BCWOpenNotice") { selection = model.notices.first?.id }
+        }
+        #endif
+        .screenTitle("Bacheca", subtitle: Platform.isMac ? unreadSubtitle : nil)
+        .searchable(text: $search, prompt: "Cerca nelle comunicazioni")
+        .refreshable { await model.loadNotices() }
+    }
+
+    private var unreadSubtitle: String? {
+        let unread = model.unreadNoticesCount
+        return unread == 0 ? nil : (unread == 1 ? "1 da leggere" : "\(unread) da leggere")
+    }
+
+    private var list: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            ChipRow {
+                FilterChip(title: "Da leggere", symbol: "circle.fill", isSelected: onlyUnread) {
+                    onlyUnread.toggle()
+                }
+                FilterChip(title: "Tutte", isSelected: category == nil) { category = nil }
+                ForEach(categories, id: \.self) { c in
+                    FilterChip(title: c, isSelected: category == c) {
+                        category = category == c ? nil : c
+                    }
+                }
+            }
+
+            if filtered.isEmpty {
+                ContentUnavailableView(model.notices.isEmpty ? "Bacheca vuota" : "Nessun risultato",
+                                       systemImage: "megaphone",
+                                       description: Text(model.notices.isEmpty
+                                                         ? "Le comunicazioni della scuola appariranno qui."
+                                                         : "Prova a cambiare i filtri."))
+                    .padding(.top, 40)
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(filtered) { notice in
+                        if isSplit {
+                            Button {
+                                selection = notice.id
+                            } label: {
+                                NoticeRow(notice: notice, isSelected: selection == notice.id)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
                             NavigationLink {
                                 NoticeDetailView(notice: notice)
                             } label: {
@@ -58,19 +98,40 @@ struct NoticeboardView: View {
                     }
                 }
             }
-            .padding(.horizontal)
-            .padding(.bottom, 24)
-            .animation(.snappy, value: filtered)
         }
-        .themedBackground()
-        .navigationTitle("Bacheca")
-        .searchable(text: $search, prompt: "Cerca nelle comunicazioni")
-        .refreshable { await model.loadNotices() }
+        .animation(.snappy, value: filtered)
+    }
+
+    private var splitView: some View {
+        HStack(spacing: 0) {
+            ScrollView {
+                list
+                    .padding(.leading, 28)
+                    .padding(.trailing, 12)
+                    .padding(.top, 8)
+                    .padding(.bottom, Theme.bottomInset)
+            }
+            .frame(width: 420)
+
+            Divider().overlay(Theme.separator)
+
+            Group {
+                if let notice = model.notices.first(where: { $0.id == selection }) {
+                    NoticeDetailView(notice: notice)
+                        .id(notice.id)
+                } else {
+                    ContentUnavailableView("Nessuna comunicazione aperta", systemImage: "megaphone",
+                                           description: Text("Scegli una comunicazione dall'elenco per leggerla."))
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 }
 
 private struct NoticeRow: View {
     let notice: Notice
+    var isSelected = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -108,6 +169,12 @@ private struct NoticeRow: View {
             }
         }
         .card(padding: 14)
+        .overlay {
+            if isSelected {
+                RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
+                    .strokeBorder(Theme.accent, lineWidth: 1.5)
+            }
+        }
     }
 }
 
@@ -189,11 +256,11 @@ struct NoticeDetailView: View {
 
                 actions
             }
-            .padding(.horizontal)
+            .pagePadding()
             .padding(.bottom, 24)
         }
         .themedBackground()
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitleDisplay()
         .quickLookPreview($previewURL)
         .task { await load() }
     }
@@ -242,7 +309,7 @@ struct NoticeDetailView: View {
                         Button("Invia risposta", systemImage: "paperplane") {
                             Task { await reply() }
                         }
-                        .buttonStyle(.glass)
+                        .glassButton()
                         .disabled(replyText.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }

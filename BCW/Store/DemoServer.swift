@@ -1,5 +1,9 @@
 import Foundation
+#if os(macOS)
+import AppKit
+#else
 import UIKit
+#endif
 
 /// Server finto che risponde come l'API di Classeviva con dati plausibili e
 /// generati in modo deterministico rispetto alla data di oggi.
@@ -516,6 +520,31 @@ final class DemoTransport: Transport {
                    status: 404, contentType: "application/json", fileName: nil)
     }
 
+    #if os(macOS)
+    private func pdf(title: String, body: String) -> Data {
+        let data = NSMutableData()
+        var box = CGRect(x: 0, y: 0, width: 595, height: 842)
+        guard let consumer = CGDataConsumer(data: data as CFMutableData),
+              let context = CGContext(consumer: consumer, mediaBox: &box, nil) else { return Data() }
+        context.beginPDFPage(nil)
+        // Origine in alto a sinistra, come su iOS.
+        context.translateBy(x: 0, y: box.height)
+        context.scaleBy(x: 1, y: -1)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+        let serif = NSFont.newYork(size: 28, weight: .bold)
+        (title as NSString).draw(at: CGPoint(x: 56, y: 72), withAttributes: [.font: serif])
+        (body as NSString).draw(in: CGRect(x: 56, y: 130, width: 483, height: 600),
+                                withAttributes: [.font: NSFont.systemFont(ofSize: 14)])
+        ("BCW · Modalità demo" as NSString).draw(at: CGPoint(x: 56, y: 790),
+                                                 withAttributes: [.font: NSFont.systemFont(ofSize: 10),
+                                                                  .foregroundColor: NSColor.gray])
+        NSGraphicsContext.restoreGraphicsState()
+        context.endPDFPage()
+        context.closePDF()
+        return data as Data
+    }
+    #else
     private func pdf(title: String, body: String) -> Data {
         let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 595, height: 842))
         return renderer.pdfData { context in
@@ -531,6 +560,7 @@ final class DemoTransport: Transport {
                                                                       .foregroundColor: UIColor.gray])
         }
     }
+    #endif
 }
 
 /// Generatore pseudo-casuale con seme (SplitMix64), per dati demo stabili.
