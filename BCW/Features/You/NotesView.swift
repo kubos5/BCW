@@ -25,6 +25,7 @@ struct NotesView: View {
                 if filtered.isEmpty {
                     ContentUnavailableView("Nessuna nota", systemImage: "hand.thumbsup",
                                            description: Text("Continua così!"))
+                        .frame(maxWidth: .infinity)
                         .padding(.top, 40)
                 } else {
                     CardGrid(minWidth: 360) {

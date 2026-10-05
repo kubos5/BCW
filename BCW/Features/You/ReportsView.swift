@@ -60,6 +60,7 @@ struct ReportsView: View {
             if documents.documents.isEmpty && documents.schoolReports.isEmpty {
                 ContentUnavailableView("Nessun documento", systemImage: "doc.text",
                                        description: Text("Pagelle e documenti di valutazione appariranno qui dopo gli scrutini."))
+                    .frame(maxWidth: .infinity)
                     .padding(.top, 20)
             }
             if !documents.documents.isEmpty {
@@ -147,7 +148,7 @@ struct DocumentButton: View {
                     .multilineTextAlignment(.leading)
                 Spacer()
                 if isLoading {
-                    ProgressView()
+                    InlineProgress()
                 } else {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))

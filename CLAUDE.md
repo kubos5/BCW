@@ -27,18 +27,30 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `-demoMode YES`.
 - Screenshot del Mac senza permessi di registrazione schermo (solo DEBUG, `App/DebugSnapshots.swift`):
   avviare con `-demoMode YES -BCWSnapshot YES -BCWSections dashboard,grades -BCWSizes 1280x840,900x640`
-  (facoltativi `-BCWSettings YES`, `-appearance light`, `-BCWDaysAgo 2`, `-BCWOpenNotice YES`); le immagini finiscono in
-  `~/Library/Containers/com.bcw-classeviva.app/Data/tmp/BCWSnapshots` e l'app si chiude da sola.
+  (facoltativi `-BCWSettings YES`, `-appearance light`, `-BCWDaysAgo 2`, `-BCWOpenNotice YES`, `-dashboardMode calendar`,
+  `-BCWHover YES` per portare il puntatore sulla barra della finestra, `-BCWSearch testo` per la pagina di ricerca);
+  le immagini finiscono in `~/Library/Containers/com.bcw-classeviva.app/Data/tmp/BCWSnapshots` (o in `-BCWSnapshotDir`
+  con un build senza sandbox) e l'app si chiude da sola.
+- Simulatori: sono disponibili iOS 26.3 e iOS 27. Quello di iOS 27 appena avviato satura la CPU per minuti e fa
+  bloccare `simctl install/launch`: tenerne acceso uno alla volta.
 
 ## Architettura
 - `BCW.xcodeproj` usa **cartelle sincronizzate** (objectVersion 77): i file in `BCW/` entrano nel target da soli.
 - **Un solo target multipiattaforma** (iOS + macOS nativo, non Catalyst; `SUPPORTED_PLATFORMS`, `SDKROOT = auto`).
   Su macOS: sandbox con rete in uscita e Calendario (impostazioni `ENABLE_*[sdk=macosx*]`).
 - Differenze tra piattaforme: `Utilities/Platform.swift` (`Platform.copy`, `screenTitle`, `.trailingBar`,
-  `pagePadding`, `CardGrid`, `ChipRow`, `glassButton`, `PlatformNavigationStack`, `SplitColumns`/`StackAware`,
-  `sheetFrame`). Usare questi invece di `#if` sparsi o di API UIKit/AppKit nelle viste.
+  `pagePadding`, `CardGrid` (anche `equalRowHeights`), `ChipRow`, `glassButton`, `PlatformNavigationStack`,
+  `SplitColumns`/`StackAware`, `sheetFrame`, `macToolbarBackground`, `localSearchable`/`LocalSearchField`,
+  `InlineProgress`, `CenteredCircle`). Usare questi invece di `#if` sparsi o di API UIKit/AppKit nelle viste.
+- iOS, ricerca: `.searchable` sta dentro la scheda Cerca (`SearchView`), con `Tab(role: .search)`. Con l'SDK di
+  iOS 27 la scheda finirebbe dentro la barra e il campo in alto: da iOS 27 in poi `MainTabView` applica
+  `.tabViewSearchActivation(.searchTabSelection)` (verificato: torna il pulsante separato con il campo in basso;
+  selezionando la scheda si apre subito la tastiera e la X riporta alla scheda precedente). `.searchable` sulla
+  `TabView` invece mette il campo anche in Dashboard: non usarlo.
 - macOS: `App/MacRootView.swift` (NavigationSplitView con `MacSection`, account in fondo alla barra laterale,
-  `BCWCommands` per i menu Vai/Account e le scorciatoie, `MacNavigation` ricorda l'ultima sezione), finestra
+  `BCWCommands` per i menu Vai/Account e le scorciatoie, `MacNavigation` ricorda l'ultima sezione e tiene lo stato
+  della ricerca generale: campo `.searchable` sulla split view, sempre visibile a destra; selezionarlo o scrivere
+  apre `SearchView` nel dettaglio, `nav.show(_:)` torna a una sezione chiudendo la ricerca, ⌘F la attiva), finestra
   `Window` singola + scena `Settings` (`MacSettingsView` a schede, con le stesse sezioni di `SettingsView`).
   I titoli sono etichette in New York nella barra (`screenTitle`): applicarlo dopo `.toolbar` della pagina,
   così resta il primo elemento. `.primaryAction` su macOS sta a sinistra: per il lato destro usare `.trailingBar`.
@@ -89,6 +101,27 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   impilano): Dashboard (calendario + prossimi giorni | giorno, con lezioni in colonna a parte da 580 pt), Voti,
   dettaglio materia, Scrutini, Anni precedenti, Lezioni. Bacheca: elenco + dettaglio affiancati sopra 820 pt.
 - Elenchi di card in `CardGrid` (una colonna su iOS, griglia adattiva su Mac); filtri in `ChipRow` (a capo su Mac).
+- Dashboard su Mac: titolo grande nel contenuto (sopra il calendario); nella barra frecce/Oggi/Domani e il menu della
+  vista (senza "Vai a oggi"), che un distanziatore invisibile allinea al bordo destro della card del calendario
+  (`menuSpacer`, calcolato da Oggi/Domani e dal calendario in coordinate `.global`). NSToolbar non ridimensiona
+  bene un elemento che cambia larghezza (lo centra nel vecchio spazio e decide l'overflow su misure vecchie): il
+  distanziatore ha un `id` che cambia con la larghezza, così viene reinserito, e con le colonne impilate non c'è.
+  Non misurare elementi della barra che dipendono dal distanziatore: si creano cicli e i tasti finiscono nell'overflow.
+  "Nei prossimi giorni" cambia identità (`upcomingGeneration`) in `select(_:)`, insieme al giorno: su iOS sempre, su
+  macOS solo se la sezione è espansa e il contenuto cambia davvero. L'identità non deve dipendere dallo stato
+  compresso: comprimere sostituirebbe la sezione intera e l'intestazione scenderebbe e risalirebbe. La transizione
+  usa lo spostamento del giorno scelto (`upcomingTransition`, `dayDetailHeight`): `.move(edge:)` sposta di tutta
+  l'altezza della vista, troppo con la lista aperta e troppo poco con la sola intestazione.
+- Barra della finestra: `macToolbarBackground()` (in `screenTitle` e nella Dashboard) fa cominciare il contenuto 1 pt
+  sotto la barra, rende trasparente lo sfondo della barra e ci mette sotto `Theme.background`. Senza, macOS 27 schiarisce
+  e sottolinea la barra al passaggio del cursore sopra ogni area scorrevole che la tocca (con `SplitColumns` solo sopra
+  una colonna). Non usare `toolbarBackground(_:for: .windowToolbar)`: colora anche la barra laterale.
+  La schermata di accesso ha un elemento invisibile nella barra: senza barra i pulsanti a semaforo si spostano.
+- Pagine con ricerca propria (Bacheca, Agenda, Materiale): su Mac il campo è nel contenuto (`LocalSearchField`),
+  perché nella barra c'è già quello generale.
+- `ContentUnavailableView` su macOS non si allarga: dentro uno stack aggiungere `.frame(maxWidth: .infinity)`.
+  Le pagine che mostrano un messaggio in `.overlay` devono riempire la finestra (`frame(maxWidth:maxHeight: .infinity)`).
+- Rotelle in pulsanti e righe: `InlineProgress` (piccola su Mac, dove quella normale è più alta della riga).
 - `.glass` su macOS riempie il pulsante con la tinta: usare `glassButton()`. Anni precedenti apre il sito nel
   browser (niente `SFSafariViewController`); "Aggiungi al Calendario" salva direttamente con accesso in sola scrittura.
 
@@ -97,6 +130,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `Pill` (stati su una riga, con versione abbreviata).
 - Sezioni comprimibili: sempre `CollapsibleContent` (scorre ritagliato con sfumatura in alto) e intestazione con
   `HeaderButtonStyle` (niente attenuazione alla pressione), dentro `withAnimation(.snappy)`.
+  Da chiusa (animazione finita) il contenuto non viene disegnato: se cambiasse mentre è nascosto, le sue animazioni
+  si vedrebbero sotto l'intestazione, dove la maschera si allarga per le ombre.
 - Pagine lunghe (Tu, Account, Impostazioni): margine in fondo `Theme.bottomInset`. iOS rimpicciolisce la tab bar
   scorrendo solo se la pagina è abbastanza lunga (verificato: Tu con 24 punti non lo faceva, con 120 sì).
 - README: niente trattini lunghi, niente grassetto/corsivo nelle parti aggiunte, tabelle solo se indispensabili.

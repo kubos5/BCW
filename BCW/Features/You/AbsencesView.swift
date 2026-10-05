@@ -50,6 +50,7 @@ struct AbsencesView: View {
                 if filtered.isEmpty {
                     ContentUnavailableView("Nessun evento", systemImage: "checkmark.circle",
                                            description: Text("Nessuna assenza, ritardo o uscita registrati."))
+                        .frame(maxWidth: .infinity)
                         .padding(.top, 30)
                 } else {
                     CardGrid(minWidth: 440, spacing: 18) {

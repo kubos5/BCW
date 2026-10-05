@@ -59,13 +59,15 @@ struct LoginView: View {
                 }
 
                 Button(action: submit) {
-                    ZStack {
-                        Text("Accedi").opacity(isLoading ? 0 : 1)
-                        if isLoading { ProgressView().tint(.white) }
-                    }
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
+                    // La rotella è sovrapposta al testo: non cambia l'altezza del pulsante.
+                    Text("Accedi")
+                        .opacity(isLoading ? 0 : 1)
+                        .overlay {
+                            if isLoading { InlineProgress(tint: .white) }
+                        }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
                 }
                 .buttonStyle(.glassProminent)
                 .controlSize(.large)
@@ -94,6 +96,18 @@ struct LoginView: View {
         #if os(macOS)
         // Il logo fa già da titolo: niente titolo di sistema nella barra della finestra.
         .toolbar(removing: .title)
+        // Senza elementi la finestra non avrebbe una barra degli strumenti e i pulsanti a
+        // semaforo starebbero più vicini al bordo che nella finestra principale: un elemento
+        // invisibile le dà la stessa barra.
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .accessibilityHidden(true)
+            }
+            .sharedBackgroundVisibility(.hidden)
+        }
+        .macToolbarBackground()
         #endif
         .animation(.snappy, value: errorMessage)
         .sheet(isPresented: Binding(get: { !choices.isEmpty }, set: { if !$0 { choices = [] } })) {

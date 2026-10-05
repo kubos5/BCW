@@ -197,19 +197,30 @@ private struct CollapseEffect: ViewModifier, Animatable {
         // Finché il contenuto non è stato misurato (sezione appena creata) non lo si
         // vincola, così da aperta non parte da altezza zero.
         let frameHeight: CGFloat? = height == 0 && clamped == 1 ? nil : max(0, height - hidden)
-        content
-            .offset(y: -hidden)
-            .frame(height: frameHeight, alignment: .top)
-            .mask(alignment: .top) {
-                VStack(spacing: 0) {
-                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                        .frame(height: gradient)
-                    Rectangle()
+        // Da chiusa (animazione finita) il contenuto non c'è proprio: altrimenti, se cambia
+        // mentre è nascosto (es. i giorni successivi quando si sceglie un altro giorno), le
+        // sue animazioni si intravedono sotto l'intestazione, dove la maschera si allarga per
+        // le ombre. L'altezza misurata resta e serve alla prossima apertura.
+        if clamped > 0 {
+            content
+                .offset(y: -hidden)
+                .frame(height: frameHeight, alignment: .top)
+                .mask(alignment: .top) {
+                    VStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                            .frame(height: gradient)
+                        Rectangle()
+                    }
+                    // Il ritaglio serve solo sul bordo superiore: ai lati e in basso
+                    // la maschera si allarga per non tagliare le ombre delle card.
+                    .padding([.horizontal, .bottom], -40)
                 }
-                // Il ritaglio serve solo sul bordo superiore: ai lati e in basso
-                // la maschera si allarga per non tagliare le ombre delle card.
-                .padding([.horizontal, .bottom], -40)
-            }
+                // Compare e scompare senza transizioni proprie: l'animazione è già quella di apertura.
+                .transition(.identity)
+        } else {
+            Color.clear.frame(height: 0)
+                .transition(.identity)
+        }
     }
 }
 
@@ -260,6 +271,8 @@ struct StatTile: View {
     let value: String
     var symbol: String
     var tint: Color = Theme.accent
+    /// Riempie l'altezza disponibile (su macOS, accanto alla card del profilo).
+    var fillsHeight = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -278,6 +291,7 @@ struct StatTile: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
+        .frame(maxHeight: fillsHeight ? .infinity : nil)
         .card(padding: 14)
     }
 }
@@ -406,7 +420,7 @@ struct LoadingCard: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ProgressView()
+            InlineProgress()
             Text(text)
                 .foregroundStyle(Theme.secondaryInk)
         }

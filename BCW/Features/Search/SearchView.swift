@@ -2,8 +2,12 @@ import SwiftUI
 
 /// Ricerca globale su compiti, voti, comunicazioni, materiale e note.
 struct SearchView: View {
+    static let prompt = "Compiti, voti, comunicazioni…"
+
     @Environment(AppModel.self) private var model
-    @State private var query = ""
+    /// Testo cercato: su macOS il campo sta nella barra della finestra (`MacRootView`),
+    /// quindi il testo appartiene a chi mostra la pagina.
+    @Binding var query: String
 
     private var trimmed: String { query.trimmingCharacters(in: .whitespaces) }
 
@@ -44,6 +48,7 @@ struct SearchView: View {
                         suggestions
                     } else if agenda.isEmpty && grades.isEmpty && notices.isEmpty && notes.isEmpty && files.isEmpty {
                         ContentUnavailableView.search(text: trimmed)
+                            .frame(maxWidth: .infinity)
                             .padding(.top, 40)
                     } else {
                         CardGrid(minWidth: 400, spacing: 20) {
@@ -56,9 +61,11 @@ struct SearchView: View {
             }
             .themedBackground()
             .screenTitle("Cerca")
-            .searchable(text: $query, prompt: "Compiti, voti, comunicazioni…")
+            #if os(iOS)
+            .searchable(text: $query, prompt: Self.prompt)
             // Con la tastiera aperta il titolo "Cerca" resta visibile.
             .searchPresentationToolbarBehavior(.avoidHidingContent)
+            #endif
             .task { if model.didactics.isEmpty { await model.loadDidactics() } }
         }
     }
