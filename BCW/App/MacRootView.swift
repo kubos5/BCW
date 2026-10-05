@@ -2,9 +2,10 @@
 import SwiftUI
 
 /// Sezioni della barra laterale su macOS: le schede di iOS più le pagine che su iPhone
-/// stanno dentro "Tu", così ogni funzione è a un clic di distanza.
+/// stanno dentro "Tu", così ogni funzione è a un clic di distanza. La ricerca non è una
+/// sezione: è il campo sempre visibile nella barra della finestra.
 enum MacSection: String, CaseIterable, Identifiable {
-    case dashboard, grades, you, search
+    case dashboard, grades, you
     case noticeboard, notes
     case reports, previousYears
     case absences
@@ -17,7 +18,6 @@ enum MacSection: String, CaseIterable, Identifiable {
         case .dashboard: "Dashboard"
         case .grades: "Voti"
         case .you: "Tu"
-        case .search: "Cerca"
         case .noticeboard: "Bacheca"
         case .notes: "Note e annotazioni"
         case .reports: "Scrutini e pagelle"
@@ -37,7 +37,6 @@ enum MacSection: String, CaseIterable, Identifiable {
         case .dashboard: "calendar.day.timeline.left"
         case .grades: "chart.line.uptrend.xyaxis"
         case .you: "person.crop.circle"
-        case .search: "magnifyingglass"
         case .noticeboard: "megaphone"
         case .notes: "exclamationmark.bubble"
         case .reports: "doc.text.magnifyingglass"
@@ -55,7 +54,7 @@ enum MacSection: String, CaseIterable, Identifiable {
     /// Stessi colori delle righe di "Tu" su iOS.
     var tint: Color {
         switch self {
-        case .dashboard, .grades, .you, .search, .noticeboard: Theme.accent
+        case .dashboard, .grades, .you, .noticeboard: Theme.accent
         case .notes: Theme.poor
         case .reports: Theme.neutral
         case .previousYears: Theme.secondaryInk
@@ -74,8 +73,8 @@ enum MacSection: String, CaseIterable, Identifiable {
         case .dashboard: "1"
         case .grades: "2"
         case .you: "3"
-        case .search: "4"
-        case .noticeboard: "5"
+        case .noticeboard: "4"
+        case .notes: "5"
         case .absences: "6"
         case .agenda: "7"
         case .didactics: "8"
@@ -85,7 +84,7 @@ enum MacSection: String, CaseIterable, Identifiable {
     }
 
     static let groups: [(title: String?, sections: [MacSection])] = [
-        (nil, [.dashboard, .grades, .you, .search]),
+        (nil, [.dashboard, .grades, .you]),
         ("Comunicazioni", [.noticeboard, .notes]),
         ("Valutazioni", [.reports, .previousYears]),
         ("Frequenza", [.absences]),
@@ -101,8 +100,25 @@ final class MacNavigation {
     }
     var addingAccount = false
     var confirmingSignOut = false
+    /// Testo della ricerca generale, nel campo della barra della finestra.
+    var searchQuery = ""
+    /// `true` mentre il dettaglio mostra la pagina di ricerca al posto della sezione.
+    var isSearching = false
+    /// Incrementato dal comando "Cerca" (⌘F) per mettere il cursore nel campo.
+    var searchFocusRequest = 0
 
     private static let sectionKey = "macSection"
+
+    /// Torna a una sezione chiudendo la ricerca.
+    func show(_ section: MacSection) {
+        endSearch()
+        self.section = section
+    }
+
+    func endSearch() {
+        isSearching = false
+        searchQuery = ""
+    }
 
     init() {
         // L'app riapre l'ultima sezione visitata.
@@ -118,6 +134,7 @@ struct MacRootView: View {
     #if DEBUG
     @Environment(\.openSettings) private var openSettings
     #endif
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         @Bindable var nav = nav
@@ -127,10 +144,29 @@ struct MacRootView: View {
                 .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 320)
         } detail: {
             NavigationStack {
-                MacSectionView(section: nav.section)
+                MacDetailView(section: nav.section, isSearching: nav.isSearching)
             }
-            // Cambiando sezione si riparte dalla sua pagina principale.
-            .id(nav.section)
+            // Cambiando sezione (o aprendo la ricerca) si riparte dalla pagina principale.
+            .id(nav.isSearching ? "ricerca" : nav.section.rawValue)
+        }
+        // Ricerca generale: campo sempre visibile a destra nella barra della finestra.
+        // Selezionandolo si apre la pagina di ricerca; si chiude uscendo dal campo vuoto
+        // o scegliendo una sezione nella barra laterale.
+        .searchable(text: $nav.searchQuery, placement: .toolbar, prompt: SearchView.prompt)
+        .searchFocused($searchFocused)
+        .onChange(of: searchFocused) { _, focused in
+            if focused {
+                nav.isSearching = true
+            } else if nav.searchQuery.isEmpty {
+                nav.isSearching = false
+            }
+        }
+        .onChange(of: nav.searchQuery) { _, query in
+            if !query.isEmpty { nav.isSearching = true }
+        }
+        .onChange(of: nav.searchFocusRequest) { searchFocused = true }
+        .onChange(of: nav.isSearching) { _, searching in
+            if !searching { searchFocused = false }
         }
         .frame(minWidth: 860, minHeight: 580)
         #if DEBUG
@@ -170,12 +206,22 @@ struct AddAccountSheet: View {
     }
 }
 
-private struct MacSectionView: View {
+private struct MacDetailView: View {
     @Environment(AppModel.self) private var model
+    @Environment(MacNavigation.self) private var nav
     let section: MacSection
+    let isSearching: Bool
 
     var body: some View {
-        content
+        @Bindable var nav = nav
+
+        Group {
+            if isSearching {
+                SearchView(query: $nav.searchQuery)
+            } else {
+                content
+            }
+        }
             .toolbar {
                 // Il distanziatore spinge a destra le azioni: a sinistra restano titolo e navigazione.
                 ToolbarSpacer(.flexible)
@@ -191,7 +237,6 @@ private struct MacSectionView: View {
         case .dashboard: DashboardView()
         case .grades: GradesView()
         case .you: YouView()
-        case .search: SearchView()
         case .noticeboard: NoticeboardView()
         case .notes: NotesView()
         case .reports: ReportsView()
@@ -233,7 +278,10 @@ private struct MacSidebar: View {
     @Environment(MacNavigation.self) private var nav
 
     var body: some View {
-        List(selection: Binding(get: { nav.section }, set: { if let s = $0 { nav.section = s } })) {
+        // Durante la ricerca nessuna sezione è evidenziata: un clic su qualsiasi voce,
+        // anche quella da cui si è partiti, chiude la ricerca.
+        List(selection: Binding(get: { nav.isSearching ? nil : nav.section },
+                                set: { if let s = $0 { nav.show(s) } })) {
             ForEach(MacSection.groups.indices, id: \.self) { index in
                 let group = MacSection.groups[index]
                 if let title = group.title {
@@ -299,7 +347,7 @@ private struct SidebarAccountMenu: View {
                 nav.addingAccount = true
             }
             Divider()
-            Button("Il tuo profilo", systemImage: "person.crop.circle") { nav.section = .you }
+            Button("Il tuo profilo", systemImage: "person.crop.circle") { nav.show(.you) }
             SettingsLink {
                 Label("Impostazioni…", systemImage: "gearshape")
             }
@@ -371,10 +419,14 @@ struct BCWCommands: Commands {
         }
 
         CommandMenu("Vai") {
+            Button("Cerca") { nav.searchFocusRequest += 1 }
+                .keyboardShortcut("f")
+                .disabled(!signedIn)
+            Divider()
             ForEach(MacSection.groups.indices, id: \.self) { index in
                 if index > 0 { Divider() }
                 ForEach(MacSection.groups[index].sections) { section in
-                    Button(section.title) { nav.section = section }
+                    Button(section.title) { nav.show(section) }
                         .keyboardShortcut(section.shortcut.map { KeyboardShortcut($0) })
                         .disabled(!signedIn)
                 }
@@ -389,7 +441,7 @@ struct BCWCommands: Commands {
                 ))
             }
             if !model.accounts.isEmpty { Divider() }
-            Button("Il tuo profilo") { nav.section = .you }
+            Button("Il tuo profilo") { nav.show(.you) }
                 .disabled(!signedIn)
             Button(model.isDemo ? "Esci dalla demo…" : "Esci da questo account…") {
                 nav.confirmingSignOut = true

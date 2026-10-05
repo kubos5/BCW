@@ -57,14 +57,21 @@ struct RootView: View {
             case .launching:
                 Theme.background.ignoresSafeArea()
             case .signedOut:
+                #if os(macOS)
+                // Dentro una pila di navigazione la finestra ha la stessa barra (e gli stessi
+                // margini dei pulsanti a semaforo) della finestra principale.
+                NavigationStack {
+                    LoginView()
+                }
+                .transition(.opacity)
+                .frame(minWidth: 520, minHeight: 640)
+                #if DEBUG
+                .task { DebugSnapshots.captureLogin() }
+                #endif
+                #else
                 LoginView()
                     .transition(.opacity)
-                    #if os(macOS)
-                    .frame(minWidth: 520, minHeight: 640)
-                    #if DEBUG
-                    .task { DebugSnapshots.captureLogin() }
-                    #endif
-                    #endif
+                #endif
             case .signedIn:
                 #if os(macOS)
                 MacRootView()
@@ -101,6 +108,7 @@ struct RootView: View {
 struct MainTabView: View {
     @Environment(AppModel.self) private var model
     @State private var selection: AppTab = .dashboard
+    @State private var searchQuery = ""
 
     enum AppTab: Hashable { case dashboard, grades, you, search }
 
@@ -117,10 +125,25 @@ struct MainTabView: View {
             }
             .badge(model.unreadNoticesCount)
             Tab("Cerca", systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
-                SearchView()
+                SearchView(query: $searchQuery)
             }
         }
+        .modifier(SeparateSearchTab())
         .tabBarMinimizeBehavior(.onScrollDown)
+    }
+}
+
+/// Con l'SDK di iOS 27 la scheda Cerca finisce dentro la barra delle schede e il campo va in
+/// alto. Legando l'attivazione della ricerca alla selezione della scheda torna come su iOS 26:
+/// un pulsante separato, con il campo che prende il posto della barra.
+/// Su iOS 26 il comportamento è già quello, quindi resta com'è.
+private struct SeparateSearchTab: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 27, *) {
+            content.tabViewSearchActivation(.searchTabSelection)
+        } else {
+            content
+        }
     }
 }
 #endif
@@ -140,3 +163,4 @@ enum MacAppearance {
     }
 }
 #endif
+

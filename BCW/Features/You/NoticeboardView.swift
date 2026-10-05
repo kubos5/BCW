@@ -2,6 +2,7 @@ import QuickLook
 import SwiftUI
 
 struct NoticeboardView: View {
+    private static let searchPrompt = "Cerca nelle comunicazioni"
     @Environment(AppModel.self) private var model
     @State private var search = ""
     @State private var category: String?
@@ -47,7 +48,7 @@ struct NoticeboardView: View {
         }
         #endif
         .screenTitle("Bacheca", subtitle: Platform.isMac ? unreadSubtitle : nil)
-        .searchable(text: $search, prompt: "Cerca nelle comunicazioni")
+        .localSearchable(text: $search, prompt: Self.searchPrompt)
         .refreshable { await model.loadNotices() }
     }
 
@@ -58,6 +59,9 @@ struct NoticeboardView: View {
 
     private var list: some View {
         VStack(alignment: .leading, spacing: 16) {
+            #if os(macOS)
+            LocalSearchField(text: $search, prompt: Self.searchPrompt)
+            #endif
             ChipRow {
                 FilterChip(title: "Da leggere", symbol: "circle.fill", isSelected: onlyUnread) {
                     onlyUnread.toggle()
@@ -76,6 +80,7 @@ struct NoticeboardView: View {
                                        description: Text(model.notices.isEmpty
                                                          ? "Le comunicazioni della scuola appariranno qui."
                                                          : "Prova a cambiare i filtri."))
+                    .frame(maxWidth: .infinity)
                     .padding(.top, 40)
             } else {
                 LazyVStack(spacing: 10) {
@@ -241,7 +246,7 @@ struct NoticeDetailView: View {
                                         .multilineTextAlignment(.leading)
                                     Spacer()
                                     if downloading == attachment.number {
-                                        ProgressView()
+                                        InlineProgress()
                                     } else {
                                         Image(systemName: "arrow.down.circle")
                                             .foregroundStyle(Theme.accent)

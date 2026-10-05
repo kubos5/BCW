@@ -105,9 +105,11 @@ struct LessonsView: View {
             if day.startOfDay > Date().startOfDay {
                 ContentUnavailableView("Nessuna lezione", systemImage: "text.book.closed",
                                        description: Text("Le lezioni compaiono nel registro dopo essere state svolte."))
+                    .frame(maxWidth: .infinity)
             } else if model.hasLoadedLessons(on: day) {
                 ContentUnavailableView("Nessuna lezione", systemImage: "text.book.closed",
                                        description: Text(day.isWeekend ? "È il fine settimana." : "Non ci sono lezioni registrate per questo giorno."))
+                    .frame(maxWidth: .infinity)
             } else {
                 LoadingCard()
             }

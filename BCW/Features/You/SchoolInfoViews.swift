@@ -22,12 +22,15 @@ struct SubjectsView: View {
     private var content: some View {
         #if os(macOS)
         ScrollView {
-            CardGrid(minWidth: 320) {
+            // Le card della stessa riga hanno tutte l'altezza della più alta (es. una materia
+            // con molti docenti), con il contenuto sempre centrato in verticale.
+            CardGrid(minWidth: 320, equalRowHeights: true) {
                 ForEach(sortedSubjects) { subject in
                     NavigationLink {
                         SubjectDetailView(subjectId: subject.id, book: model.gradeBook, subjects: model.subjects)
                     } label: {
                         SubjectListRow(subject: subject, average: average(of: subject), showsChevron: true)
+                            .frame(maxHeight: .infinity)
                             .card(padding: 14)
                     }
                     .buttonStyle(.plain)
@@ -36,6 +39,8 @@ struct SubjectsView: View {
             .pagePadding()
             .padding(.bottom, Theme.bottomInset)
         }
+        // A tutta pagina, così il messaggio "Nessuna materia" sta al centro della finestra.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .themedBackground()
         #else
         List {
@@ -101,7 +106,7 @@ struct SchoolbooksView: View {
         content
             .overlay {
                 if loading && model.schoolbooks.isEmpty {
-                    ProgressView()
+                    InlineProgress()
                 } else if model.schoolbooks.isEmpty {
                     ContentUnavailableView("Nessun libro", systemImage: "books.vertical",
                                            description: Text("La scuola non ha pubblicato le adozioni."))
@@ -123,7 +128,7 @@ struct SchoolbooksView: View {
                 ForEach(model.schoolbooks) { course in
                     VStack(alignment: .leading, spacing: 10) {
                         SectionHeader(course.name)
-                        CardGrid(minWidth: 380) {
+                        CardGrid(minWidth: 380, equalRowHeights: true) {
                             ForEach(course.books) { book in
                                 BookRow(book: book)
                                     .frame(maxHeight: .infinity, alignment: .top)
@@ -136,6 +141,9 @@ struct SchoolbooksView: View {
             .pagePadding()
             .padding(.bottom, Theme.bottomInset)
         }
+        // A tutta pagina: altrimenti, senza libri, la pagina è larga quanto il suo contenuto
+        // (cioè nulla) e il messaggio o la rotella restano schiacciati in una colonna.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .themedBackground()
         #else
         List {
@@ -229,10 +237,12 @@ struct SchoolCalendarView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 #if os(macOS)
-                // Su macOS i due riepiloghi stanno affiancati.
+                // Su macOS i due riepiloghi stanno affiancati; la prossima vacanza ha meno
+                // contenuto, quindi la sua card è più stretta.
                 HStack(alignment: .top, spacing: 14) {
                     yearProgress
                     nextHoliday
+                        .frame(width: 300)
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 #else
@@ -277,11 +287,17 @@ struct SchoolCalendarView: View {
             let daysLeft = CVDate.calendar.dateComponents([.day], from: Date().startOfDay, to: next.start).day ?? 0
             VStack(alignment: .leading, spacing: 8) {
                 Eyebrow(text: "Prossima vacanza", color: Theme.accent)
-                Text(range(next))
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(Theme.ink)
-                Text(daysLeft <= 0 ? "Sei in vacanza!" : "Tra \(daysLeft) giorni")
-                    .foregroundStyle(Theme.secondaryInk)
+                // Su macOS data e giorni mancanti stanno al centro dello spazio sotto l'occhiello.
+                VStack(alignment: Platform.isMac ? .center : .leading, spacing: 8) {
+                    Text(range(next))
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(Theme.ink)
+                    Text(daysLeft <= 0 ? "Sei in vacanza!" : "Tra \(daysLeft) giorni")
+                        .foregroundStyle(Theme.secondaryInk)
+                }
+                .multilineTextAlignment(Platform.isMac ? .center : .leading)
+                .frame(maxWidth: Platform.isMac ? .infinity : nil,
+                       maxHeight: Platform.isMac ? .infinity : nil)
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .card()

@@ -48,12 +48,13 @@ BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 
 BCW è anche un'app nativa per macOS (non Catalyst), con le stesse funzioni e lo stesso design dell'app per iPhone, ma con un layout pensato per lo schermo grande:
 
-- barra laterale con tutte le sezioni (Dashboard, Voti, Tu, Cerca, Bacheca, Note, Scrutini, Assenze, Didattica…) e i contatori delle cose da leggere o giustificare
+- barra laterale con tutte le sezioni (Dashboard, Voti, Tu, Bacheca, Note, Scrutini, Assenze, Didattica…) e i contatori delle cose da leggere o giustificare
+- ricerca sempre a portata di mano nel campo in alto a destra (⌘F)
 - Dashboard a colonne: calendario e prossimi giorni a sinistra, il giorno scelto a destra, con le lezioni in una colonna a parte
 - Voti con medie e andamento sempre visibili accanto all'elenco
 - Bacheca con elenco e comunicazione aperta affiancati, come in Mail
 - griglie di card per note, assenze, agenda, materiale, materie e libri
-- menu Vai e Account, scorciatoie da tastiera (⌘1…⌘9 per le sezioni, ⌘R per aggiornare, ⌘← ⌘→ ⌘T per spostarsi tra i giorni)
+- menu Vai e Account, scorciatoie da tastiera (⌘1…⌘9 per le sezioni, ⌘F per cercare, ⌘R per aggiornare, ⌘← ⌘→ ⌘T ⇧⌘T per spostarsi tra i giorni)
 - finestra Impostazioni (⌘,) a schede
 - le pagine si adattano alla larghezza della finestra: se è stretta, le colonne si impilano
 

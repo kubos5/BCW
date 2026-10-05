@@ -87,6 +87,7 @@ struct GradeBookView: View {
     private var emptyBook: some View {
         ContentUnavailableView("Nessun voto", systemImage: "graduationcap",
                                description: Text("I voti appariranno qui non appena verranno registrati."))
+            .frame(maxWidth: .infinity)
             .padding(.top, 60)
     }
 
@@ -198,6 +199,7 @@ struct GradeBookView: View {
         if filteredGrades.isEmpty {
             ContentUnavailableView("Nessun voto", systemImage: "line.3.horizontal.decrease.circle",
                                    description: Text("Nessun voto corrisponde ai filtri selezionati."))
+                .frame(maxWidth: .infinity)
         } else {
             CardGrid(minWidth: 340) {
                 ForEach(filteredGrades) { grade in

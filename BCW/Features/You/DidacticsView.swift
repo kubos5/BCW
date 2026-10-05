@@ -2,6 +2,7 @@ import QuickLook
 import SwiftUI
 
 struct DidacticsView: View {
+    private static let searchPrompt = "Cerca file o cartelle"
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
     @State private var teacherFilter: String?
@@ -41,6 +42,12 @@ struct DidacticsView: View {
                     StatusBanner(message: error, symbol: "exclamationmark.triangle")
                 }
 
+                #if os(macOS)
+                if !model.didactics.isEmpty {
+                    LocalSearchField(text: $search, prompt: Self.searchPrompt)
+                }
+                #endif
+
                 if !model.didactics.isEmpty {
                     ChipRow {
                         FilterChip(title: "Tutti i docenti", isSelected: teacherFilter == nil) { teacherFilter = nil }
@@ -57,6 +64,7 @@ struct DidacticsView: View {
                 } else if model.didactics.isEmpty {
                     ContentUnavailableView("Nessun materiale", systemImage: "folder",
                                            description: Text("I file condivisi dai docenti appariranno qui."))
+                        .frame(maxWidth: .infinity)
                         .padding(.top, 40)
                 }
 
@@ -91,7 +99,7 @@ struct DidacticsView: View {
         }
         .themedBackground()
         .screenTitle("Materiale didattico")
-        .searchable(text: $search, prompt: "Cerca file o cartelle")
+        .localSearchable(text: $search, prompt: Self.searchPrompt)
         .quickLookPreview($previewURL)
         .sheet(item: $textItem) { item in
             NavigationStack {
@@ -184,7 +192,7 @@ struct DidacticsView: View {
                                 }
                                 Spacer()
                                 if openingContent == content.id {
-                                    ProgressView()
+                                    InlineProgress()
                                 } else {
                                     Image(systemName: content.kind == .link ? "arrow.up.right.square" : "arrow.down.circle")
                                         .foregroundStyle(Theme.accent)

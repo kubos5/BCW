@@ -182,6 +182,8 @@ private struct MonthDayCell: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 44)
+            // Si può fare clic su tutto il cerchio del giorno, non solo sul numero.
+            .contentShape(CenteredCircle(diameter: 42))
             .background {
                 if isSelected {
                     Circle().fill(Theme.accent.gradient).frame(width: 42, height: 42)

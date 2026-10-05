@@ -227,6 +227,8 @@ private struct MenuRow<Destination: View>: View {
 
 struct ProfileCard: View {
     @Environment(AppModel.self) private var model
+    /// Riempie l'altezza disponibile (su macOS, accanto alle statistiche).
+    var fillsHeight = false
 
     var body: some View {
         HStack(spacing: 16) {
@@ -255,6 +257,7 @@ struct ProfileCard: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Theme.secondaryInk.opacity(0.7))
         }
+        .frame(maxHeight: fillsHeight ? .infinity : nil)
         .card(padding: 18)
     }
 }
@@ -270,16 +273,18 @@ private struct MacYouView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
                 // Profilo e statistiche affiancati se c'è spazio, altrimenti uno sotto l'altro.
+                // Affiancati hanno tutti la stessa altezza: quella del più alto.
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .top, spacing: 14) {
-                        profile
+                        profile(fillsHeight: true)
                             .frame(minWidth: 380)
-                        stats
+                        stats(fillsHeight: true)
                             .frame(width: 520)
                     }
+                    .fixedSize(horizontal: false, vertical: true)
                     VStack(spacing: 14) {
-                        profile
-                        stats
+                        profile(fillsHeight: false)
+                        stats(fillsHeight: false)
                     }
                 }
 
@@ -293,7 +298,7 @@ private struct MacYouView: View {
                             ForEach(group.sections) { section in
                                 SectionTile(section: section, subtitle: subtitle(for: section),
                                             badge: badge(for: section)) {
-                                    nav.section = section
+                                    nav.show(section)
                                 }
                             }
                         }
@@ -309,25 +314,26 @@ private struct MacYouView: View {
         .screenTitle("Tu")
     }
 
-    private var profile: some View {
+    private func profile(fillsHeight: Bool) -> some View {
         NavigationLink {
             AccountView()
         } label: {
-            ProfileCard()
+            ProfileCard(fillsHeight: fillsHeight)
         }
         .buttonStyle(.plain)
     }
 
-    private var stats: some View {
+    private func stats(fillsHeight: Bool) -> some View {
         let absences = model.absences.filter { $0.kind == .absence }.count
         let lates = model.absences.filter { $0.kind == .late || $0.kind == .shortLate }.count
         let exits = model.absences.filter { $0.kind == .earlyExit }.count
         return HStack(spacing: 10) {
             StatTile(title: "Media", value: GradeFormat.average(model.gradeBook.average()),
-                     symbol: "graduationcap", tint: Theme.gradeColor(value: model.gradeBook.average()))
-            StatTile(title: "Assenze", value: "\(absences)", symbol: "person.crop.circle.badge.xmark", tint: Theme.poor)
-            StatTile(title: "Ritardi", value: "\(lates)", symbol: "clock", tint: Theme.fair)
-            StatTile(title: "Uscite", value: "\(exits)", symbol: "figure.walk.departure", tint: Theme.neutral)
+                     symbol: "graduationcap", tint: Theme.gradeColor(value: model.gradeBook.average()),
+                     fillsHeight: fillsHeight)
+            StatTile(title: "Assenze", value: "\(absences)", symbol: "person.crop.circle.badge.xmark", tint: Theme.poor, fillsHeight: fillsHeight)
+            StatTile(title: "Ritardi", value: "\(lates)", symbol: "clock", tint: Theme.fair, fillsHeight: fillsHeight)
+            StatTile(title: "Uscite", value: "\(exits)", symbol: "figure.walk.departure", tint: Theme.neutral, fillsHeight: fillsHeight)
         }
     }
 

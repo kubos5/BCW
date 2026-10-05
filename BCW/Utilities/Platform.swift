@@ -97,6 +97,7 @@ extension View {
                 }
                 .sharedBackgroundVisibility(.hidden)
             }
+            .macToolbarBackground()
         #else
         navigationTitle(title)
         #endif
@@ -129,6 +130,25 @@ extension View {
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
+        #else
+        self
+        #endif
+    }
+
+    /// Barra della finestra sopra il contenuto con lo sfondo fisso della pagina. macOS 27, al
+    /// passaggio del cursore sulla barra, schiarisce (e sottolinea) la parte sopra ogni area
+    /// scorrevole che vi passa sotto: nelle pagine a due colonne solo sopra una delle due.
+    /// Qui il contenuto comincia appena sotto la barra, così nessuna area scorrevole la tocca,
+    /// e sotto la barra resta il colore della pagina. Vale solo per il contenuto, non per la
+    /// barra laterale.
+    func macToolbarBackground() -> some View {
+        #if os(macOS)
+        VStack(spacing: 0) {
+            Color.clear.frame(height: 1)
+            self
+        }
+        .background(Theme.background.ignoresSafeArea())
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         #else
         self
         #endif
@@ -183,17 +203,140 @@ private struct MacToolbarTitle: View {
 struct CardGrid<Content: View>: View {
     var minWidth: CGFloat = 340
     var spacing: CGFloat = 10
+    /// Su macOS le card della stessa riga prendono l'altezza della più alta
+    /// (vanno costruite con `.frame(maxHeight: .infinity)` prima di `.card()`).
+    var equalRowHeights = false
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         #if os(macOS)
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: minWidth), spacing: 14, alignment: .top)],
-                  alignment: .leading, spacing: 14, content: content)
+        if equalRowHeights {
+            EqualRowGrid(minWidth: minWidth, spacing: 14) { content() }
+        } else {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: minWidth), spacing: 14, alignment: .top)],
+                      alignment: .leading, spacing: 14, content: content)
+        }
         #else
         LazyVStack(spacing: spacing, content: content)
         #endif
     }
 }
+
+#if os(macOS)
+/// Griglia adattiva (come `GridItem.adaptive`) in cui ogni riga è alta quanto la sua card
+/// più alta: le altre ricevono quell'altezza e, se flessibili, la riempiono.
+struct EqualRowGrid: Layout {
+    var minWidth: CGFloat
+    var spacing: CGFloat
+
+    private func columns(for width: CGFloat) -> Int {
+        max(1, Int((width + spacing) / (minWidth + spacing)))
+    }
+
+    private func rows(width: CGFloat, subviews: Subviews) -> (columnWidth: CGFloat, heights: [CGFloat]) {
+        let count = columns(for: width)
+        let columnWidth = (width - spacing * CGFloat(count - 1)) / CGFloat(count)
+        let heights = stride(from: 0, to: subviews.count, by: count).map { start in
+            subviews[start..<min(start + count, subviews.count)]
+                .map { $0.sizeThatFits(ProposedViewSize(width: columnWidth, height: nil)).height }
+                .max() ?? 0
+        }
+        return (columnWidth, heights)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? minWidth
+        let layout = rows(width: width, subviews: subviews)
+        let height = layout.heights.reduce(0, +) + spacing * CGFloat(max(0, layout.heights.count - 1))
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let count = columns(for: bounds.width)
+        let layout = rows(width: bounds.width, subviews: subviews)
+        var y = bounds.minY
+        for (row, height) in layout.heights.enumerated() {
+            for column in 0..<count {
+                let index = row * count + column
+                guard index < subviews.count else { break }
+                let x = bounds.minX + CGFloat(column) * (layout.columnWidth + spacing)
+                subviews[index].place(at: CGPoint(x: x, y: y),
+                                      proposal: ProposedViewSize(width: layout.columnWidth, height: height))
+            }
+            y += height + spacing
+        }
+    }
+}
+#endif
+
+/// Indicatore di caricamento dentro righe e pulsanti: su macOS la misura normale è più
+/// alta della riga, quindi si usa quella piccola.
+struct InlineProgress: View {
+    var tint: Color?
+
+    var body: some View {
+        ProgressView()
+            .tint(tint)
+            #if os(macOS)
+            .controlSize(.small)
+            #endif
+    }
+}
+
+/// Cerchio centrato nel riquadro, di diametro fisso: area cliccabile dei giorni del calendario.
+struct CenteredCircle: Shape {
+    var diameter: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        Path(ellipseIn: CGRect(x: rect.midX - diameter / 2, y: rect.midY - diameter / 2,
+                               width: diameter, height: diameter))
+    }
+}
+
+/// Ricerca dentro una singola pagina (bacheca, agenda, materiale). Su iOS è il campo nella
+/// barra di navigazione; su macOS la barra della finestra ha già la ricerca generale, quindi
+/// la pagina mostra il campo `LocalSearchField` nel proprio contenuto.
+extension View {
+    func localSearchable(text: Binding<String>, prompt: String) -> some View {
+        #if os(macOS)
+        self
+        #else
+        searchable(text: text, prompt: prompt)
+        #endif
+    }
+}
+
+#if os(macOS)
+struct LocalSearchField: View {
+    @Binding var text: String
+    let prompt: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(Theme.secondaryInk)
+            TextField(prompt, text: $text)
+                .textFieldStyle(.plain)
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Theme.secondaryInk)
+                }
+                .buttonStyle(.plain)
+                .help("Cancella")
+            }
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .frame(maxWidth: 360)
+        .background(Theme.surface, in: .capsule)
+        .overlay { Capsule().strokeBorder(Theme.separator, lineWidth: 0.5) }
+    }
+}
+#endif
 
 /// Riga di filtri: scorre in orizzontale su iOS, va a capo su macOS.
 struct ChipRow<Content: View>: View {

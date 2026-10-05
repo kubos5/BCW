@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AgendaListView: View {
+    private static let searchPrompt = "Cerca compiti ed eventi"
     @Environment(AppModel.self) private var model
     @State private var kind: AgendaEvent.Kind?
     @State private var showPast = false
@@ -24,13 +25,19 @@ struct AgendaListView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Picker("Periodo", selection: $showPast) {
-                    Text("In arrivo").tag(false)
-                    Text("Passati").tag(true)
+                HStack(spacing: 12) {
+                    Picker("Periodo", selection: $showPast) {
+                        Text("In arrivo").tag(false)
+                        Text("Passati").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .compactOnMac()
+                    #if os(macOS)
+                    Spacer(minLength: 0)
+                    LocalSearchField(text: $search, prompt: Self.searchPrompt)
+                    #endif
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .compactOnMac()
 
                 ChipRow {
                     FilterChip(title: "Da fare", symbol: "circle", isSelected: onlyPending) { onlyPending.toggle() }
@@ -45,6 +52,7 @@ struct AgendaListView: View {
                 if grouped.isEmpty {
                     ContentUnavailableView("Niente da mostrare", systemImage: "checklist",
                                            description: Text("Nessun elemento corrisponde ai filtri."))
+                        .frame(maxWidth: .infinity)
                         .padding(.top, 30)
                 }
 
@@ -68,7 +76,7 @@ struct AgendaListView: View {
         }
         .themedBackground()
         .screenTitle("Agenda")
-        .searchable(text: $search, prompt: "Cerca compiti ed eventi")
+        .localSearchable(text: $search, prompt: Self.searchPrompt)
         .refreshable { await model.loadAgenda() }
     }
 }
