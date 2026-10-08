@@ -55,6 +55,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   I titoli sono etichette in New York nella barra (`screenTitle`): applicarlo dopo `.toolbar` della pagina,
   così resta il primo elemento. `.primaryAction` su macOS sta a sinistra: per il lato destro usare `.trailingBar`.
   `project.yml` è un'alternativa per XcodeGen.
+- Icona: `Resources/AppIcon.icon` (Icon Composer, con varianti chiara/scura/tinta), la stessa per iOS e macOS;
+  il nome corrisponde a `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`. Nel catalogo `Assets.xcassets` non c'è più
+  un `AppIcon.appiconset`: non aggiungerlo, andrebbe in conflitto.
 - Build settings: `SWIFT_VERSION = 5.0`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, approachable concurrency.
 - `Networking/ClassevivaClient.swift`: client REST, `Transport` sostituibile (live/demo), rinnovo token,
   `DiskCache` per l'offline, `fetchFirst` per endpoint versionati.
