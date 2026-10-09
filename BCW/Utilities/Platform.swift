@@ -132,6 +132,17 @@ extension View {
         #endif
     }
 
+    /// Titolo grande nella stessa riga dei pulsanti, come nella Dashboard (solo iOS). Per le
+    /// pagine principali delle schede: con il titolo grande su una riga a parte, toccando di
+    /// nuovo la scheda il sistema si fermava sotto la barra con il titolo ancora compresso.
+    func inlineLargeTitleDisplay() -> some View {
+        #if os(macOS)
+        self
+        #else
+        toolbarTitleDisplayMode(.inlineLarge)
+        #endif
+    }
+
     /// Margini laterali delle pagine: più ampi su macOS, dove c'è più spazio.
     func pagePadding() -> some View {
         #if os(macOS)

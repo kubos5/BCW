@@ -55,6 +55,11 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   annulla i gesti della barra, altrimenti la scheda verrebbe selezionata). `Tab.contextMenu` su iPhone non fa nulla
   (verificato). Toccando di nuovo Dashboard (`MainTabView.tabSelection` riconosce il secondo tocco) si torna in
   cima, o a domani se si è già in cima (`DashboardView.reselection`).
+  In tutte le schede il ritorno in cima è quello del sistema, che funziona solo con il titolo grande nella riga dei
+  pulsanti (`inlineLargeTitleDisplay()`, cioè `.toolbarTitleDisplayMode(.inlineLarge)`, come nella Dashboard). Con il
+  titolo grande su una riga a parte (lo stile predefinito) il sistema si ferma sotto la barra con il titolo ancora
+  compresso, e scorrere ancora da codice dopo o insieme al sistema dà uno scatto (verificato, anche con `ScrollPosition`):
+  le pagine principali delle schede vanno tenute in `.inlineLarge`.
 - Account: su iOS il popup `AccountSwitcherSheet` (dal basso, in vetro, rilevamenti medio/grande) mostra la stessa
   `AccountsSection` della pagina Account; si apre dal pulsante in alto a destra in Tu e tenendo premuta la scheda Tu, e
   si chiude da solo quando comincia il cambio. Su macOS c'è `AccountMenuItems` nella barra laterale. La demo non è un

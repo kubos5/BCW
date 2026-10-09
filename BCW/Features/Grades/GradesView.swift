@@ -13,6 +13,7 @@ struct GradesView: View {
         PlatformNavigationStack {
             GradeBookView(book: model.gradeBook, subjects: model.subjects, allowsRefresh: true)
                 .screenTitle("Voti")
+                .inlineLargeTitleDisplay()
                 .navigationDestination(for: SubjectSummary.self) { summary in
                     SubjectDetailView(subjectId: summary.subjectId, book: model.gradeBook, subjects: model.subjects)
                         .pushedPageActions()
