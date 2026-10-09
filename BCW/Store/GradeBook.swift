@@ -97,10 +97,25 @@ struct GradeBook {
         if let subjectId { list = list.filter { $0.subjectId == subjectId } }
         list.sort { $0.date < $1.date }
         var points: [(date: Date, value: Double)] = []
-        var running: [Grade] = []
+        // Somme progressive invece di ricalcolare la media di tutti i voti precedenti a ogni
+        // passo: stesso risultato (stesse somme, nello stesso ordine) in tempo lineare.
+        var count = 0
+        var sum = 0.0
+        var weightedSum = 0.0
+        var weights = 0.0
         for g in list {
-            running.append(g)
-            guard let avg = Self.average(of: running, weighted: weighted) else { continue }
+            count += 1
+            sum += g.value ?? 0
+            let w = (g.weight ?? 1) > 0 ? (g.weight ?? 1) : 1
+            weightedSum += (g.value ?? 0) * w
+            weights += w
+            let avg: Double
+            if weighted {
+                guard weights > 0 else { continue }
+                avg = weightedSum / weights
+            } else {
+                avg = sum / Double(count)
+            }
             let day = g.date.startOfDay
             if let last = points.last, last.date == day {
                 points[points.count - 1].value = avg

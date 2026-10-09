@@ -100,12 +100,18 @@ struct CardBackground: ViewModifier {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.surface, in: .rect(cornerRadius: Theme.corner, style: .continuous))
+            // L'ombra è della sola forma di sfondo, non dell'intera card: stessa sagoma, ma
+            // senza dover ridisegnare testo e contenuto per calcolarla a ogni fotogramma
+            // delle animazioni (aprendo una sezione si spostano tutte le card sotto).
+            .background {
+                RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
+                    .fill(Theme.surface)
+                    .shadow(color: .black.opacity(0.04), radius: 10, y: 4)
+            }
             .overlay {
                 RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
                     .strokeBorder(Theme.separator.opacity(0.7), lineWidth: 0.5)
             }
-            .shadow(color: .black.opacity(0.04), radius: 10, y: 4)
     }
 }
 

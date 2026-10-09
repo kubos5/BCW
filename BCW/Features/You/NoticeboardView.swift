@@ -95,6 +95,7 @@ struct NoticeboardView: View {
                         } else {
                             NavigationLink {
                                 NoticeDetailView(notice: notice)
+                                    .pushedPageActions()
                             } label: {
                                 NoticeRow(notice: notice)
                             }

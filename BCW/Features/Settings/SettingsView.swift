@@ -251,6 +251,12 @@ private struct AccountsSettingsPane: View {
                     nav.addingAccount = true
                 }
                 .disabled(model.phase != .signedIn)
+                if !model.isDemo {
+                    Button("Prova la demo", systemImage: "sparkles") {
+                        withAnimation { model.startDemo() }
+                    }
+                    .disabled(model.phase != .signedIn)
+                }
             }
             .listRowBackground(Theme.surface)
         }
@@ -288,39 +294,7 @@ struct AccountView: View {
             }
             .listRowBackground(Color.clear)
 
-            Section {
-                ForEach(model.accounts) { account in
-                    Button {
-                        withAnimation { model.switchAccount(to: account.id) }
-                    } label: {
-                        AccountRow(account: account,
-                                   isActive: !model.isDemo && account.id == model.activeAccountID)
-                    }
-                    .buttonStyle(.plain)
-                    .swipeActions {
-                        Button("Rimuovi", systemImage: "trash", role: .destructive) {
-                            withAnimation { model.removeAccount(account.id) }
-                        }
-                    }
-                    .contextMenu {
-                        Button("Rimuovi", systemImage: "trash", role: .destructive) {
-                            withAnimation { model.removeAccount(account.id) }
-                        }
-                    }
-                }
-                Button("Aggiungi account", systemImage: "person.crop.circle.badge.plus") {
-                    addingAccount = true
-                }
-            } header: {
-                Text("Account")
-            } footer: {
-                Text(model.accounts.count > 1
-                     ? (Platform.isMac
-                        ? "Fai clic su un account per passare ad esso. Fai clic con il tasto destro per rimuoverlo."
-                        : "Tocca un account per passare ad esso. Scorri verso sinistra per rimuoverlo.")
-                     : "Puoi aggiungere altri account Classeviva (ad esempio quelli di fratelli o sorelle) e passare dall'uno all'altro.")
-            }
-            .listRowBackground(Theme.surface)
+            AccountsSection { addingAccount = true }
 
             if let card = model.card {
                 Section("Profilo") {
@@ -396,10 +370,59 @@ struct AccountView: View {
     }
 
     private var signOutFooter: String {
-        if model.isDemo { return "Stai usando la modalità demo." }
+        if model.isDemo { return model.demoExitMessage }
         return model.accounts.count > 1
             ? "Le credenziali di questo account verranno rimosse e passerai a un altro account salvato."
             : "Uscendo, le credenziali verranno rimosse da questo dispositivo."
+    }
+}
+
+/// Sezione "Account" della pagina Account: account salvati, aggiunta di un account e demo.
+/// È anche il contenuto del popup per cambiare account (`AccountSwitcherSheet`).
+struct AccountsSection: View {
+    @Environment(AppModel.self) private var model
+    /// Nel popup il titolo è già nella barra: l'intestazione della sezione si ripeterebbe.
+    var showsHeader = true
+    let addAccount: () -> Void
+
+    var body: some View {
+        Section {
+            ForEach(model.accounts) { account in
+                Button {
+                    withAnimation { model.switchAccount(to: account.id) }
+                } label: {
+                    AccountRow(account: account,
+                               isActive: !model.isDemo && account.id == model.activeAccountID)
+                }
+                .buttonStyle(.plain)
+                .swipeActions {
+                    Button("Rimuovi", systemImage: "trash", role: .destructive) {
+                        withAnimation { model.removeAccount(account.id) }
+                    }
+                }
+                .contextMenu {
+                    Button("Rimuovi", systemImage: "trash", role: .destructive) {
+                        withAnimation { model.removeAccount(account.id) }
+                    }
+                }
+            }
+            Button("Aggiungi account", systemImage: "person.crop.circle.badge.plus", action: addAccount)
+            if !model.isDemo {
+                // Uscendo dalla demo si torna a questo account.
+                Button("Prova la demo", systemImage: "sparkles") {
+                    withAnimation { model.startDemo() }
+                }
+            }
+        } header: {
+            if showsHeader { Text("Account") }
+        } footer: {
+            Text(model.accounts.count > 1
+                 ? (Platform.isMac
+                    ? "Fai clic su un account per passare ad esso. Fai clic con il tasto destro per rimuoverlo."
+                    : "Tocca un account per passare ad esso. Scorri verso sinistra per rimuoverlo.")
+                 : "Puoi aggiungere altri account Classeviva (ad esempio quelli di fratelli o sorelle) e passare dall'uno all'altro.")
+        }
+        .listRowBackground(Theme.surface)
     }
 }
 

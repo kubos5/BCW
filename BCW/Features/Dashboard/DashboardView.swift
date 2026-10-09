@@ -2,6 +2,13 @@ import SwiftUI
 
 struct DashboardView: View {
     @Environment(AppModel.self) private var model
+    /// Cambia quando si tocca di nuovo la scheda Dashboard (iOS): si torna in cima alla
+    /// pagina o, se si è già in cima, alla giornata di domani.
+    var reselection = 0
+    #if os(iOS)
+    @State private var scrollPosition = ScrollPosition(edge: .top)
+    @State private var isAtTop = true
+    #endif
     /// Si apre sul giorno dopo, come richiesto: è quello per cui servono i compiti.
     @State private var selectedDay = Date().adding(days: DashboardView.initialOffset).startOfDay
     /// Larghezza della barra di navigazione, per capire se il titolo esteso ci sta.
@@ -21,7 +28,10 @@ struct DashboardView: View {
     #endif
     /// Altezza del giorno scelto: i giorni successivi si spostano di altrettanto nella
     /// transizione, così si muovono come il contenuto principale (vedi `upcomingTransition`).
-    @State private var dayDetailHeight: CGFloat = 300
+    /// Non è uno stato osservato: aprendo una sezione l'altezza cambia a ogni fotogramma, e
+    /// ridisegnare l'intera Dashboard (calendario compreso) ogni volta rallentava l'animazione.
+    /// Serve solo quando cambia il giorno, e allora la vista si aggiorna comunque.
+    @State private var dayDetailHeight = UnobservedValue<CGFloat>(300)
 
     private var mode: DashboardMode { model.preferences.dashboardMode }
 
@@ -212,7 +222,7 @@ struct DashboardView: View {
                 StatusBanner(message: error, symbol: model.isOffline ? "wifi.slash" : "exclamationmark.triangle")
             }
             DayDetail(day: selectedDay)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { if $0 > 0 { dayDetailHeight = $0 } }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { if $0 > 0 { dayDetailHeight.value = $0 } }
                 .id(selectedDay)
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             StackAware { stacked in
@@ -231,7 +241,7 @@ struct DashboardView: View {
                 calendar
 
                 DayDetail(day: selectedDay)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { if $0 > 0 { dayDetailHeight = $0 } }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { if $0 > 0 { dayDetailHeight.value = $0 } }
                     .id(selectedDay)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
 
@@ -242,6 +252,19 @@ struct DashboardView: View {
             .pagePadding()
             .padding(.bottom, 24)
             .animation(.snappy, value: selectedDay)
+        }
+        .scrollPosition($scrollPosition)
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentOffset.y + geometry.contentInsets.top <= 1
+        } action: { _, atTop in
+            isAtTop = atTop
+        }
+        .onChange(of: reselection) {
+            if isAtTop {
+                select(Date().adding(days: 1).startOfDay)
+            } else {
+                withAnimation(.smooth) { scrollPosition.scrollTo(edge: .top) }
+            }
         }
         .themedBackground()
         #endif
@@ -267,7 +290,7 @@ struct DashboardView: View {
     /// e troppo poco da chiusi (solo l'intestazione). Si spostano invece quanto il giorno scelto,
     /// così si muovono insieme al resto del contenuto.
     private var upcomingTransition: AnyTransition {
-        .opacity.combined(with: .offset(y: dayDetailHeight))
+        .opacity.combined(with: .offset(y: dayDetailHeight.value))
     }
 
     private func upcomingKey(after day: Date) -> String {
@@ -281,7 +304,10 @@ struct DashboardView: View {
     /// coincidere con quello del calendario. Tra due elementi della barra c'è sempre lo stesso
     /// spazio (misurato tra Oggi e Domani): uno prima e uno dopo il distanziatore.
     private var menuSpacer: CGFloat {
-        guard calendarMaxX > 0, tomorrowFrame.width > 0 else { return 0 }
+        // Con le colonne impilate (sotto i 780 punti di `SplitColumns`) il menu non si allinea.
+        // Si controlla anche la larghezza attuale: all'apertura `SplitColumns` mostra per un
+        // istante le due colonne, e quella misura del calendario può arrivare dopo l'altra.
+        guard barWidth >= 780, calendarMaxX > 0, tomorrowFrame.width > 0 else { return 0 }
         let measuredGap = tomorrowFrame.minX - todayMaxX
         let gap = (0...30).contains(measuredGap) ? measuredGap : 8
         return max(0, (calendarMaxX - tomorrowFrame.maxX - 2 * gap - menuWidth).rounded())
@@ -343,8 +369,12 @@ struct WeekStrip: View {
 
     private static func week(containing day: Date) -> Date {
         let start = day.startOfWeek
-        return weeks.first { $0.isSameDay(as: start) } ?? start
+        // Le settimane sono già inizi di settimana: basta l'uguaglianza, molto più rapida
+        // del confronto con il calendario (chiamato a ogni aggiornamento della striscia).
+        return weekSet.contains(start) ? start : (weeks.first { $0.isSameDay(as: start) } ?? start)
     }
+
+    private static let weekSet = Set(weeks)
 
     var body: some View {
         VStack(spacing: 12) {
@@ -478,8 +508,6 @@ private struct UpcomingDays: View {
     let after: Date
     let onSelect: (Date) -> Void
 
-    private var days: [(Date, [AgendaEvent])] { Self.days(after: after, model: model) }
-
     static func days(after: Date, model: AppModel) -> [(Date, [AgendaEvent])] {
         let start = after.adding(days: 1)
         let end = after.adding(days: 21)
@@ -493,6 +521,8 @@ private struct UpcomingDays: View {
     private var isCollapsed: Bool { model.preferences.isCollapsed(.upcoming) }
 
     var body: some View {
+        // Calcolati una volta per aggiornamento e passati all'elenco.
+        let days = Self.days(after: after, model: model)
         if !days.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 Button {
@@ -510,13 +540,13 @@ private struct UpcomingDays: View {
                 .sensoryFeedback(.selection, trigger: isCollapsed)
 
                 CollapsibleContent(isExpanded: !isCollapsed, spacing: 12) {
-                    upcomingList
+                    upcomingList(days)
                 }
             }
         }
     }
 
-    private var upcomingList: some View {
+    private func upcomingList(_ days: [(Date, [AgendaEvent])]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(days, id: \.0) { day, events in
                 VStack(alignment: .leading, spacing: 12) {
@@ -530,9 +560,10 @@ private struct UpcomingDays: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    let lastID = events.last?.id
                     ForEach(events) { event in
                         AgendaEventRow(event: event)
-                        if event.id != events.last?.id { Divider().overlay(Theme.separator) }
+                        if event.id != lastID { Divider().overlay(Theme.separator) }
                     }
                 }
                 .card()

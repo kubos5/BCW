@@ -28,6 +28,7 @@ struct SubjectsView: View {
                 ForEach(sortedSubjects) { subject in
                     NavigationLink {
                         SubjectDetailView(subjectId: subject.id, book: model.gradeBook, subjects: model.subjects)
+                            .pushedPageActions()
                     } label: {
                         SubjectListRow(subject: subject, average: average(of: subject), showsChevron: true)
                             .frame(maxHeight: .infinity)
