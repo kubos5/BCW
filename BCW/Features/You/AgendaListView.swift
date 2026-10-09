@@ -23,6 +23,8 @@ struct AgendaListView: View {
     }
 
     var body: some View {
+        // Calcolato una volta per aggiornamento (a ogni lettera della ricerca).
+        let grouped = grouped
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 12) {
@@ -60,9 +62,10 @@ struct AgendaListView: View {
                     ForEach(grouped, id: \.0) { day, events in
                         VStack(alignment: .leading, spacing: 12) {
                             Eyebrow(text: day.relativeDayName, color: Theme.accent)
+                            let lastID = events.last?.id
                             ForEach(events) { event in
                                 AgendaEventRow(event: event)
-                                if event.id != events.last?.id { Divider().overlay(Theme.separator) }
+                                if event.id != lastID { Divider().overlay(Theme.separator) }
                             }
                         }
                         .card()

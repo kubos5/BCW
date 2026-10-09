@@ -27,15 +27,27 @@ final class AppModel {
     var grades: [Grade] = []
     var periods: [Period] = []
     var subjects: [Subject] = []
-    var agenda: [AgendaEvent] = []
-    var absences: [AbsenceEvent] = []
+    var agenda: [AgendaEvent] = [] {
+        didSet { eventsByDay = Dictionary(grouping: agenda) { CVDate.dayKey($0.begin) } }
+    }
+    var absences: [AbsenceEvent] = [] {
+        didSet { absencesByDay = Dictionary(grouping: absences) { CVDate.dayKey($0.date) } }
+    }
     var notices: [Notice] = []
     var notes: [DisciplinaryNote] = []
     var didactics: [DidacticTeacher] = []
     var documents: DocumentsResponse?
-    var calendarDays: [CalendarDay] = []
+    var calendarDays: [CalendarDay] = [] {
+        didSet { calendarByDay = Dictionary(calendarDays.map { (CVDate.dayKey($0.date), $0) }) { first, _ in first } }
+    }
     var schoolbooks: [SchoolbookCourse] = []
     private(set) var lessonsByDay: [String: [Lesson]] = [:]
+    /// Indici per giorno (chiave `CVDate.dayKey`), ricostruiti quando cambiano i dati: la
+    /// Dashboard chiede gli eventi di un giorno per ogni cella del calendario a ogni
+    /// aggiornamento, e confrontare le date una per una con il calendario è lento.
+    private(set) var eventsByDay: [String: [AgendaEvent]] = [:]
+    private(set) var absencesByDay: [String: [AbsenceEvent]] = [:]
+    private(set) var calendarByDay: [String: CalendarDay] = [:]
     private var loadedLessonDays: Set<String> = []
 
     // Stato
@@ -47,6 +59,11 @@ final class AppModel {
     @ObservationIgnored private var refreshingClient: ClassevivaClient?
     /// Cambia a ogni cambio di sessione (account, demo, uscita): le viste lo usano per ricaricare.
     private(set) var sessionID = UUID()
+    /// `true` mentre l'app sfuma per cambiare account: l'interfaccia scompare, i dati cambiano
+    /// mentre non si vede e poi riappare (`RootView`), invece di trasformarsi davanti all'utente.
+    private(set) var isChangingSession = false
+    /// Cambio richiesto durante una dissolvenza già in corso: vale l'ultimo.
+    @ObservationIgnored private var pendingSessionChange: (() -> Void)?
     /// Archivi degli anni passati caricati in questa sessione.
     @ObservationIgnored private var archives: [Int: ArchiveModel] = [:]
 
@@ -60,6 +77,19 @@ final class AppModel {
         accounts.first { $0.id == activeAccountID }
     }
 
+    /// Account a cui si torna uscendo dalla demo: quello da cui è stata aperta, o il primo salvato.
+    var accountAfterDemo: SavedAccount? {
+        activeAccount ?? accounts.first
+    }
+
+    /// Spiegazione per la conferma di uscita dalla demo.
+    var demoExitMessage: String {
+        if let account = accountAfterDemo {
+            return "Stai usando la modalità demo. Uscendo tornerai a \(account.name)."
+        }
+        return "Stai usando la modalità demo."
+    }
+
     func bootstrap() {
         accounts = Keychain.loadAccounts()
         // Cache delle versioni precedenti: ora ogni account (e la demo) ha la sua.
@@ -68,11 +98,13 @@ final class AppModel {
             DiskCache.remove(namespace: "archive-\(year)")
             DiskCache.remove(namespace: "archive-\(year)-demo")
         }
+        let storedID = UserDefaults.standard.string(forKey: Self.activeAccountKey)
         if UserDefaults.standard.bool(forKey: Self.demoKey) {
+            // La demo può essere aperta da un account: uscendo si torna a quello.
+            activeAccountID = accounts.first { $0.id == storedID }?.id
             startDemo()
             return
         }
-        let storedID = UserDefaults.standard.string(forKey: Self.activeAccountKey)
         guard let account = accounts.first(where: { $0.id == storedID }) ?? accounts.first else {
             phase = .signedOut
             return
@@ -103,6 +135,16 @@ final class AppModel {
             accounts.append(account)
         }
         Keychain.saveAccounts(accounts)
+        if phase == .signedIn {
+            // Account aggiunto mentre l'app è aperta: stessa dissolvenza del cambio di account.
+            let added = account
+            changeSession {
+                self.activate(added, refresh: false)
+                self.client?.adoptSession(from: probe)
+                Task { await self.refreshAll() }
+            }
+            return
+        }
         activate(account, refresh: false)
         client?.adoptSession(from: probe)
         await refreshAll()
@@ -112,7 +154,33 @@ final class AppModel {
     func switchAccount(to id: String) {
         guard let account = accounts.first(where: { $0.id == id }) else { return }
         guard isDemo || account.id != activeAccountID else { return }
-        activate(account)
+        changeSession { self.activate(account) }
+    }
+
+    /// Cambia sessione con una dissolvenza: l'interfaccia scompare, i dati cambiano senza
+    /// animazioni (nessun elemento si ridimensiona per accogliere i nuovi contenuti) e poi
+    /// riappare. Fuori dall'app già avviata (avvio, schermata di accesso) cambia subito: lì
+    /// c'è già la transizione tra le schermate.
+    private func changeSession(_ change: @escaping () -> Void) {
+        guard phase == .signedIn else { change(); return }
+        let alreadyFading = pendingSessionChange != nil
+        pendingSessionChange = change
+        guard !alreadyFading else { return }
+        withAnimation(.easeOut(duration: 0.2)) {
+            isChangingSession = true
+        } completion: {
+            guard let change = self.pendingSessionChange else { return }
+            self.pendingSessionChange = nil
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { change() }
+            Task { @MainActor in
+                await self.waitForSessionContent()
+                // Un attimo per disegnare i nuovi dati mentre l'interfaccia è ancora nascosta.
+                try? await Task.sleep(for: .milliseconds(60))
+                withAnimation(.easeIn(duration: 0.25)) { self.isChangingSession = false }
+            }
+        }
     }
 
     /// Rende attivo un account: azzera i dati, mostra subito la cache e aggiorna.
@@ -130,7 +198,24 @@ final class AppModel {
         if refresh { Task { await refreshAll() } }
     }
 
+    /// Durante il cambio di sessione l'interfaccia riappare quando ci sono i dati: subito se
+    /// c'è la cache dell'account, altrimenti (demo, account mai aperto) a fine aggiornamento,
+    /// così i contenuti non compaiono a pezzi trasformando la pagina. Al massimo 3 secondi.
+    private func waitForSessionContent() async {
+        guard card == nil, agenda.isEmpty, grades.isEmpty else { return }
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline, lastUpdated == nil, lastError == nil {
+            try? await Task.sleep(for: .milliseconds(40))
+        }
+    }
+
+    /// Apre la demo. Si può aprire anche con un account collegato: `activeAccountID` resta
+    /// impostato, così uscendo dalla demo si torna a quell'account.
     func startDemo() {
+        changeSession { self.beginDemo() }
+    }
+
+    private func beginDemo() {
         resetData()
         isDemo = true
         UserDefaults.standard.set(true, forKey: Self.demoKey)
@@ -144,13 +229,13 @@ final class AppModel {
     /// passa al successivo, altrimenti torna alla schermata di accesso.
     func signOut() {
         if isDemo {
-            resetData()
-            removeCaches(owner: "demo")
-            UserDefaults.standard.set(false, forKey: Self.demoKey)
-            isDemo = false
-            if let next = accounts.first(where: { $0.id == activeAccountID }) ?? accounts.first {
-                activate(next)
+            if let next = accountAfterDemo {
+                changeSession {
+                    self.leaveDemo()
+                    self.activate(next)
+                }
             } else {
+                leaveDemo()
                 endSession()
             }
             return
@@ -162,9 +247,27 @@ final class AppModel {
         }
     }
 
-    /// Rimuove un account salvato e la sua cache.
+    private func leaveDemo() {
+        resetData()
+        removeCaches(owner: "demo")
+        UserDefaults.standard.set(false, forKey: Self.demoKey)
+        isDemo = false
+    }
+
+    /// Rimuove un account salvato e la sua cache. Se è quello attivo si passa al successivo
+    /// con la stessa dissolvenza del cambio di account.
     func removeAccount(_ id: String) {
         guard let account = accounts.first(where: { $0.id == id }) else { return }
+        if id == activeAccountID, !isDemo, accounts.count > 1 {
+            changeSession { self.performRemoval(of: account) }
+        } else {
+            performRemoval(of: account)
+        }
+    }
+
+    private func performRemoval(of account: SavedAccount) {
+        let id = account.id
+        guard accounts.contains(where: { $0.id == id }) else { return }
         if id == activeAccountID, !isDemo { resetData() }
         removeCaches(owner: account.id)
         accounts.removeAll { $0.id == id }
@@ -549,15 +652,15 @@ final class AppModel {
     }
 
     func events(on day: Date) -> [AgendaEvent] {
-        agenda.filter { $0.begin.isSameDay(as: day) }
+        eventsByDay[CVDate.dayKey(day)] ?? []
     }
 
     func absences(on day: Date) -> [AbsenceEvent] {
-        absences.filter { $0.date.isSameDay(as: day) }
+        absencesByDay[CVDate.dayKey(day)] ?? []
     }
 
     func calendarStatus(on day: Date) -> CalendarDay? {
-        calendarDays.first { $0.date.isSameDay(as: day) }
+        calendarByDay[CVDate.dayKey(day)]
     }
 
     var unjustifiedAbsences: [AbsenceEvent] { absences.filter { !$0.isJustified } }

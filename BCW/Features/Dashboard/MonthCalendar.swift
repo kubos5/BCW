@@ -28,8 +28,11 @@ struct MonthCalendar: View {
 
     private static func month(containing day: Date) -> Date {
         let start = day.startOfMonth
-        return months.first { $0.isSameDay(as: start) } ?? start
+        // I mesi sono già inizi di mese: basta l'uguaglianza, più rapida del calendario.
+        return monthSet.contains(start) ? start : (months.first { $0.isSameDay(as: start) } ?? start)
     }
+
+    private static let monthSet = Set(months)
 
     /// Settimane del mese, da lunedì a domenica (`nil` = giorno di un altro mese).
     private static func rows(of month: Date) -> [[Date?]] {

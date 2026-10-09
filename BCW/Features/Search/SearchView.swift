@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Ricerca globale su compiti, voti, comunicazioni, materiale e note.
 struct SearchView: View {
-    static let prompt = "Compiti, voti, comunicazioni…"
+    static let prompt = "Compiti, voti, altro…"
 
     @Environment(AppModel.self) private var model
     /// Testo cercato: su macOS il campo sta nella barra della finestra (`MacRootView`),
@@ -11,32 +11,35 @@ struct SearchView: View {
 
     private var trimmed: String { query.trimmingCharacters(in: .whitespaces) }
 
-    private var agenda: [AgendaEvent] {
-        model.agenda.filter { $0.notes.localizedCaseInsensitiveContains(trimmed)
-            || ($0.subjectName ?? "").localizedCaseInsensitiveContains(trimmed) }
-            .sorted { abs($0.begin.timeIntervalSinceNow) < abs($1.begin.timeIntervalSinceNow) }
-    }
+    /// Risultati della ricerca, calcolati una volta per aggiornamento (a ogni lettera digitata):
+    /// prima ogni elenco veniva rifiltrato e riordinato più volte, anche una per ogni riga.
+    private struct Results {
+        let agenda: [AgendaEvent]
+        let grades: [Grade]
+        let notices: [Notice]
+        let notes: [DisciplinaryNote]
+        let files: [(DidacticTeacher, DidacticContent)]
 
-    private var grades: [Grade] {
-        model.grades.filter { $0.subjectName.localizedCaseInsensitiveContains(trimmed)
-            || ($0.notes ?? "").localizedCaseInsensitiveContains(trimmed) }
-    }
+        var isEmpty: Bool {
+            agenda.isEmpty && grades.isEmpty && notices.isEmpty && notes.isEmpty && files.isEmpty
+        }
 
-    private var notices: [Notice] {
-        model.notices.filter { $0.title.localizedCaseInsensitiveContains(trimmed)
-            || $0.category.localizedCaseInsensitiveContains(trimmed) }
-    }
-
-    private var notes: [DisciplinaryNote] {
-        model.notes.filter { $0.text.localizedCaseInsensitiveContains(trimmed)
-            || $0.authorName.localizedCaseInsensitiveContains(trimmed) }
-    }
-
-    private var files: [(DidacticTeacher, DidacticContent)] {
-        model.didactics.flatMap { teacher in
-            teacher.folders.flatMap(\.contents)
-                .filter { $0.name.localizedCaseInsensitiveContains(trimmed) || teacher.name.localizedCaseInsensitiveContains(trimmed) }
-                .map { (teacher, $0) }
+        init(model: AppModel, query trimmed: String) {
+            let now = Date()
+            agenda = model.agenda.filter { $0.notes.localizedCaseInsensitiveContains(trimmed)
+                || ($0.subjectName ?? "").localizedCaseInsensitiveContains(trimmed) }
+                .sorted { abs($0.begin.timeIntervalSince(now)) < abs($1.begin.timeIntervalSince(now)) }
+            grades = model.grades.filter { $0.subjectName.localizedCaseInsensitiveContains(trimmed)
+                || ($0.notes ?? "").localizedCaseInsensitiveContains(trimmed) }
+            notices = model.notices.filter { $0.title.localizedCaseInsensitiveContains(trimmed)
+                || $0.category.localizedCaseInsensitiveContains(trimmed) }
+            notes = model.notes.filter { $0.text.localizedCaseInsensitiveContains(trimmed)
+                || $0.authorName.localizedCaseInsensitiveContains(trimmed) }
+            files = model.didactics.flatMap { teacher in
+                teacher.folders.flatMap(\.contents)
+                    .filter { $0.name.localizedCaseInsensitiveContains(trimmed) || teacher.name.localizedCaseInsensitiveContains(trimmed) }
+                    .map { (teacher, $0) }
+            }
         }
     }
 
@@ -46,13 +49,16 @@ struct SearchView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     if trimmed.isEmpty {
                         suggestions
-                    } else if agenda.isEmpty && grades.isEmpty && notices.isEmpty && notes.isEmpty && files.isEmpty {
-                        ContentUnavailableView.search(text: trimmed)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 40)
                     } else {
-                        CardGrid(minWidth: 400, spacing: 20) {
-                            results
+                        let results = Results(model: model, query: trimmed)
+                        if results.isEmpty {
+                            ContentUnavailableView.search(text: trimmed)
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 40)
+                        } else {
+                            CardGrid(minWidth: 400, spacing: 20) {
+                                resultCards(results)
+                            }
                         }
                     }
                 }
@@ -80,12 +86,19 @@ struct SearchView: View {
     }
 
     @ViewBuilder
-    private var results: some View {
+    private func resultCards(_ results: Results) -> some View {
+        let agenda = results.agenda
+        let grades = results.grades
+        let notices = results.notices
+        let notes = results.notes
+        let files = results.files
         if !agenda.isEmpty {
+            let shown = Array(agenda.prefix(15))
+            let lastID = shown.last?.id
             group("Agenda", count: agenda.count) {
-                ForEach(agenda.prefix(15)) { event in
+                ForEach(shown) { event in
                     AgendaEventRow(event: event, showsDate: true)
-                    if event.id != agenda.prefix(15).last?.id { Divider().overlay(Theme.separator) }
+                    if event.id != lastID { Divider().overlay(Theme.separator) }
                 }
             }
         }
@@ -110,6 +123,7 @@ struct SearchView: View {
                 ForEach(notices.prefix(10)) { notice in
                     NavigationLink {
                         NoticeDetailView(notice: notice)
+                            .pushedPageActions()
                     } label: {
                         HStack {
                             Text(notice.title)
@@ -130,6 +144,7 @@ struct SearchView: View {
                 ForEach(files.prefix(10), id: \.1.id) { teacher, content in
                     NavigationLink {
                         DidacticsView()
+                            .pushedPageActions()
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: content.symbol).foregroundStyle(Theme.accent).frame(width: 24)

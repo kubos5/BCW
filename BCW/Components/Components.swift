@@ -164,11 +164,8 @@ struct CollapsibleContent<Content: View>: View {
     @State private var height: CGFloat = 0
 
     var body: some View {
-        content()
-            .padding(.top, spacing)
-            .fixedSize(horizontal: false, vertical: true)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
-            .modifier(CollapseEffect(progress: isExpanded ? 1 : 0, height: height, fade: fade))
+        CollapseBody(progress: isExpanded ? 1 : 0, height: height, fade: fade, spacing: spacing,
+                     onHeightChange: { height = $0 }, content: content)
             .frame(maxWidth: .infinity, alignment: .leading)
             .allowsHitTesting(isExpanded)
             .accessibilityHidden(!isExpanded)
@@ -176,17 +173,26 @@ struct CollapsibleContent<Content: View>: View {
 }
 
 /// Anima apertura e chiusura: `progress` va da 0 (chiusa) a 1 (aperta).
-private struct CollapseEffect: ViewModifier, Animatable {
+/// È una vista (non un modificatore) per costruire il contenuto solo quando serve: da chiusa,
+/// ad animazione finita, il contenuto non viene né costruito né disegnato. Così non costa nulla
+/// (le sezioni chiuse possono essere molte, es. i voti) e, se cambia mentre è nascosto (es. i
+/// giorni successivi quando si sceglie un altro giorno), le sue animazioni non si intravedono
+/// sotto l'intestazione, dove la maschera si allarga per le ombre. L'altezza misurata resta e
+/// serve alla prossima apertura.
+private struct CollapseBody<Content: View>: View, Animatable {
     var progress: CGFloat
     let height: CGFloat
     let fade: CGFloat
+    let spacing: CGFloat
+    let onHeightChange: (CGFloat) -> Void
+    @ViewBuilder let content: () -> Content
 
     nonisolated var animatableData: CGFloat {
         get { progress }
         set { progress = newValue }
     }
 
-    func body(content: Content) -> some View {
+    var body: some View {
         // Le molle con un po' di rimbalzo (es. `.snappy`) superano l'1: senza limite il
         // contenuto finirebbe troppo in basso e poi tornerebbe al suo posto con uno scatto.
         let clamped = min(max(progress, 0), 1)
@@ -197,12 +203,11 @@ private struct CollapseEffect: ViewModifier, Animatable {
         // Finché il contenuto non è stato misurato (sezione appena creata) non lo si
         // vincola, così da aperta non parte da altezza zero.
         let frameHeight: CGFloat? = height == 0 && clamped == 1 ? nil : max(0, height - hidden)
-        // Da chiusa (animazione finita) il contenuto non c'è proprio: altrimenti, se cambia
-        // mentre è nascosto (es. i giorni successivi quando si sceglie un altro giorno), le
-        // sue animazioni si intravedono sotto l'intestazione, dove la maschera si allarga per
-        // le ombre. L'altezza misurata resta e serve alla prossima apertura.
         if clamped > 0 {
-            content
+            content()
+                .padding(.top, spacing)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { onHeightChange($0) }
                 .offset(y: -hidden)
                 .frame(height: frameHeight, alignment: .top)
                 .mask(alignment: .top) {

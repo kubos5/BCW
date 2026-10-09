@@ -28,10 +28,12 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Screenshot del Mac senza permessi di registrazione schermo (solo DEBUG, `App/DebugSnapshots.swift`):
   avviare con `-demoMode YES -BCWSnapshot YES -BCWSections dashboard,grades -BCWSizes 1280x840,900x640`
   (facoltativi `-BCWSettings YES`, `-appearance light`, `-BCWDaysAgo 2`, `-BCWOpenNotice YES`, `-dashboardMode calendar`,
-  `-BCWHover YES` per portare il puntatore sulla barra della finestra, `-BCWSearch testo` per la pagina di ricerca);
+  `-BCWHover YES` per portare il puntatore sulla barra della finestra, `-BCWSearch testo` per aprire e chiudere la ricerca,
+  `-BCWOpenSubject YES` per aprire in Voti la materia con il nome più lungo, cioè una pagina aperta da un'altra);
   le immagini finiscono in `~/Library/Containers/com.bcw-classeviva.app/Data/tmp/BCWSnapshots` (o in `-BCWSnapshotDir`
   con un build senza sandbox) e l'app si chiude da sola.
-- Simulatori: sono disponibili iOS 26.3 e iOS 27. Quello di iOS 27 appena avviato satura la CPU per minuti e fa
+- Simulatori: sono disponibili iOS 26.3 e iOS 27. Lo strumento del simulatore di Claude Code (tocchi, pressioni lunghe,
+  screenshot) funziona con il simulatore acceso; per le animazioni registrare con `simctl io … recordVideo`. Quello di iOS 27 appena avviato satura la CPU per minuti e fa
   bloccare `simctl install/launch`: tenerne acceso uno alla volta.
 
 ## Architettura
@@ -41,12 +43,29 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Differenze tra piattaforme: `Utilities/Platform.swift` (`Platform.copy`, `screenTitle`, `.trailingBar`,
   `pagePadding`, `CardGrid` (anche `equalRowHeights`), `ChipRow`, `glassButton`, `PlatformNavigationStack`,
   `SplitColumns`/`StackAware`, `sheetFrame`, `macToolbarBackground`, `localSearchable`/`LocalSearchField`,
-  `InlineProgress`, `CenteredCircle`). Usare questi invece di `#if` sparsi o di API UIKit/AppKit nelle viste.
+  `InlineProgress`, `CenteredCircle`, `pushedPageActions`, `UnobservedValue`). Usare questi invece di `#if` sparsi o di
+  API UIKit/AppKit nelle viste.
 - iOS, ricerca: `.searchable` sta dentro la scheda Cerca (`SearchView`), con `Tab(role: .search)`. Con l'SDK di
   iOS 27 la scheda finirebbe dentro la barra e il campo in alto: da iOS 27 in poi `MainTabView` applica
   `.tabViewSearchActivation(.searchTabSelection)` (verificato: torna il pulsante separato con il campo in basso;
   selezionando la scheda si apre subito la tastiera e la X riporta alla scheda precedente). `.searchable` sulla
   `TabView` invece mette il campo anche in Dashboard: non usarlo.
+- iOS, barra delle schede: tenendo premuta la scheda Tu si apre il popup degli account (`TabBarItemLongPress`, un
+  riconoscitore di pressione prolungata sulla `UITabBar` che risponde solo sopra quella scheda e, quando scatta,
+  annulla i gesti della barra, altrimenti la scheda verrebbe selezionata). `Tab.contextMenu` su iPhone non fa nulla
+  (verificato). Toccando di nuovo Dashboard (`MainTabView.tabSelection` riconosce il secondo tocco) si torna in
+  cima, o a domani se si è già in cima (`DashboardView.reselection`).
+- Account: su iOS il popup `AccountSwitcherSheet` (dal basso, in vetro, rilevamenti medio/grande) mostra la stessa
+  `AccountsSection` della pagina Account; si apre dal pulsante in alto a destra in Tu e tenendo premuta la scheda Tu, e
+  si chiude da solo quando comincia il cambio. Su macOS c'è `AccountMenuItems` nella barra laterale. La demo non è un
+  account: non entra nel conteggio (icona del pulsante, testi), si apre con "Prova la demo" anche con un account
+  collegato (`activeAccountID` resta impostato e uscendo si torna a quello).
+- Cambio di sessione (altro account, demo, uscita dalla demo verso un account, rimozione dell'account attivo, account
+  aggiunto ad app aperta): `AppModel.changeSession` sfuma l'interfaccia (`isChangingSession`, opacità in `RootView`),
+  cambia i dati senza animazioni mentre non si vede e la fa riapparire quando ci sono i dati (subito con la cache,
+  altrimenti a fine aggiornamento, al massimo 3 s). Così niente si ridimensiona davanti all'utente. Su macOS la barra
+  della finestra resta: i suoi elementi stanno in `NSToolbar`, fuori dal contenuto (ricerca e barra laterale sono di
+  sistema e non sfumerebbero comunque).
 - macOS: `App/MacRootView.swift` (NavigationSplitView con `MacSection`, account in fondo alla barra laterale,
   `BCWCommands` per i menu Vai/Account e le scorciatoie, `MacNavigation` ricorda l'ultima sezione e tiene lo stato
   della ricerca generale: campo `.searchable` sulla split view, sempre visibile a destra; selezionarlo o scrivere
@@ -54,6 +73,27 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `Window` singola + scena `Settings` (`MacSettingsView` a schede, con le stesse sezioni di `SettingsView`).
   I titoli sono etichette in New York nella barra (`screenTitle`): applicarlo dopo `.toolbar` della pagina,
   così resta il primo elemento. `.primaryAction` su macOS sta a sinistra: per il lato destro usare `.trailingBar`.
+  Distanziatore e Aggiorna (`macWindowActions`) stanno sulla pagina principale di ogni sezione; ogni pagina aperta da
+  un'altra (`NavigationLink`, `navigationDestination`) deve avere `.pushedPageActions()`, altrimenti sostituisce la
+  barra: Aggiorna sparisce e la ricerca va accanto al titolo. Agganciati alla finestra o alla pila (verificato)
+  restano, ma accanto al titolo. Con poco spazio il campo di ricerca diventa un'icona
+  che si espande premendola (come in Note): `SearchFieldCompaction` regola la soglia sotto cui `NSSearchToolbarItem`
+  diventa icona (proprietà non pubblica `minimumWidthForSearchFieldRepresentation`, di serie 160; con controllo
+  `responds(to:)`). Con le due colonne (dettaglio ≥ 780 punti) 260 punti; con una colonna la larghezza piena meno 1 e una
+  riserva invisibile di 65 punti (un quinto del campo) in `macWindowActions`, prima del distanziatore: il campo resta
+  esteso solo se è pieno e oltre a lui resta vuoto almeno un quinto della sua larghezza. La riserva ha priorità di
+  visibilità bassa (se manca posto esce lei, non un pulsante); se esce dalla barra viene ridotta a 1 punto
+  (`searchReserveIsTight`), altrimenti lo spazio avanzato finisce tra Aggiorna e l'icona; torna intera quando c'è posto.
+  Il suo `id` contiene la larghezza, così la barra la reinserisce. Durante la ricerca non c'è. Chiudendo la ricerca (Esc, clic altrove, scelta di una
+  sezione) la pagina torna solo 250 ms dopo che il campo ha perso il focus (`closeSearch`, `searchEndRequest`): se la
+  barra della pagina arriva mentre il campo è ancora aperto, AppKit la impagina con il campo largo e non la ricalcola più
+  (Aggiorna nell'overflow, lente in mezzo). Abbassare `preferredWidthForSearchField` non va: la lente non si apre più al
+  clic e il campo della ricerca resta minuscolo. Si prova con `-BCWSearch` e `-BCWClickSearch` (clic simulato sulla lente).
+  Verificato che NON funzionano:
+  `.searchToolbarBehavior(.minimize)` (non esiste su macOS), alzare `preferredWidthForSearchField` o priorità bassa del campo
+  (si stringe), `prefersCompactRepresentation` o una soglia enorme o pari alla larghezza massima (la lente resta in
+  mezzo allo spazio del campo), la riserva agganciata alla finestra (finisce prima del campo o prima del titolo).
+  Prima di pubblicare su App Store valutare se tenere la proprietà non pubblica.
   `project.yml` è un'alternativa per XcodeGen.
 - Icona: `Resources/AppIcon.icon` (Icon Composer, con varianti chiara/scura/tinta), la stessa per iOS e macOS;
   il nome corrisponde a `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`. Nel catalogo `Assets.xcassets` non c'è più
@@ -106,7 +146,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Elenchi di card in `CardGrid` (una colonna su iOS, griglia adattiva su Mac); filtri in `ChipRow` (a capo su Mac).
 - Dashboard su Mac: titolo grande nel contenuto (sopra il calendario); nella barra frecce/Oggi/Domani e il menu della
   vista (senza "Vai a oggi"), che un distanziatore invisibile allinea al bordo destro della card del calendario
-  (`menuSpacer`, calcolato da Oggi/Domani e dal calendario in coordinate `.global`). NSToolbar non ridimensiona
+  (`menuSpacer`, calcolato da Oggi/Domani e dal calendario in coordinate `.global`; zero sotto i 780 punti, perché
+  all'apertura `SplitColumns` mostra per un istante le due colonne e quella misura può arrivare in ritardo). NSToolbar non ridimensiona
   bene un elemento che cambia larghezza (lo centra nel vecchio spazio e decide l'overflow su misure vecchie): il
   distanziatore ha un `id` che cambia con la larghezza, così viene reinserito, e con le colonne impilate non c'è.
   Non misurare elementi della barra che dipendono dal distanziatore: si creano cicli e i tasti finiscono nell'overflow.
@@ -128,13 +169,27 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - `.glass` su macOS riempie il pulsante con la tinta: usare `glassButton()`. Anni precedenti apre il sito nel
   browser (niente `SFSafariViewController`); "Aggiungi al Calendario" salva direttamente con accesso in sola scrittura.
 
+## Prestazioni
+- Eventi, assenze e giorni del calendario per giorno: usare `model.events(on:)`, `absences(on:)`, `calendarStatus(on:)`,
+  che leggono indici ricostruiti quando cambiano i dati. Confrontare le date con `isSameDay` su tutto l'elenco è lento
+  (il calendario di Foundation dominava i profili) e le celle del calendario lo fanno a ogni aggiornamento.
+- Nelle viste calcolare gli elenchi una volta per aggiornamento (`let` nel `body`, o una struttura come
+  `DayDetail.Content` e `SearchView.Results`), mai in proprietà calcolate richiamate più volte o dentro le righe.
+- Misure che cambiano a ogni fotogramma e servono solo in certi momenti (es. `dayDetailHeight`) vanno in
+  `UnobservedValue`, non in uno `@State` osservato: altrimenti l'intera pagina si ricalcola a ogni fotogramma.
+- `.card()` mette l'ombra sulla sola forma di sfondo: un'ombra sull'intera vista va ricalcolata dal contenuto.
+- Per misurare: build Release del Mac con `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG`, un aggancio temporaneo che ripete
+  l'interazione e `sample <pid> 8`, poi sommare i campioni per funzione dell'app.
+
 ## Convenzioni
 - Testi UI e commenti in italiano. Stile: card, `Eyebrow`, `FilterChip`, `StatTile`, `GradeBadge`, `AverageRing`,
   `Pill` (stati su una riga, con versione abbreviata).
 - Sezioni comprimibili: sempre `CollapsibleContent` (scorre ritagliato con sfumatura in alto) e intestazione con
   `HeaderButtonStyle` (niente attenuazione alla pressione), dentro `withAnimation(.snappy)`.
-  Da chiusa (animazione finita) il contenuto non viene disegnato: se cambiasse mentre è nascosto, le sue animazioni
-  si vedrebbero sotto l'intestazione, dove la maschera si allarga per le ombre.
+  Da chiusa (animazione finita) il contenuto non viene né costruito né disegnato (`CollapseBody`, vista animabile che
+  chiama la closure solo quando serve): non costa nulla e, se cambiasse mentre è nascosto, le sue animazioni non si
+  vedrebbero sotto l'intestazione, dove la maschera si allarga per le ombre. Lo stato interno del contenuto (es. una
+  riga espansa) si azzera chiudendo la sezione.
 - Pagine lunghe (Tu, Account, Impostazioni): margine in fondo `Theme.bottomInset`. iOS rimpicciolisce la tab bar
   scorrendo solo se la pagina è abbastanza lunga (verificato: Tu con 24 punti non lo faceva, con 120 sì).
 - README: niente trattini lunghi, niente grassetto/corsivo nelle parti aggiunte, tabelle solo se indispensabili.

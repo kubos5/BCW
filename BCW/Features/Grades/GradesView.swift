@@ -3,6 +3,11 @@ import SwiftUI
 
 struct GradesView: View {
     @Environment(AppModel.self) private var model
+    #if DEBUG
+    /// Per gli screenshot di sviluppo: `-BCWOpenSubject YES` apre la materia con il nome più
+    /// lungo (il caso peggiore per la barra della finestra).
+    @State private var debugSubject: SubjectSummary?
+    #endif
 
     var body: some View {
         PlatformNavigationStack {
@@ -10,7 +15,18 @@ struct GradesView: View {
                 .screenTitle("Voti")
                 .navigationDestination(for: SubjectSummary.self) { summary in
                     SubjectDetailView(subjectId: summary.subjectId, book: model.gradeBook, subjects: model.subjects)
+                        .pushedPageActions()
                 }
+                #if DEBUG
+                .navigationDestination(item: $debugSubject) { summary in
+                    SubjectDetailView(subjectId: summary.subjectId, book: model.gradeBook, subjects: model.subjects)
+                        .pushedPageActions()
+                }
+                .task(id: model.grades.count) {
+                    guard UserDefaults.standard.bool(forKey: "BCWOpenSubject"), debugSubject == nil else { return }
+                    debugSubject = model.gradeBook.subjects().max { $0.name.count < $1.name.count }
+                }
+                #endif
         }
     }
 }
@@ -163,6 +179,7 @@ struct GradeBookView: View {
 
     @ViewBuilder
     private var filters: some View {
+        let allSubjects = allSubjects
         ChipRow {
             FilterChip(title: "Tutto l'anno", isSelected: period == nil) { period = nil }
             ForEach(book.activePeriods) { p in
@@ -196,6 +213,7 @@ struct GradeBookView: View {
 
     @ViewBuilder
     private var recentList: some View {
+        let filteredGrades = filteredGrades
         if filteredGrades.isEmpty {
             ContentUnavailableView("Nessun voto", systemImage: "line.3.horizontal.decrease.circle",
                                    description: Text("Nessun voto corrisponde ai filtri selezionati."))

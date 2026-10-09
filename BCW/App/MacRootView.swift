@@ -106,18 +106,16 @@ final class MacNavigation {
     var isSearching = false
     /// Incrementato dal comando "Cerca" (⌘F) per mettere il cursore nel campo.
     var searchFocusRequest = 0
+    /// Incrementato per chiudere la ricerca: `MacRootView` toglie prima il focus al campo e
+    /// mostra la pagina solo quando il campo si è richiuso (vedi `closeSearch`).
+    var searchEndRequest = 0
 
     private static let sectionKey = "macSection"
 
     /// Torna a una sezione chiudendo la ricerca.
     func show(_ section: MacSection) {
-        endSearch()
         self.section = section
-    }
-
-    func endSearch() {
-        isSearching = false
-        searchQuery = ""
+        if isSearching { searchEndRequest += 1 }
     }
 
     init() {
@@ -135,6 +133,10 @@ struct MacRootView: View {
     @Environment(\.openSettings) private var openSettings
     #endif
     @FocusState private var searchFocused: Bool
+    /// Le pagine a due colonne (`SplitColumns`) si affiancano da 780 punti in su.
+    @State private var detailHasTwoColumns = true
+    /// La riserva non ci sta nella barra: è ridotta al minimo (vedi `SearchFieldCompaction`).
+    @State private var searchReserveIsTight = false
 
     var body: some View {
         @Bindable var nav = nav
@@ -148,26 +150,39 @@ struct MacRootView: View {
             }
             // Cambiando sezione (o aprendo la ricerca) si riparte dalla pagina principale.
             .id(nav.isSearching ? "ricerca" : nav.section.rawValue)
+            .onGeometryChange(for: Bool.self) { $0.size.width >= 780 } action: { detailHasTwoColumns = $0 }
         }
         // Ricerca generale: campo sempre visibile a destra nella barra della finestra.
         // Selezionandolo si apre la pagina di ricerca; si chiude uscendo dal campo vuoto
         // o scegliendo una sezione nella barra laterale.
         .searchable(text: $nav.searchQuery, placement: .toolbar, prompt: SearchView.prompt)
         .searchFocused($searchFocused)
+        // Con una colonna il campo resta esteso solo se, oltre a lui, nella barra resta vuoto
+        // almeno un quinto della sua larghezza: lo tiene da parte `macWindowActions`.
+        .environment(\.searchReserveWidth, searchReserveWidth)
+        .background {
+            SearchFieldCompaction(twoColumns: detailHasTwoColumns, isSearching: nav.isSearching,
+                                  reserveIsTight: $searchReserveIsTight)
+        }
         .onChange(of: searchFocused) { _, focused in
             if focused {
                 nav.isSearching = true
             } else if nav.searchQuery.isEmpty {
-                nav.isSearching = false
+                closeSearch()
+            }
+        }
+        .onChange(of: nav.searchEndRequest) {
+            nav.searchQuery = ""
+            if searchFocused {
+                searchFocused = false  // chiude la ricerca da `onChange(of: searchFocused)`
+            } else {
+                closeSearch()
             }
         }
         .onChange(of: nav.searchQuery) { _, query in
             if !query.isEmpty { nav.isSearching = true }
         }
         .onChange(of: nav.searchFocusRequest) { searchFocused = true }
-        .onChange(of: nav.isSearching) { _, searching in
-            if !searching { searchFocused = false }
-        }
         .frame(minWidth: 860, minHeight: 580)
         #if DEBUG
         .task { DebugSnapshots.runIfRequested(nav: nav, openSettings: openSettings) }
@@ -179,9 +194,27 @@ struct MacRootView: View {
             Button("Esci", role: .destructive) { model.signOut() }
             Button("Annulla", role: .cancel) {}
         } message: {
-            Text(model.isDemo ? "Stai usando la modalità demo."
+            Text(model.isDemo ? model.demoExitMessage
                  : "Le credenziali di questo account verranno rimosse da questo Mac.")
         }
+    }
+
+    /// Torna dalla pagina di ricerca a quella della sezione, ma solo dopo che il campo si è
+    /// richiuso: se la barra della pagina arriva mentre il campo è ancora aperto, AppKit la
+    /// impagina con il campo largo e non la ricalcola più (Aggiorna nel menu di overflow, lente
+    /// in mezzo alla barra). Vale per Esc, per il clic altrove e per la scelta di una sezione.
+    private func closeSearch() {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            if !searchFocused && nav.searchQuery.isEmpty { nav.isSearching = false }
+        }
+    }
+
+    /// Spazio di riserva per il campo di ricerca (vedi `SearchFieldCompaction`).
+    /// Larghezza della riserva per il campo di ricerca, `nil` se non serve.
+    private var searchReserveWidth: CGFloat? {
+        guard !detailHasTwoColumns, !nav.isSearching else { return nil }
+        return searchReserveIsTight ? SearchFieldCompaction.tightReserveWidth : SearchFieldCompaction.reserveWidth
     }
 
     private var signOutTitle: String {
@@ -222,13 +255,7 @@ private struct MacDetailView: View {
                 content
             }
         }
-            .toolbar {
-                // Il distanziatore spinge a destra le azioni: a sinistra restano titolo e navigazione.
-                ToolbarSpacer(.flexible)
-                ToolbarItem(placement: .automatic) {
-                    RefreshButton()
-                }
-            }
+        .macWindowActions()
     }
 
     @ViewBuilder
@@ -252,6 +279,48 @@ private struct MacDetailView: View {
     }
 }
 
+extension EnvironmentValues {
+    /// Larghezza dello spazio di riserva del campo di ricerca nella barra, `nil` se non serve.
+    @Entry var searchReserveWidth: CGFloat? = nil
+}
+
+extension View {
+    /// Azioni a destra nella barra della finestra: distanziatore e Aggiorna, con la ricerca
+    /// generale subito dopo. Vanno sulla pagina principale di ogni sezione e su ogni pagina
+    /// aperta da un'altra (`NavigationLink`, `navigationDestination`): la pagina aperta
+    /// sostituisce la barra, e senza di esse Aggiorna sparirebbe e la ricerca finirebbe
+    /// accanto al titolo. Agganciate alla finestra o alla pila restano sì, ma accanto al titolo.
+    func macWindowActions() -> some View {
+        modifier(MacWindowActions())
+    }
+}
+
+private struct MacWindowActions: ViewModifier {
+    @Environment(\.searchReserveWidth) private var searchReserveWidth
+
+    func body(content: Content) -> some View {
+        content.toolbar {
+            // Riserva invisibile per il campo di ricerca (`SearchFieldCompaction`): prima del
+            // distanziatore, cioè subito dopo titolo e navigazione, dove si confonde con lo spazio
+            // vuoto. Tra i pulsanti di destra lascerebbe un buco prima del campo.
+            // L'identificativo cambia con la larghezza: la barra reinserisce l'elemento invece di
+            // ridimensionarlo (che fa male).
+            if let width = searchReserveWidth {
+                ToolbarItem(id: "\(SearchFieldCompaction.reserveID)-\(Int(width))") {
+                    Color.clear
+                        .frame(width: width, height: 1)
+                        .accessibilityHidden(true)
+                }
+                .sharedBackgroundVisibility(.hidden)
+            }
+            ToolbarSpacer(.flexible)
+            ToolbarItem(placement: .automatic) {
+                RefreshButton()
+            }
+        }
+    }
+}
+
 /// Su macOS non si trascina per aggiornare: c'è un pulsante (e ⌘R).
 struct RefreshButton: View {
     @Environment(AppModel.self) private var model
@@ -268,6 +337,134 @@ struct RefreshButton: View {
         }
         .disabled(model.isRefreshing)
         .help("Aggiorna i dati da Classeviva (⌘R)")
+    }
+}
+
+/// Con poco spazio nella barra il campo di ricerca diventa un'icona, che si espande quando la
+/// si preme (come in Note). `NSSearchToolbarItem` lo fa quando gli spetta meno di una soglia
+/// minima, di serie 160 punti: prima il campo si stringe, e alla larghezza minima della finestra
+/// resterebbe sempre intero. La soglia si alza con la proprietà non pubblica
+/// `minimumWidthForSearchFieldRepresentation` (se un giorno sparisse, il campo si stringe e basta):
+/// - con le pagine a due colonne a 260 punti;
+/// - con una colonna alla larghezza piena del campo, con in più una riserva invisibile nella barra
+///   larga un quinto del campo (`macWindowActions`): il campo è esteso solo se è pieno e oltre a lui
+///   resta vuoto almeno un quinto della sua larghezza, altrimenti diventa icona. La riserva ha la
+///   priorità più bassa: se non c'è posto finisce lei fuori dalla barra, non un pulsante;
+/// - durante la ricerca la soglia torna quella di serie e la riserva non c'è.
+/// Forzare l'icona con `prefersCompactRepresentation` o con una soglia enorme non va: la barra
+/// lascia al campo tutto il suo spazio e la lente finisce in mezzo (verificato).
+struct SearchFieldCompaction: NSViewRepresentable {
+    let twoColumns: Bool
+    let isSearching: Bool
+    @Binding var reserveIsTight: Bool
+
+    static let reserveID = "riserva-ricerca"
+    /// Riserva ridotta, quando quella intera non ci sta: in quel caso il campo è comunque un'icona
+    /// (lo spazio è molto meno della sua larghezza). Se la riserva intera uscisse dalla barra,
+    /// lo spazio avanzato finirebbe tra Aggiorna e l'icona invece che dopo il titolo (verificato).
+    static let tightReserveWidth: CGFloat = 1
+    /// Un quinto della larghezza piena del campo (325 punti su macOS 26-27).
+    static let reserveWidth: CGFloat = 65
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        view.isHidden = true
+        context.coordinator.view = view
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        context.coordinator.twoColumns = twoColumns
+        context.coordinator.isSearching = isSearching
+        context.coordinator.reserveIsTight = $reserveIsTight
+        context.coordinator.scheduleUpdate()
+    }
+
+    final class Coordinator {
+        weak var view: NSView?
+        var twoColumns = true
+        var isSearching = false
+        var reserveIsTight: Binding<Bool>?
+        private weak var observedToolbar: NSToolbar?
+        private var observers: [NSObjectProtocol] = []
+
+        private static let minimumKey = "minimumWidthForSearchFieldRepresentation"
+        /// Soglia di serie di AppKit.
+        private static let systemMinimum: CGFloat = 160
+        /// Larghezza del campo ridotto a icona.
+        private static let iconWidth: CGFloat = 36
+
+
+        deinit { observers.forEach(NotificationCenter.default.removeObserver) }
+
+        func scheduleUpdate() {
+            DispatchQueue.main.async { [weak self] in
+                self?.observe()
+                self?.update()
+            }
+        }
+
+        /// Gli elementi della barra cambiano con la pagina: la riserva va ritrovata ogni volta.
+        private func observe() {
+            guard let toolbar = view?.window?.toolbar, toolbar !== observedToolbar else { return }
+            observers.forEach(NotificationCenter.default.removeObserver)
+            observedToolbar = toolbar
+            observers = [
+                NotificationCenter.default.addObserver(forName: NSToolbar.willAddItemNotification, object: toolbar,
+                                                       queue: .main) { [weak self] _ in self?.scheduleUpdate() },
+            ]
+        }
+
+        /// Riserva intera che non ci sta (è finita fuori dalla barra) → ridotta; riserva ridotta e
+        /// abbastanza spazio vuoto per quella intera → di nuovo intera. Le due condizioni non si
+        /// sovrappongono, quindi non si alternano.
+        private func updateReserveSize(_ reserve: NSToolbarItem, toolbar: NSToolbar) {
+            guard let tight = reserveIsTight else { return }
+            let view = reserve.value(forKey: "view") as? NSView
+            let isVisible = view?.window != nil && view?.isHiddenOrHasHiddenAncestor == false
+            if !tight.wrappedValue {
+                if !isVisible { tight.wrappedValue = true }
+            } else if isVisible, let free = Self.freeSpace(in: toolbar),
+                      // 16 punti di margine: lo spazio misurato comprende piccoli scarti fissi
+                      // (es. tra barra laterale e contenuto) che la riserva non può usare.
+                      free >= SearchFieldCompaction.reserveWidth - SearchFieldCompaction.tightReserveWidth + 16 {
+                tight.wrappedValue = false
+            }
+        }
+
+        /// Spazio vuoto nella barra: la somma degli spazi tra gli elementi visibili oltre la
+        /// distanza normale tra due elementi (8 punti).
+        private static func freeSpace(in toolbar: NSToolbar) -> CGFloat? {
+            var frames: [CGRect] = []
+            for item in toolbar.items {
+                let view = (item as? NSSearchToolbarItem)?.searchField ?? (item.value(forKey: "view") as? NSView)
+                guard let view, view.window != nil, !view.isHiddenOrHasHiddenAncestor else { continue }
+                let frame = view.convert(view.bounds, to: nil)
+                if frame.width > 0 { frames.append(frame) }
+            }
+            frames.sort { $0.minX < $1.minX }
+            guard frames.count > 1 else { return nil }
+            return zip(frames, frames.dropFirst()).reduce(0) { $0 + max(0, $1.1.minX - $1.0.maxX - 8) }
+        }
+
+        private func update() {
+            guard let toolbar = view?.window?.toolbar else { return }
+            for item in toolbar.items where item.itemIdentifier.rawValue.contains(SearchFieldCompaction.reserveID) {
+                if item.visibilityPriority != .low { item.visibilityPriority = .low }
+                updateReserveSize(item, toolbar: toolbar)
+            }
+            guard let search = toolbar.items.compactMap({ $0 as? NSSearchToolbarItem }).first,
+                  search.responds(to: NSSelectorFromString("setMinimumWidthForSearchFieldRepresentation:")) else { return }
+            let fullWidth = search.maxSize.width > 0 ? search.maxSize.width : 325
+            // Un punto sotto la larghezza piena: con la soglia uguale alla larghezza massima
+            // l'icona terrebbe lo spazio del campo (verificato).
+            let minimum: CGFloat = isSearching ? Self.systemMinimum : (twoColumns ? 260 : fullWidth - 1)
+            if (search.value(forKey: Self.minimumKey) as? CGFloat) != minimum {
+                search.setValue(minimum, forKey: Self.minimumKey)
+            }
+        }
     }
 }
 
@@ -325,27 +522,7 @@ private struct SidebarAccountMenu: View {
 
     var body: some View {
         Menu {
-            Section("Account") {
-                ForEach(model.accounts) { account in
-                    let isActive = !model.isDemo && account.id == model.activeAccountID
-                    Button {
-                        withAnimation { model.switchAccount(to: account.id) }
-                    } label: {
-                        if isActive {
-                            Label(account.name, systemImage: "checkmark")
-                        } else {
-                            Text(account.name)
-                        }
-                    }
-                    .disabled(isActive)
-                }
-                if model.isDemo {
-                    Label("Demo", systemImage: "checkmark")
-                }
-            }
-            Button("Aggiungi account…", systemImage: "person.crop.circle.badge.plus") {
-                nav.addingAccount = true
-            }
+            AccountMenuItems { nav.addingAccount = true }
             Divider()
             Button("Il tuo profilo", systemImage: "person.crop.circle") { nav.show(.you) }
             SettingsLink {
@@ -441,6 +618,10 @@ struct BCWCommands: Commands {
                 ))
             }
             if !model.accounts.isEmpty { Divider() }
+            // La demo non è un account: si apre da qui anche con un account collegato.
+            Button("Prova la demo") { model.startDemo() }
+                .disabled(!signedIn || model.isDemo)
+            Divider()
             Button("Il tuo profilo") { nav.show(.you) }
                 .disabled(!signedIn)
             Button(model.isDemo ? "Esci dalla demo…" : "Esci da questo account…") {

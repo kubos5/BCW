@@ -72,6 +72,26 @@ extension PlatformFont {
     #endif
 }
 
+extension View {
+    /// Su macOS: distanziatore e pulsante Aggiorna nella barra della finestra (vedi
+    /// `macWindowActions` in `MacRootView`). Da applicare alle pagine aperte da un'altra.
+    @ViewBuilder
+    func pushedPageActions() -> some View {
+        #if os(macOS)
+        macWindowActions()
+        #else
+        self
+        #endif
+    }
+}
+
+/// Valore da conservare in `@State` senza che cambiarlo ridisegni la vista: per misure che
+/// cambiano spesso (es. a ogni fotogramma di un'animazione) ma servono solo in certi momenti.
+final class UnobservedValue<Value> {
+    var value: Value
+    init(_ value: Value) { self.value = value }
+}
+
 extension ToolbarItemPlacement {
     /// Lato destro della barra (su macOS `.primaryAction` starebbe invece a sinistra).
     static var trailingBar: ToolbarItemPlacement {

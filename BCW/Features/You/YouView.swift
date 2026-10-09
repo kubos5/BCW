@@ -2,7 +2,7 @@ import SwiftUI
 
 struct YouView: View {
     @Environment(AppModel.self) private var model
-    @State private var addingAccount = false
+    @State private var switchingAccount = false
 
     var body: some View {
         #if os(macOS)
@@ -16,13 +16,16 @@ struct YouView: View {
         PlatformNavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    NavigationLink {
-                        AccountView()
-                    } label: {
-                        ProfileCard()
+                    // Profilo e statistiche formano un blocco: stessa distanza che c'è tra le statistiche.
+                    VStack(alignment: .leading, spacing: 10) {
+                        NavigationLink {
+                            AccountView()
+                        } label: {
+                            ProfileCard()
+                        }
+                        .buttonStyle(.plain)
+                        stats
                     }
-                    .buttonStyle(.plain)
-                    stats
 
                     menuSection("Comunicazioni") {
                         MenuRow(title: "Bacheca", subtitle: noticeSubtitle, symbol: "megaphone",
@@ -76,48 +79,23 @@ struct YouView: View {
             .toolbar {
                 ToolbarItem(placement: .trailingBar) { accountSwitcher }
             }
-            .sheet(isPresented: $addingAccount) {
-                NavigationStack {
-                    LoginView(isAddingAccount: true)
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Annulla", systemImage: "xmark") { addingAccount = false }
-                            }
-                        }
-                }
+            #if os(iOS)
+            .sheet(isPresented: $switchingAccount) {
+                AccountSwitcherSheet()
             }
+            #endif
         }
     }
 
-    /// Cambio rapido dell'account attivo.
+    /// Cambio rapido dell'account attivo: apre lo stesso popup della scheda Tu tenuta premuta.
+    /// L'icona conta solo gli account veri: la demo non è un account.
     private var accountSwitcher: some View {
-        Menu {
-            Section("Account") {
-                ForEach(model.accounts) { account in
-                    let isActive = !model.isDemo && account.id == model.activeAccountID
-                    Button {
-                        withAnimation { model.switchAccount(to: account.id) }
-                    } label: {
-                        if isActive {
-                            Label(account.name, systemImage: "checkmark")
-                        } else {
-                            Text(account.name)
-                        }
-                        Text(account.school ?? account.credentials.username)
-                    }
-                    .disabled(isActive)
-                }
-                if model.isDemo {
-                    Label("Demo", systemImage: "checkmark")
-                }
-            }
-            Button("Aggiungi account", systemImage: "person.crop.circle.badge.plus") {
-                addingAccount = true
-            }
+        Button {
+            switchingAccount = true
         } label: {
             Image(systemName: model.accounts.count > 1 ? "person.2.circle" : "person.crop.circle.badge.plus")
         }
-        .accessibilityLabel("Cambia account")
+        .accessibilityLabel(model.accounts.count > 1 ? "Cambia account" : "Aggiungi account")
     }
 
     var stats: some View {
@@ -273,16 +251,17 @@ private struct MacYouView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
                 // Profilo e statistiche affiancati se c'è spazio, altrimenti uno sotto l'altro.
-                // Affiancati hanno tutti la stessa altezza: quella del più alto.
+                // Affiancati hanno tutti la stessa altezza: quella del più alto. Tra profilo e
+                // statistiche c'è la stessa distanza che c'è tra le statistiche.
                 ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: 14) {
+                    HStack(alignment: .top, spacing: 10) {
                         profile(fillsHeight: true)
                             .frame(minWidth: 380)
                         stats(fillsHeight: true)
                             .frame(width: 520)
                     }
                     .fixedSize(horizontal: false, vertical: true)
-                    VStack(spacing: 14) {
+                    VStack(spacing: 10) {
                         profile(fillsHeight: false)
                         stats(fillsHeight: false)
                     }
@@ -317,6 +296,7 @@ private struct MacYouView: View {
     private func profile(fillsHeight: Bool) -> some View {
         NavigationLink {
             AccountView()
+                .pushedPageActions()
         } label: {
             ProfileCard(fillsHeight: fillsHeight)
         }

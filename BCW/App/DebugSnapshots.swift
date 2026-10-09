@@ -5,7 +5,9 @@ import SwiftUI
 /// Strumento di sviluppo: con `-BCWSnapshot YES` l'app visita le sezioni e salva un'immagine
 /// della finestra per ciascuna nella cartella temporanea del contenitore.
 /// Opzioni: `-BCWHover YES` porta anche il puntatore sulla barra della finestra e salva
-/// `<sezione>-<larghezza>-hover.png`; `-BCWSearch testo` apre la ricerca e salva `search.png`.
+/// `<sezione>-<larghezza>-hover.png`; `-BCWSearch testo` apre la ricerca e salva `search.png`, poi la chiude e salva `search-closed.png`
+/// (e `search-empty.png`/`search-closed-empty.png` per il campo selezionato e lasciato vuoto);
+/// `-BCWClickSearch YES` fa clic tre volte sul campo (o sulla lente) e salva `click-N.png`.
 enum DebugSnapshots {
     static func runIfRequested(nav: MacNavigation, openSettings: OpenSettingsAction) {
         let defaults = UserDefaults.standard
@@ -42,13 +44,45 @@ enum DebugSnapshots {
                     }
                 }
             }
+            if defaults.bool(forKey: "BCWClickSearch") {
+                // Clic sul campo di ricerca (o sulla lente, se è ridotto a icona), poi chiusura.
+                let start = nav.section
+                for step in 0..<3 {
+                    if let window = mainWindow { click(searchFieldIn: window) }
+                    try? await Task.sleep(for: .seconds(2))
+                    if let window = mainWindow { capture(window, to: folder.appendingPathComponent("click-\(step).png")) }
+                    // Si esce come con Esc, poi scegliendo la stessa sezione, poi tornando a quella
+                    // di partenza da un'altra (Voti, o Tu se si partiva da Voti).
+                    switch step {
+                    case 0: mainWindow?.makeFirstResponder(nil)
+                    case 1: nav.show(start)
+                    default:
+                        nav.show(start == .grades ? .you : .grades)
+                        try? await Task.sleep(for: .seconds(1.5))
+                        nav.show(start)
+                    }
+                    try? await Task.sleep(for: .seconds(2))
+                    if let window = mainWindow { capture(window, to: folder.appendingPathComponent("click-\(step)-closed.png")) }
+                }
+            }
             if let text = defaults.string(forKey: "BCWSearch") {
+                // Campo selezionato e poi abbandonato vuoto (come con Esc), poi una ricerca vera
+                // chiusa allo stesso modo: la barra deve tornare com'era.
                 nav.searchFocusRequest += 1
                 try? await Task.sleep(for: .seconds(2))
                 if let window = mainWindow { capture(window, to: folder.appendingPathComponent("search-empty.png")) }
+                mainWindow?.makeFirstResponder(nil)
+                try? await Task.sleep(for: .seconds(2))
+                if let window = mainWindow { capture(window, to: folder.appendingPathComponent("search-closed-empty.png")) }
+                nav.searchFocusRequest += 1
+                try? await Task.sleep(for: .seconds(1))
                 nav.searchQuery = text
                 try? await Task.sleep(for: .seconds(2))
                 if let window = mainWindow { capture(window, to: folder.appendingPathComponent("search.png")) }
+                nav.searchQuery = ""
+                mainWindow?.makeFirstResponder(nil)
+                try? await Task.sleep(for: .seconds(2))
+                if let window = mainWindow { capture(window, to: folder.appendingPathComponent("search-closed.png")) }
             }
             if defaults.bool(forKey: "BCWSettings") {
                 openSettings()
@@ -106,6 +140,20 @@ enum DebugSnapshots {
     private static func restorePointer() {
         if let savedPointer { CGWarpMouseCursorPosition(savedPointer) }
         savedPointer = nil
+    }
+
+    /// Clic simulato al centro del campo di ricerca della barra.
+    private static func click(searchFieldIn window: NSWindow) {
+        guard let search = window.toolbar?.items.compactMap({ $0 as? NSSearchToolbarItem }).first,
+              search.searchField.window != nil else { return }
+        let field = search.searchField
+        let center = field.convert(NSPoint(x: field.bounds.midX, y: field.bounds.midY), to: nil)
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            if let event = NSEvent.mouseEvent(with: type, location: center, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                              windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) {
+                window.sendEvent(event)
+            }
+        }
     }
 
     private static var mainWindow: NSWindow? {

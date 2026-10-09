@@ -73,13 +73,17 @@ struct RootView: View {
                     .transition(.opacity)
                 #endif
             case .signedIn:
-                #if os(macOS)
-                MacRootView()
-                    .transition(.opacity)
-                #else
-                MainTabView()
-                    .transition(.opacity)
-                #endif
+                Group {
+                    #if os(macOS)
+                    MacRootView()
+                    #else
+                    MainTabView()
+                    #endif
+                }
+                // Cambiando account tutto scompare e riappare con i nuovi dati (`changeSession`).
+                .opacity(model.isChangingSession ? 0 : 1)
+                .background(Theme.background.ignoresSafeArea())
+                .transition(.opacity)
             }
 
             if lock.isLocked && model.phase == .signedIn {
@@ -109,13 +113,16 @@ struct MainTabView: View {
     @Environment(AppModel.self) private var model
     @State private var selection: AppTab = .dashboard
     @State private var searchQuery = ""
+    /// Incrementato toccando la scheda Dashboard quando è già quella aperta.
+    @State private var dashboardReselection = 0
+    @State private var switchingAccount = false
 
     enum AppTab: Hashable { case dashboard, grades, you, search }
 
     var body: some View {
-        TabView(selection: $selection) {
+        TabView(selection: tabSelection) {
             Tab("Dashboard", systemImage: "calendar.day.timeline.left", value: AppTab.dashboard) {
-                DashboardView()
+                DashboardView(reselection: dashboardReselection)
             }
             Tab("Voti", systemImage: "chart.line.uptrend.xyaxis", value: AppTab.grades) {
                 GradesView()
@@ -130,6 +137,23 @@ struct MainTabView: View {
         }
         .modifier(SeparateSearchTab())
         .tabBarMinimizeBehavior(.onScrollDown)
+        // Tenendo premuta la scheda Tu si cambia account al volo.
+        .background {
+            TabBarItemLongPress(index: 2) { switchingAccount = true }
+        }
+        .sheet(isPresented: $switchingAccount) {
+            AccountSwitcherSheet()
+        }
+    }
+
+    /// Selezione delle schede che riconosce un nuovo tocco sulla scheda già aperta.
+    private var tabSelection: Binding<AppTab> {
+        Binding {
+            selection
+        } set: { tab in
+            if tab == selection, tab == .dashboard { dashboardReselection += 1 }
+            selection = tab
+        }
     }
 }
 

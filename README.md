@@ -38,9 +38,10 @@ BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 - puoi bloccare l'app con FaceID / TouchID (anche su Mac)
 - puoi consultare l'app anche offline, visualizzando i dati dell'ultima volta che era stata aperta
 - supporto agli account genitore con più figli
-- puoi aggiungere più account e passare dall'uno all'altro
+- puoi aggiungere più account e passare dall'uno all'altro (su iPhone anche tenendo premuta la scheda Tu), con una dissolvenza tra i dati di un account e quelli dell'altro
 - bacheca con adesione, firma e risposta alle comunicazioni e apertura degli allegati con Quick Look
-- modalità Demo con dati di esempio, per provare l'app senza un account
+- modalità Demo con dati di esempio, per provare l'app senza un account o anche con un account già collegato (uscendo si torna all'account)
+- toccando di nuovo la scheda Dashboard si torna in cima alla pagina e, se si è già in cima, alla giornata di domani
 - riepilogo per periodo con le insufficienze
 - conto alla rovescia alle prossime vacanze
 
@@ -49,7 +50,7 @@ BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 BCW è anche un'app nativa per macOS (non Catalyst), con le stesse funzioni e lo stesso design dell'app per iPhone, ma con un layout pensato per lo schermo grande:
 
 - barra laterale con tutte le sezioni (Dashboard, Voti, Tu, Bacheca, Note, Scrutini, Assenze, Didattica…) e i contatori delle cose da leggere o giustificare
-- ricerca sempre a portata di mano nel campo in alto a destra (⌘F)
+- ricerca sempre a portata di mano nel campo in alto a destra (⌘F), che diventa un'icona se la finestra è stretta
 - Dashboard a colonne: calendario e prossimi giorni a sinistra, il giorno scelto a destra, con le lezioni in una colonna a parte
 - Voti con medie e andamento sempre visibili accanto all'elenco
 - Bacheca con elenco e comunicazione aperta affiancati, come in Mail
