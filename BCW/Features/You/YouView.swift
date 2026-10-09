@@ -75,6 +75,7 @@ struct YouView: View {
             }
             .themedBackground()
             .screenTitle("Tu")
+            .inlineLargeTitleDisplay()
             .refreshable { await model.refreshAll() }
             .toolbar {
                 ToolbarItem(placement: .trailingBar) { accountSwitcher }
