@@ -12,16 +12,12 @@ struct GradesView: View {
     var body: some View {
         PlatformNavigationStack {
             GradeBookView(book: model.gradeBook, subjects: model.subjects, allowsRefresh: true)
-                .screenTitle("Voti")
-                .inlineLargeTitleDisplay()
                 .navigationDestination(for: SubjectSummary.self) { summary in
                     SubjectDetailView(subjectId: summary.subjectId, book: model.gradeBook, subjects: model.subjects)
-                        .pushedPageActions()
                 }
                 #if DEBUG
                 .navigationDestination(item: $debugSubject) { summary in
                     SubjectDetailView(subjectId: summary.subjectId, book: model.gradeBook, subjects: model.subjects)
-                        .pushedPageActions()
                 }
                 .task(id: model.grades.count) {
                     guard UserDefaults.standard.bool(forKey: "BCWOpenSubject"), debugSubject == nil else { return }
@@ -32,7 +28,7 @@ struct GradesView: View {
     }
 }
 
-/// Vista riutilizzabile del libretto voti (usata anche per l'anno precedente).
+/// Libretto voti, con titolo e filtri nella barra.
 struct GradeBookView: View {
     @Environment(AppModel.self) private var model
     let book: GradeBook
@@ -65,6 +61,8 @@ struct GradeBookView: View {
 
     var body: some View {
         content
+            .screenTitle("Voti")
+            .inlineLargeTitleDisplay()
             .refreshable {
                 if allowsRefresh { await model.loadGrades() }
             }
