@@ -123,7 +123,7 @@ struct SearchView: View {
                 ForEach(notices.prefix(10)) { notice in
                     NavigationLink {
                         NoticeDetailView(notice: notice)
-                            .pushedPageActions()
+                            .pushedPageTitle("Comunicazione")
                     } label: {
                         HStack {
                             Text(notice.title)
@@ -144,7 +144,6 @@ struct SearchView: View {
                 ForEach(files.prefix(10), id: \.1.id) { teacher, content in
                     NavigationLink {
                         DidacticsView()
-                            .pushedPageActions()
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: content.symbol).foregroundStyle(Theme.accent).frame(width: 24)

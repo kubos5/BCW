@@ -107,7 +107,6 @@ struct LoginView: View {
             }
             .sharedBackgroundVisibility(.hidden)
         }
-        .macToolbarBackground()
         #endif
         .animation(.snappy, value: errorMessage)
         .sheet(isPresented: Binding(get: { !choices.isEmpty }, set: { if !$0 { choices = [] } })) {

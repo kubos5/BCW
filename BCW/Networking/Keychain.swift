@@ -68,66 +68,62 @@ enum Keychain {
 
     // MARK: Primitive
 
-    #if os(macOS)
-    /// Su macOS si usa il Portachiavi "moderno", lo stesso di iOS, che però richiede un'app
-    /// firmata con un team di sviluppo. Con la firma locale si ripiega sul portachiavi di login.
-    private static var usesDataProtection = true
-    #endif
+    /// Portachiavi da usare, in ordine: `true` è quello "moderno" (data protection), lo stesso di
+    /// iOS. Su macOS richiede un'app firmata con un profilo di provisioning; senza, si usa il
+    /// portachiavi di login. Attenzione: senza autorizzazione `SecItemAdd` e `SecItemDelete`
+    /// rispondono `errSecMissingEntitlement`, ma `SecItemCopyMatching` risponde
+    /// `errSecItemNotFound` (verificato). Per questo in lettura si guardano sempre entrambi:
+    /// prima si ripiegava solo sull'errore di autorizzazione, la lettura non trovava l'account
+    /// salvato nel portachiavi di login e a ogni avvio si tornava alla schermata di accesso.
+    private static var stores: [Bool] {
+        #if os(macOS)
+        [true, false]
+        #else
+        [true]
+        #endif
+    }
 
-    private static func query(_ account: String) -> [String: Any] {
+    private static func query(_ account: String, dataProtection: Bool) -> [String: Any] {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
         #if os(macOS)
-        if usesDataProtection { query[kSecUseDataProtectionKeychain as String] = true }
+        if dataProtection { query[kSecUseDataProtectionKeychain as String] = true }
         #endif
         return query
     }
 
-    /// Esegue un'operazione e, se su macOS manca l'autorizzazione al Portachiavi moderno,
-    /// la ripete sul portachiavi di login.
-    private static func withFallback(_ operation: () -> OSStatus) -> OSStatus {
-        let status = operation()
-        #if os(macOS)
-        if status == errSecMissingEntitlement && usesDataProtection {
-            usesDataProtection = false
-            return operation()
-        }
-        #endif
-        return status
-    }
-
+    /// Salva nel primo portachiavi che accetta la voce (e la toglie dagli altri).
     private static func write(_ data: Data, for account: String) {
         remove(account)
-        _ = withFallback {
-            var item = query(account)
+        for dataProtection in stores {
+            var item = query(account, dataProtection: dataProtection)
             item[kSecValueData as String] = data
-            #if os(macOS)
-            if usesDataProtection {
+            if dataProtection {
                 item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             }
-            #else
-            item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-            #endif
-            return SecItemAdd(item as CFDictionary, nil)
+            if SecItemAdd(item as CFDictionary, nil) == errSecSuccess { return }
         }
     }
 
     private static func read(_ account: String) -> Data? {
-        var result: AnyObject?
-        let status = withFallback {
-            var search = query(account)
+        for dataProtection in stores {
+            var search = query(account, dataProtection: dataProtection)
             search[kSecReturnData as String] = true
             search[kSecMatchLimit as String] = kSecMatchLimitOne
-            return SecItemCopyMatching(search as CFDictionary, &result)
+            var result: AnyObject?
+            if SecItemCopyMatching(search as CFDictionary, &result) == errSecSuccess, let data = result as? Data {
+                return data
+            }
         }
-        guard status == errSecSuccess else { return nil }
-        return result as? Data
+        return nil
     }
 
     private static func remove(_ account: String) {
-        _ = withFallback { SecItemDelete(query(account) as CFDictionary) }
+        for dataProtection in stores {
+            SecItemDelete(query(account, dataProtection: dataProtection) as CFDictionary)
+        }
     }
 }

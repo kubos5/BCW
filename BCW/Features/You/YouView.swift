@@ -297,7 +297,6 @@ private struct MacYouView: View {
     private func profile(fillsHeight: Bool) -> some View {
         NavigationLink {
             AccountView()
-                .pushedPageActions()
         } label: {
             ProfileCard(fillsHeight: fillsHeight)
         }

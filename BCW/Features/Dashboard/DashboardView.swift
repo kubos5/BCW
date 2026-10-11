@@ -16,16 +16,6 @@ struct DashboardView: View {
     /// Identità dei giorni successivi: cambia (con transizione) solo quando cambia il giorno
     /// scelto e con esso il contenuto della sezione espansa (vedi `select`).
     @State private var upcomingGeneration = 0
-    #if os(macOS)
-    /// Allineamento del menu della vista al bordo destro del calendario (coordinate della
-    /// finestra). Si misurano solo elementi di larghezza fissa che stanno prima del menu
-    /// (Oggi e Domani) e il menu stesso: niente dipende dal distanziatore, quindi non ci sono
-    /// misure che si inseguono.
-    @State private var calendarMaxX: CGFloat = 0
-    @State private var todayMaxX: CGFloat = 0
-    @State private var tomorrowFrame: CGRect = .zero
-    @State private var menuWidth: CGFloat = 36
-    #endif
     /// Altezza del giorno scelto: i giorni successivi si spostano di altrettanto nella
     /// transizione, così si muovono come il contenuto principale (vedi `upcomingTransition`).
     /// Non è uno stato osservato: aprendo una sezione l'altezza cambia a ogni fotogramma, e
@@ -73,77 +63,29 @@ struct DashboardView: View {
             content
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { barWidth = $0 }
                 .refreshable { await model.refreshAll() }
+                .screenTitle(title)
+                .inlineLargeTitleDisplay()
                 .toolbar {
-                    #if os(macOS)
-                    // Su macOS lo spostamento tra i giorni sta accanto al titolo, con le scorciatoie.
-                    ToolbarItemGroup(placement: .navigation) {
-                        Button("Giorno precedente", systemImage: "chevron.left") { shift(-1) }
-                            .keyboardShortcut(.leftArrow, modifiers: .command)
-                            .help("Giorno precedente (⌘←)")
-                        Button("Giorno successivo", systemImage: "chevron.right") { shift(1) }
-                            .keyboardShortcut(.rightArrow, modifiers: .command)
-                            .help("Giorno successivo (⌘→)")
-                        Button("Oggi") { jump(to: Date()) }
-                            .keyboardShortcut("t")
-                            .disabled(selectedDay.isToday)
-                            .help("Vai a oggi (⌘T)")
-                            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxX } action: { todayMaxX = $0 }
-                        Button("Domani") { jump(to: Date().adding(days: 1)) }
-                            .keyboardShortcut("t", modifiers: [.command, .shift])
-                            .disabled(selectedDay.isTomorrow)
-                            .help("Vai a domani (⇧⌘T)")
-                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { tomorrowFrame = $0 }
-                    }
-                    // Il menu della vista sta nella barra, allineato al bordo destro del calendario
-                    // da un distanziatore. La barra non ridimensiona bene un elemento che cambia
-                    // larghezza (lo centra nel vecchio spazio e decide l'overflow su misure
-                    // vecchie): a ogni nuova larghezza si inserisce quindi un elemento nuovo, e con
-                    // le colonne impilate il distanziatore non c'è proprio.
-                    let spacer = menuSpacer
-                    if spacer > 0 {
-                        ToolbarItem(id: "allineamento-menu-\(Int(spacer))", placement: .navigation) {
-                            Color.clear
-                                .frame(width: spacer, height: 1)
-                                .accessibilityHidden(true)
-                        }
-                        .sharedBackgroundVisibility(.hidden)
-                    }
-                    ToolbarItem(placement: .navigation) {
-                        viewMenu
-                            .menuIndicator(.hidden)
-                            .help("Vista e filtri")
-                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
-                                if width > 0 { menuWidth = width }
-                            }
-                    }
-                    #else
                     if !selectedDay.isTomorrow {
                         ToolbarItem(placement: .trailingBar) {
                             Button("Domani") {
                                 select(Date().adding(days: 1).startOfDay)
                             }
+                            #if os(macOS)
+                            .keyboardShortcut("t", modifiers: [.command, .shift])
+                            .help("Vai a domani (⇧⌘T)")
+                            #endif
                         }
                         ToolbarSpacer(.fixed, placement: .trailingBar)
                     }
                     ToolbarItem(placement: .trailingBar) {
                         viewMenu
                     }
-                    #endif
                 }
-                #if os(macOS)
-                // Su macOS il titolo sta nel contenuto, sopra il calendario: nella barra della
-                // finestra restano solo i comandi per spostarsi tra i giorni.
-                .navigationTitle(title)
-                .toolbar(removing: .title)
-                #else
-                .navigationTitle(title)
-                .toolbarTitleDisplayMode(.inlineLarge)
-                #endif
         }
     }
 
-    /// Vista (lista o calendario) e filtri. Su macOS non ha "Vai a oggi", che è già un pulsante
-    /// nella barra.
+    /// Vista (lista o calendario) e filtri.
     private var viewMenu: some View {
         Menu {
             Picker("Vista", selection: Bindable(model.preferences).dashboardMode) {
@@ -151,10 +93,8 @@ struct DashboardView: View {
                     Label(mode.title, systemImage: mode.symbol).tag(mode)
                 }
             }
-            if !Platform.isMac {
-                Button("Vai a oggi", systemImage: "sun.max") {
-                    select(Date().startOfDay)
-                }
+            Button("Vai a oggi", systemImage: "sun.max") {
+                select(Date().startOfDay)
             }
             Toggle("Nascondi compiti fatti", systemImage: "checkmark.circle",
                    isOn: Bindable(model.preferences).hideCompletedHomework)
@@ -191,27 +131,11 @@ struct DashboardView: View {
         Binding { selectedDay } set: { select($0, animated: false) }
     }
 
-    private func jump(to day: Date) {
-        select(day.startOfDay)
-    }
-
-    private func shift(_ days: Int) {
-        select(selectedDay.adding(days: days))
-    }
-
     @ViewBuilder
     private var content: some View {
         #if os(macOS)
         // Calendario e giorni successivi restano a sinistra mentre si legge il giorno scelto.
         SplitColumns(sideWidth: 340) {
-            Text(title)
-                .font(.system(size: 30, weight: .bold, design: .serif))
-                .foregroundStyle(Theme.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .contentTransition(.numericText())
-                .padding(.horizontal, 4)
-                .accessibilityAddTraits(.isHeader)
             calendar
             // Con le colonne impilate i giorni successivi vanno in fondo, dopo il giorno scelto.
             StackAware { stacked in
@@ -230,7 +154,6 @@ struct DashboardView: View {
             }
         }
         .animation(.snappy, value: selectedDay)
-        .macToolbarBackground()
         #else
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
@@ -299,54 +222,16 @@ struct DashboardView: View {
             .joined(separator: "|")
     }
 
-    #if os(macOS)
-    /// Larghezza del distanziatore davanti al menu della vista: il bordo destro del menu deve
-    /// coincidere con quello del calendario. Tra due elementi della barra c'è sempre lo stesso
-    /// spazio (misurato tra Oggi e Domani): uno prima e uno dopo il distanziatore.
-    private var menuSpacer: CGFloat {
-        // Con le colonne impilate (sotto i 780 punti di `SplitColumns`) il menu non si allinea.
-        // Si controlla anche la larghezza attuale: all'apertura `SplitColumns` mostra per un
-        // istante le due colonne, e quella misura del calendario può arrivare dopo l'altra.
-        guard barWidth >= 780, calendarMaxX > 0, tomorrowFrame.width > 0 else { return 0 }
-        let measuredGap = tomorrowFrame.minX - todayMaxX
-        let gap = (0...30).contains(measuredGap) ? measuredGap : 8
-        return max(0, (calendarMaxX - tomorrowFrame.maxX - 2 * gap - menuWidth).rounded())
-    }
-    #endif
-
     @ViewBuilder
     private var calendar: some View {
-        Group {
-            switch mode {
-            case .list:
-                WeekStrip(selectedDay: daySelection)
-            case .calendar:
-                MonthCalendar(selectedDay: daySelection)
-            }
+        switch mode {
+        case .list:
+            WeekStrip(selectedDay: daySelection)
+        case .calendar:
+            MonthCalendar(selectedDay: daySelection)
         }
-        #if os(macOS)
-        .modifier(CalendarEdgeReader { calendarMaxX = $0 })
-        #endif
     }
 }
-
-#if os(macOS)
-/// Riporta il bordo destro del calendario solo quando sta nella colonna laterale: con le
-/// colonne impilate riporta 0. Legge lo stato dal layout stesso (`columnsStacked`), così la
-/// misura non arriva mai in ritardo rispetto al cambio di colonne.
-private struct CalendarEdgeReader: ViewModifier {
-    @Environment(\.columnsStacked) private var stacked
-    let onChange: (CGFloat) -> Void
-
-    func body(content: Content) -> some View {
-        content
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                stacked ? 0 : proxy.frame(in: .global).maxX
-            } action: { onChange($0) }
-            .onChange(of: stacked) { _, isStacked in if isStacked { onChange(0) } }
-    }
-}
-#endif
 
 // MARK: - Striscia settimanale
 

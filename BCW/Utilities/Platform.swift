@@ -72,19 +72,6 @@ extension PlatformFont {
     #endif
 }
 
-extension View {
-    /// Su macOS: distanziatore e pulsante Aggiorna nella barra della finestra (vedi
-    /// `macWindowActions` in `MacRootView`). Da applicare alle pagine aperte da un'altra.
-    @ViewBuilder
-    func pushedPageActions() -> some View {
-        #if os(macOS)
-        macWindowActions()
-        #else
-        self
-        #endif
-    }
-}
-
 /// Valore da conservare in `@State` senza che cambiarlo ridisegni la vista: per misure che
 /// cambiano spesso (es. a ogni fotogramma di un'animazione) ma servono solo in certi momenti.
 final class UnobservedValue<Value> {
@@ -106,7 +93,11 @@ extension ToolbarItemPlacement {
 extension View {
     /// Titolo della pagina. Su iOS è il titolo della barra di navigazione; su macOS la
     /// finestra mostrerebbe il titolo con il font di sistema, quindi lo si sostituisce
-    /// con un'etichetta in New York all'inizio della barra degli strumenti.
+    /// con un'etichetta in New York all'inizio della barra degli strumenti, e a destra
+    /// aggiunge Aggiorna (subito prima della ricerca).
+    ///
+    /// Su macOS la barra mette prima gli elementi dei modificatori più esterni: perché
+    /// Aggiorna resti l'ultimo, `screenTitle` va applicato prima del `.toolbar` della pagina.
     func screenTitle(_ title: String, subtitle: String? = nil) -> some View {
         #if os(macOS)
         navigationTitle(title)
@@ -116,10 +107,23 @@ extension View {
                     MacToolbarTitle(title: title, subtitle: subtitle)
                 }
                 .sharedBackgroundVisibility(.hidden)
+                ToolbarItem {
+                    RefreshButton()
+                }
             }
-            .macToolbarBackground()
         #else
         navigationTitle(title)
+        #endif
+    }
+
+    /// Titolo (e Aggiorna) di una pagina aperta da un'altra che su iOS non ha titolo, come il
+    /// dettaglio di una comunicazione: su macOS la barra resterebbe senza titolo e senza Aggiorna.
+    @ViewBuilder
+    func pushedPageTitle(_ title: String) -> some View {
+        #if os(macOS)
+        screenTitle(title)
+        #else
+        self
         #endif
     }
 
@@ -161,25 +165,6 @@ extension View {
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
-        #else
-        self
-        #endif
-    }
-
-    /// Barra della finestra sopra il contenuto con lo sfondo fisso della pagina. macOS 27, al
-    /// passaggio del cursore sulla barra, schiarisce (e sottolinea) la parte sopra ogni area
-    /// scorrevole che vi passa sotto: nelle pagine a due colonne solo sopra una delle due.
-    /// Qui il contenuto comincia appena sotto la barra, così nessuna area scorrevole la tocca,
-    /// e sotto la barra resta il colore della pagina. Vale solo per il contenuto, non per la
-    /// barra laterale.
-    func macToolbarBackground() -> some View {
-        #if os(macOS)
-        VStack(spacing: 0) {
-            Color.clear.frame(height: 1)
-            self
-        }
-        .background(Theme.background.ignoresSafeArea())
-        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         #else
         self
         #endif
