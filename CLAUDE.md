@@ -45,7 +45,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   anteprima, `-timetableMode list|calendar|day` sceglie la vista, `-BCWTimetableEditing YES` apre la modifica, `-BCWTimetableDay N` apre l'orario N giorni dopo oggi; i
   valori negativi non passano come argomenti, usare quelli positivi);
   le immagini finiscono in `~/Library/Containers/com.bcw-classeviva.app/Data/tmp/BCWSnapshots` (o in `-BCWSnapshotDir`
-  con un build senza sandbox) e l'app si chiude da sola.
+  con un build senza sandbox, `ENABLE_APP_SANDBOX=NO`) e l'app si chiude da sola. Per ogni immagine stampa anche gli
+  elementi della barra della finestra con la loro posizione (`BCWToolbar …`): con lo schermo bloccato le immagini escono
+  bianche, ma l'elenco resta affidabile.
 - Autotest dell'orario (solo DEBUG): `-BCWTimetableSelfTest YES` prova backup (esportazione, importazione, file,
   rifiuto di file non validi, riapertura da disco), modifiche estese agli eventi con lo stesso nome, generazione e
   passaggio dall'allineamento libero all'automatico;
@@ -58,10 +60,10 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - `BCW.xcodeproj` usa **cartelle sincronizzate** (objectVersion 77): i file in `BCW/` entrano nel target da soli.
 - **Un solo target multipiattaforma** (iOS + macOS nativo, non Catalyst; `SUPPORTED_PLATFORMS`, `SDKROOT = auto`).
   Su macOS: sandbox con rete in uscita e Calendario (impostazioni `ENABLE_*[sdk=macosx*]`).
-- Differenze tra piattaforme: `Utilities/Platform.swift` (`Platform.copy`, `screenTitle`, `.trailingBar`,
+- Differenze tra piattaforme: `Utilities/Platform.swift` (`Platform.copy`, `screenTitle`, `pushedPageTitle`, `.trailingBar`,
   `pagePadding`, `CardGrid` (anche `equalRowHeights`), `ChipRow`, `glassButton`, `PlatformNavigationStack`,
-  `SplitColumns`/`StackAware`, `sheetFrame`, `macToolbarBackground`, `localSearchable`/`LocalSearchField`,
-  `InlineProgress`, `CenteredCircle`, `pushedPageActions`, `UnobservedValue`). Usare questi invece di `#if` sparsi o di
+  `SplitColumns`/`StackAware`, `sheetFrame`, `localSearchable`/`LocalSearchField`,
+  `InlineProgress`, `CenteredCircle`, `UnobservedValue`). Usare questi invece di `#if` sparsi o di
   API UIKit/AppKit nelle viste.
 - iOS, ricerca: `.searchable` sta dentro la scheda Cerca (`SearchView`), con `Tab(role: .search)`. Con l'SDK di
   iOS 27 la scheda finirebbe dentro la barra e il campo in alto: da iOS 27 in poi `MainTabView` applica
@@ -91,32 +93,21 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   sistema e non sfumerebbero comunque).
 - macOS: `App/MacRootView.swift` (NavigationSplitView con `MacSection`, account in fondo alla barra laterale,
   `BCWCommands` per i menu Vai/Account e le scorciatoie, `MacNavigation` ricorda l'ultima sezione e tiene lo stato
-  della ricerca generale: campo `.searchable` sulla split view, sempre visibile a destra; selezionarlo o scrivere
-  apre `SearchView` nel dettaglio, `nav.show(_:)` torna a una sezione chiudendo la ricerca, ⌘F la attiva), finestra
-  `Window` singola + scena `Settings` (`MacSettingsView` a schede, con le stesse sezioni di `SettingsView`).
-  I titoli sono etichette in New York nella barra (`screenTitle`): applicarlo dopo `.toolbar` della pagina,
-  così resta il primo elemento. `.primaryAction` su macOS sta a sinistra: per il lato destro usare `.trailingBar`.
-  Distanziatore e Aggiorna (`macWindowActions`) stanno sulla pagina principale di ogni sezione; ogni pagina aperta da
-  un'altra (`NavigationLink`, `navigationDestination`) deve avere `.pushedPageActions()`, altrimenti sostituisce la
-  barra: Aggiorna sparisce e la ricerca va accanto al titolo. Agganciati alla finestra o alla pila (verificato)
-  restano, ma accanto al titolo. Con poco spazio il campo di ricerca diventa un'icona
-  che si espande premendola (come in Note): `SearchFieldCompaction` regola la soglia sotto cui `NSSearchToolbarItem`
-  diventa icona (proprietà non pubblica `minimumWidthForSearchFieldRepresentation`, di serie 160; con controllo
-  `responds(to:)`). Con le due colonne (dettaglio ≥ 780 punti) 260 punti; con una colonna la larghezza piena meno 1 e una
-  riserva invisibile di 65 punti (un quinto del campo) in `macWindowActions`, prima del distanziatore: il campo resta
-  esteso solo se è pieno e oltre a lui resta vuoto almeno un quinto della sua larghezza. La riserva ha priorità di
-  visibilità bassa (se manca posto esce lei, non un pulsante); se esce dalla barra viene ridotta a 1 punto
-  (`searchReserveIsTight`), altrimenti lo spazio avanzato finisce tra Aggiorna e l'icona; torna intera quando c'è posto.
-  Il suo `id` contiene la larghezza, così la barra la reinserisce. Durante la ricerca non c'è. Chiudendo la ricerca (Esc, clic altrove, scelta di una
-  sezione) la pagina torna solo 250 ms dopo che il campo ha perso il focus (`closeSearch`, `searchEndRequest`): se la
-  barra della pagina arriva mentre il campo è ancora aperto, AppKit la impagina con il campo largo e non la ricalcola più
-  (Aggiorna nell'overflow, lente in mezzo). Abbassare `preferredWidthForSearchField` non va: la lente non si apre più al
-  clic e il campo della ricerca resta minuscolo. Si prova con `-BCWSearch` e `-BCWClickSearch` (clic simulato sulla lente).
-  Verificato che NON funzionano:
-  `.searchToolbarBehavior(.minimize)` (non esiste su macOS), alzare `preferredWidthForSearchField` o priorità bassa del campo
-  (si stringe), `prefersCompactRepresentation` o una soglia enorme o pari alla larghezza massima (la lente resta in
-  mezzo allo spazio del campo), la riserva agganciata alla finestra (finisce prima del campo o prima del titolo).
-  Prima di pubblicare su App Store valutare se tenere la proprietà non pubblica.
+  della ricerca generale: campo `.searchable` sulla split view; selezionarlo o scrivere apre `SearchView` nel dettaglio,
+  `nav.show(_:)` torna a una sezione chiudendo la ricerca, ⌘F la attiva), finestra `Window` singola + scena `Settings`
+  (`MacSettingsView` a schede, con le stesse sezioni di `SettingsView`).
+- Barra della finestra su macOS, costruita in modo standard (niente colori, misure o allineamenti personalizzati):
+  titolo in New York a sinistra, pulsanti della pagina a destra, poi Aggiorna e infine la ricerca (che diventa
+  un'icona da sola quando manca spazio). Come è fatta:
+  - `screenTitle` mette il titolo (etichetta in New York in `.navigation`, il titolo di sistema è tolto) e Aggiorna.
+    Ogni pagina della finestra principale ce l'ha, comprese quelle aperte da un'altra (per quelle che su iOS non hanno
+    titolo c'è `pushedPageTitle`).
+  - La barra mette prima gli elementi dei modificatori più esterni (verificato): `screenTitle` va applicato prima
+    (più all'interno) del `.toolbar` della pagina, altrimenti Aggiorna finisce prima dei pulsanti della pagina.
+  - Il distanziatore flessibile tra titolo e pulsanti è nel `.toolbar` della `NavigationStack` del dettaglio
+    (esterno, quindi primo; resta anche nelle pagine aperte da un'altra). Togliendo il titolo di sistema SwiftUI non lo
+    mette più da solo e tutto finirebbe accanto al titolo.
+  - `.primaryAction` su macOS sta a sinistra: per il lato destro usare `.trailingBar` (`.automatic`).
   `project.yml` è un'alternativa per XcodeGen.
 - Icona: `Resources/AppIcon.icon` (Icon Composer, con varianti chiara/scura/tinta), la stessa per iOS e macOS;
   il nome corrisponde a `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`. Nel catalogo `Assets.xcassets` non c'è più
@@ -131,13 +122,10 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (scrutini, didattica, libri) non finiscono nel banner globale `lastError`; `Preferences` (UserDefaults); `GradeBook` (medie,
   andamento, voto necessario); `Reminders` (notifiche locali); `ArchiveModel` (anno precedente);
   `DemoServer.swift` (dati finti deterministici per "Prova la demo").
-- `Networking/Keychain.swift`: su macOS usa il Portachiavi moderno (data protection) se l'app ha l'autorizzazione
-  `application-identifier` (profilo di sviluppo), altrimenti quello di login; la scelta si fa all'avvio con una
-  cancellazione di prova. Senza autorizzazione cancellare e salvare rispondono `errSecMissingEntitlement` (-34018) ma
-  leggere risponde `errSecItemNotFound` (-25300): decidere solo al primo errore faceva sparire gli account a ogni
-  riavvio (verificato; l'app esportata con il team non ha il profilo). Le voci rimaste nel portachiavi di login
-  vengono spostate in quello moderno quando diventa disponibile. Prove: `-BCWKeychainService nome` (solo DEBUG) usa
-  un'altra voce e non tocca gli account veri.
+- `Networking/Keychain.swift`: su macOS usa il Portachiavi moderno (data protection) e ripiega su quello di login
+  se l'app non ha un profilo di provisioning (senza capacità che lo richiedano, nemmeno con il team impostato).
+  In lettura cerca sempre in entrambi: senza autorizzazione `SecItemCopyMatching` sul moderno risponde
+  `errSecItemNotFound`, non `errSecMissingEntitlement` (verificato; per questo a ogni avvio si doveva rientrare).
 - Orario: `Models/Timetable.swift` (modello `Codable` con decodifica tollerante, minuti dalla mezzanotte, giorni 1 = lunedì),
   `Store/TimetableStore.swift` (in `AppModel.timetable`, un JSON per account in Application Support/Timetable/<account>,
   file allegati in `Files`, cancellati quando nessuno li usa; la demo si cancella uscendo), `Store/TimetableGenerator.swift`,
@@ -204,23 +192,14 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   impilano): Dashboard (calendario + prossimi giorni | giorno, con lezioni in colonna a parte da 580 pt), Voti,
   dettaglio materia, Scrutini, Anni precedenti, Lezioni. Bacheca: elenco + dettaglio affiancati sopra 820 pt.
 - Elenchi di card in `CardGrid` (una colonna su iOS, griglia adattiva su Mac); filtri in `ChipRow` (a capo su Mac).
-- Dashboard su Mac: titolo grande nel contenuto (sopra il calendario); nella barra frecce/Oggi/Domani e il menu della
-  vista (senza "Vai a oggi"), che un distanziatore invisibile allinea al bordo destro della card del calendario
-  (`menuSpacer`, calcolato da Oggi/Domani e dal calendario in coordinate `.global`; zero sotto i 780 punti, perché
-  all'apertura `SplitColumns` mostra per un istante le due colonne e quella misura può arrivare in ritardo). NSToolbar non ridimensiona
-  bene un elemento che cambia larghezza (lo centra nel vecchio spazio e decide l'overflow su misure vecchie): il
-  distanziatore ha un `id` che cambia con la larghezza, così viene reinserito, e con le colonne impilate non c'è.
-  Non misurare elementi della barra che dipendono dal distanziatore: si creano cicli e i tasti finiscono nell'overflow.
+- Dashboard su Mac: il giorno scelto è il titolo nella barra, come nelle altre sezioni; a destra "Domani" (solo se il
+  giorno scelto non è domani, ⇧⌘T) e il menu della vista (con "Vai a oggi"), poi Aggiorna e la ricerca.
   "Nei prossimi giorni" cambia identità (`upcomingGeneration`) in `select(_:)`, insieme al giorno: su iOS sempre, su
   macOS solo se la sezione è espansa e il contenuto cambia davvero. L'identità non deve dipendere dallo stato
   compresso: comprimere sostituirebbe la sezione intera e l'intestazione scenderebbe e risalirebbe. La transizione
   usa lo spostamento del giorno scelto (`upcomingTransition`, `dayDetailHeight`): `.move(edge:)` sposta di tutta
   l'altezza della vista, troppo con la lista aperta e troppo poco con la sola intestazione.
-- Barra della finestra: `macToolbarBackground()` (in `screenTitle` e nella Dashboard) fa cominciare il contenuto 1 pt
-  sotto la barra, rende trasparente lo sfondo della barra e ci mette sotto `Theme.background`. Senza, macOS 27 schiarisce
-  e sottolinea la barra al passaggio del cursore sopra ogni area scorrevole che la tocca (con `SplitColumns` solo sopra
-  una colonna). Non usare `toolbarBackground(_:for: .windowToolbar)`: colora anche la barra laterale.
-  La schermata di accesso ha un elemento invisibile nella barra: senza barra i pulsanti a semaforo si spostano.
+- La schermata di accesso ha un elemento invisibile nella barra: senza barra i pulsanti a semaforo si spostano.
 - Pagine con ricerca propria (Bacheca, Agenda, Materiale): su Mac il campo è nel contenuto (`LocalSearchField`),
   perché nella barra c'è già quello generale.
 - `ContentUnavailableView` su macOS non si allarga: dentro uno stack aggiungere `.frame(maxWidth: .infinity)`.

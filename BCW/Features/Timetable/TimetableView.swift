@@ -58,13 +58,15 @@ struct TimetableView: View {
     var body: some View {
         PlatformNavigationStack {
             content
-                .toolbar { toolbar }
+                // `screenTitle` va prima del `.toolbar` della pagina: su macOS così Aggiorna resta
+                // dopo i pulsanti dell'orario, subito prima della ricerca.
                 #if os(macOS)
                 .screenTitle(isEditing ? "Modifica orario" : "Orario", subtitle: selectedDay.longDay)
                 #else
                 .screenTitle(isEditing ? "Modifica" : "Orario")
                 .inlineLargeTitleDisplay()
                 #endif
+                .toolbar { toolbar }
                 .sheet(item: $editor) { request in
                     TimetableEntryEditor(request: request)
                 }
@@ -153,7 +155,7 @@ struct TimetableView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         #if os(macOS)
-        ToolbarItemGroup(placement: .navigation) {
+        ToolbarItemGroup(placement: .trailingBar) {
             Button("Giorno precedente", systemImage: "chevron.left") { select(selectedDay.adding(days: mode == .day ? -7 : -1)) }
                 .keyboardShortcut(.leftArrow, modifiers: .command)
                 .help(mode == .day ? "Settimana precedente (⌘←)" : "Giorno precedente (⌘←)")
@@ -166,7 +168,7 @@ struct TimetableView: View {
                 .help("Vai a oggi (⌘T)")
         }
         if !isEditing {
-            ToolbarItem(placement: .navigation) {
+            ToolbarItem(placement: .trailingBar) {
                 Picker("Vista", selection: Bindable(model.preferences).timetableMode) {
                     ForEach(TimetableMode.allCases) { mode in
                         Label(mode == .day ? "Settimana" : mode.title, systemImage: mode.symbol).tag(mode)
@@ -177,7 +179,7 @@ struct TimetableView: View {
                 .help("Vista: lista, calendario o settimana")
             }
         }
-        ToolbarItemGroup(placement: .navigation) {
+        ToolbarItemGroup(placement: .trailingBar) {
             Button("Nuovo evento", systemImage: "plus") {
                 editor = TimetableEditorRequest(weekday: selectedDay.timetableWeekday)
             }
@@ -370,12 +372,10 @@ struct TimetableView: View {
                     .transition(.opacity)
             }
             .animation(.snappy, value: selectedDay)
-            .macToolbarBackground()
         case .day:
             MacWeekTimeline(selectedDay: daySelection, days: weekDays, actions: actions, isEditing: isEditing,
                             banner: { banner })
                 .animation(.snappy, value: isEditing)
-                .macToolbarBackground()
         }
     }
     #endif

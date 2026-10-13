@@ -156,6 +156,23 @@ enum DebugSnapshots {
         }
     }
 
+    /// Elementi della barra della finestra con la loro posizione: per controllare ordine e
+    /// allineamento anche quando la finestra non si può catturare (es. schermo bloccato).
+    private static func logToolbar(of window: NSWindow, label: String) {
+        guard let toolbar = window.toolbar else { return }
+        print("BCWToolbar \(label): finestra larga \(Int(window.frame.width))")
+        for item in toolbar.items {
+            let view = (item as? NSSearchToolbarItem)?.searchField ?? (item.value(forKey: "view") as? NSView)
+            var position = "fuori dalla barra"
+            if let view, view.window != nil, !view.isHiddenOrHasHiddenAncestor {
+                let frame = view.convert(view.bounds, to: nil)
+                position = "x \(Int(frame.minX))–\(Int(frame.maxX))"
+            }
+            let name = "\(item.itemIdentifier.rawValue) [\(item.label)] \(type(of: item))"
+            print("  \(name): \(position)")
+        }
+    }
+
     private static var mainWindow: NSWindow? {
         NSApp.windows.first { $0.isVisible && !($0 is NSPanel) && $0.contentView != nil }
     }
@@ -165,6 +182,7 @@ enum DebugSnapshots {
     /// `CGWindowListCreateImage` non è più esposta dall'SDK, ma per le finestre della
     /// propria app funziona senza il permesso di registrazione dello schermo.
     private static func capture(_ window: NSWindow, to url: URL) {
+        logToolbar(of: window, label: url.deletingPathExtension().lastPathComponent)
         guard let handle = dlopen(nil, RTLD_NOW),
               let symbol = dlsym(handle, "CGWindowListCreateImage") else { return }
         let function = unsafeBitCast(symbol, to: WindowImageFunction.self)

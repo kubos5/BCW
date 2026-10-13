@@ -37,13 +37,7 @@ struct SavedAccount: Codable, Identifiable, Equatable {
 }
 
 enum Keychain {
-    private static let service: String = {
-        #if DEBUG
-        // Per le prove: `-BCWKeychainService nome` usa un'altra voce e non tocca gli account veri.
-        if let test = UserDefaults.standard.string(forKey: "BCWKeychainService") { return test }
-        #endif
-        return "com.bcw.app.credentials"
-    }()
+    private static let service = "com.bcw.app.credentials"
     /// Voce usata dalle versioni con un solo account (migrata alla prima apertura).
     private static let legacyAccount = "classeviva"
     private static let accountsKey = "classeviva.accounts"
@@ -74,76 +68,62 @@ enum Keychain {
 
     // MARK: Primitive
 
-    #if os(macOS)
-    /// Su macOS si usa il Portachiavi "moderno", lo stesso di iOS, che però richiede l'autorizzazione
-    /// `application-identifier` (app firmata con un profilo di sviluppo). Senza, si usa il portachiavi
-    /// di login. Si capisce all'avvio con una cancellazione di prova: senza autorizzazione cancellare e
-    /// salvare rispondono `errSecMissingEntitlement`, mentre leggere risponde solo `errSecItemNotFound`
-    /// (verificato su macOS 27). Prima la scelta avveniva solo al primo salvataggio, quindi a ogni
-    /// avvio la lettura cercava nel Portachiavi moderno, non trovava gli account e l'app tornava alla
-    /// schermata di accesso.
-    private static let usesDataProtection: Bool = {
-        let probe: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: "probe",
-            kSecUseDataProtectionKeychain as String: true,
-        ]
-        return SecItemDelete(probe as CFDictionary) != errSecMissingEntitlement
-    }()
-    #endif
+    /// Portachiavi da usare, in ordine: `true` è quello "moderno" (data protection), lo stesso di
+    /// iOS. Su macOS richiede un'app firmata con un profilo di provisioning; senza, si usa il
+    /// portachiavi di login. Attenzione: senza autorizzazione `SecItemAdd` e `SecItemDelete`
+    /// rispondono `errSecMissingEntitlement`, ma `SecItemCopyMatching` risponde
+    /// `errSecItemNotFound` (verificato). Per questo in lettura si guardano sempre entrambi:
+    /// prima si ripiegava solo sull'errore di autorizzazione, la lettura non trovava l'account
+    /// salvato nel portachiavi di login e a ogni avvio si tornava alla schermata di accesso.
+    private static var stores: [Bool] {
+        #if os(macOS)
+        [true, false]
+        #else
+        [true]
+        #endif
+    }
 
-    /// - Parameter dataProtection: su macOS, se cercare nel Portachiavi moderno o in quello di login.
-    private static func query(_ account: String, dataProtection: Bool = true) -> [String: Any] {
+    private static func query(_ account: String, dataProtection: Bool) -> [String: Any] {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
         #if os(macOS)
-        if dataProtection && usesDataProtection { query[kSecUseDataProtectionKeychain as String] = true }
+        if dataProtection { query[kSecUseDataProtectionKeychain as String] = true }
         #endif
         return query
     }
 
+    /// Salva nel primo portachiavi che accetta la voce (e la toglie dagli altri).
     private static func write(_ data: Data, for account: String) {
         remove(account)
-        var item = query(account)
-        item[kSecValueData as String] = data
-        #if os(macOS)
-        if usesDataProtection {
-            item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        for dataProtection in stores {
+            var item = query(account, dataProtection: dataProtection)
+            item[kSecValueData as String] = data
+            if dataProtection {
+                item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            }
+            if SecItemAdd(item as CFDictionary, nil) == errSecSuccess { return }
         }
-        #else
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        #endif
-        SecItemAdd(item as CFDictionary, nil)
-    }
-
-    private static func copy(_ query: [String: Any]) -> Data? {
-        var search = query
-        search[kSecReturnData as String] = true
-        search[kSecMatchLimit as String] = kSecMatchLimitOne
-        var result: AnyObject?
-        guard SecItemCopyMatching(search as CFDictionary, &result) == errSecSuccess else { return nil }
-        return result as? Data
     }
 
     private static func read(_ account: String) -> Data? {
-        if let data = copy(query(account)) { return data }
-        #if os(macOS)
-        // Con il Portachiavi moderno disponibile, una voce rimasta in quello di login (salvata da
-        // una versione firmata senza autorizzazione) viene letta e spostata.
-        if usesDataProtection, let data = copy(query(account, dataProtection: false)) {
-            write(data, for: account)
-            SecItemDelete(query(account, dataProtection: false) as CFDictionary)
-            return data
+        for dataProtection in stores {
+            var search = query(account, dataProtection: dataProtection)
+            search[kSecReturnData as String] = true
+            search[kSecMatchLimit as String] = kSecMatchLimitOne
+            var result: AnyObject?
+            if SecItemCopyMatching(search as CFDictionary, &result) == errSecSuccess, let data = result as? Data {
+                return data
+            }
         }
-        #endif
         return nil
     }
 
     private static func remove(_ account: String) {
-        SecItemDelete(query(account) as CFDictionary)
+        for dataProtection in stores {
+            SecItemDelete(query(account, dataProtection: dataProtection) as CFDictionary)
+        }
     }
 }
