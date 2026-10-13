@@ -154,19 +154,18 @@ struct TimetableView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        #if os(macOS)
-        ToolbarItemGroup(placement: .trailingBar) {
-            Button("Giorno precedente", systemImage: "chevron.left") { select(selectedDay.adding(days: mode == .day ? -7 : -1)) }
-                .keyboardShortcut(.leftArrow, modifiers: .command)
-                .help(mode == .day ? "Settimana precedente (⌘←)" : "Giorno precedente (⌘←)")
-            Button("Giorno successivo", systemImage: "chevron.right") { select(selectedDay.adding(days: mode == .day ? 7 : 1)) }
-                .keyboardShortcut(.rightArrow, modifiers: .command)
-                .help(mode == .day ? "Settimana successiva (⌘→)" : "Giorno successivo (⌘→)")
-            Button("Oggi") { select(Date()) }
-                .keyboardShortcut("t")
-                .disabled(selectedDay.isToday)
-                .help("Vai a oggi (⌘T)")
+        // "Oggi" c'è solo se il giorno scelto non è oggi, come "Domani" nella Dashboard.
+        if !selectedDay.isToday {
+            ToolbarItem(placement: .trailingBar) {
+                Button("Oggi") { select(Date()) }
+                    #if os(macOS)
+                    .keyboardShortcut("t")
+                    .help("Vai a oggi (⌘T)")
+                    #endif
+            }
+            ToolbarSpacer(.fixed, placement: .trailingBar)
         }
+        #if os(macOS)
         if !isEditing {
             ToolbarItem(placement: .trailingBar) {
                 Picker("Vista", selection: Bindable(model.preferences).timetableMode) {
@@ -229,7 +228,6 @@ struct TimetableView: View {
                     Label(mode.title, systemImage: mode.symbol).tag(mode)
                 }
             }
-            Button("Vai a oggi", systemImage: "sun.max") { select(Date()) }
             #endif
             // Cambia ciò che mostra la lista: sta con la scelta della vista.
             Toggle("Mostra le verifiche", systemImage: "pencil.and.list.clipboard",

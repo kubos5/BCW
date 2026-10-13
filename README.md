@@ -73,7 +73,7 @@ BCW è anche un'app nativa per macOS (non Catalyst), con le stesse funzioni e lo
 - Voti con medie e andamento sempre visibili accanto all'elenco
 - Bacheca con elenco e comunicazione aperta affiancati, come in Mail
 - griglie di card per note, assenze, agenda, materiale, materie e libri
-- menu Vai e Account, scorciatoie da tastiera (⌘1…⌘9 per le sezioni, ⌘F per cercare, ⌘R per aggiornare, ⌘← ⌘→ ⌘T ⇧⌘T per spostarsi tra i giorni, ⌘N per un nuovo evento dell'orario)
+- menu Vai e Account, scorciatoie da tastiera (⌘1…⌘9 per le sezioni, ⌘F per cercare, ⌘R per aggiornare, ⇧⌘T per andare a domani nella Dashboard, ⌘T per tornare a oggi e ⌘N per un nuovo evento nell'Orario)
 - finestra Impostazioni (⌘,) a schede
 - le pagine si adattano alla larghezza della finestra: se è stretta, le colonne si impilano
 

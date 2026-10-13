@@ -185,6 +185,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   misurata (riduce oltre 140 punti dalla cima, riapre in cima e tirando in fondo con il dito, non scorrendo in su).
   `ScrollGeometry.containerSize` è già senza i margini (verificato). Il passaggio è una vista `Animatable`
   (`progress` 0–1) che interpola posizioni, rettangolo → cerchio e dissolvenze; si controlla registrando il simulatore.
+- Orario, barra: niente frecce per cambiare giorno; "Oggi" compare solo se il giorno scelto non è oggi (⌘T su Mac),
+  come "Domani" nella Dashboard.
 - Orario su Mac: Lista e Calendario con `SplitColumns` (settimana o mese + riepilogo della settimana | giorno); la
   vista Giorno (`MacWeekTimeline`) mostra tutta la settimana con gli eventi trascinabili anche tra i giorni.
   Fuori da uno scorrimento `WeekStrip` va con `.fixedSize(horizontal: false, vertical: true)`, altrimenti si allunga.
