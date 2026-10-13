@@ -64,7 +64,7 @@ struct YouView: View {
                     }
 
                     menuSection("App") {
-                        MenuRow(title: "Impostazioni", subtitle: "Medie, promemoria, sicurezza",
+                        MenuRow(title: "Impostazioni", subtitle: "Medie, orario, promemoria, backup",
                                 symbol: "gearshape", tint: Theme.secondaryInk) { SettingsView() }
                     }
 

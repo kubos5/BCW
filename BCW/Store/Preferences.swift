@@ -8,6 +8,33 @@ enum DashboardMode: String, CaseIterable, Identifiable {
     var symbol: String { self == .list ? "list.bullet" : "calendar" }
 }
 
+/// Vista della scheda Orario.
+enum TimetableMode: String, CaseIterable, Identifiable {
+    case list, calendar, day
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .list: "Lista"
+        case .calendar: "Calendario"
+        case .day: "Giorno"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .list: "list.bullet"
+        case .calendar: "calendar"
+        case .day: "calendar.day.timeline.left"
+        }
+    }
+
+    /// Viste disponibili: su iPhone la Calendario non c'è (il mese è già nella Dashboard).
+    static var available: [TimetableMode] {
+        Platform.isMac ? allCases : [.list, .day]
+    }
+}
+
 /// Quando abbreviare il titolo della Dashboard ("Giovedì 1 ottobre" → "Gio 1 ott").
 enum TitleAbbreviation: String, CaseIterable, Identifiable {
     case automatic, always, never
@@ -60,6 +87,9 @@ final class Preferences {
     var homeworkReminders: Bool { didSet { defaults.set(homeworkReminders, forKey: "homeworkReminders") } }
     var reminderHour: Int { didSet { defaults.set(reminderHour, forKey: "reminderHour") } }
     var dashboardMode: DashboardMode { didSet { defaults.set(dashboardMode.rawValue, forKey: "dashboardMode") } }
+    /// Verifiche nella vista Lista dell'orario (spente di serie).
+    var timetableShowsTests: Bool { didSet { defaults.set(timetableShowsTests, forKey: "timetableShowsTests") } }
+    var timetableMode: TimetableMode { didSet { defaults.set(timetableMode.rawValue, forKey: "timetableMode") } }
     var appearance: AppearanceMode { didSet { defaults.set(appearance.rawValue, forKey: "appearance") } }
     var hideCompletedHomework: Bool { didSet { defaults.set(hideCompletedHomework, forKey: "hideCompletedHomework") } }
     var showUpcomingDays: Bool { didSet { defaults.set(showUpcomingDays, forKey: "showUpcomingDays") } }
@@ -84,6 +114,8 @@ final class Preferences {
         let hour = defaults.integer(forKey: "reminderHour")
         reminderHour = hour == 0 ? 18 : hour
         dashboardMode = DashboardMode(rawValue: defaults.string(forKey: "dashboardMode") ?? "") ?? .list
+        timetableShowsTests = defaults.bool(forKey: "timetableShowsTests")
+        timetableMode = TimetableMode(rawValue: defaults.string(forKey: "timetableMode") ?? "") ?? .list
         appearance = AppearanceMode(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
         hideCompletedHomework = defaults.bool(forKey: "hideCompletedHomework")
         completedHomework = Set(defaults.array(forKey: "completedHomework") as? [Int] ?? [])

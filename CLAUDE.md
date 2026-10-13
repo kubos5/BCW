@@ -12,6 +12,17 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   del giorno, in una sezione separata da compiti ed eventi.
 - **Voti**: media generale + medie dei singoli periodi (trimestre/pentamestre, quadrimestri…); sotto, lista
   degli ultimi voti con info rilevanti, **espandibile** e **filtrabile per materia e periodo**.
+- **Orario** (scheda tra Dashboard e Voti): orario settimanale dell'utente in tre viste (Lista, Calendario,
+  Giorno), con note/file/verifiche per giorno o ricorrenza, verifiche automatiche da Classeviva (nascondibili),
+  modifiche estese agli eventi con lo stesso nome, gruppi di eventi uguali accostati, eventi contemporanei
+  affiancati, intervalli in primo piano, colori e
+  palette (anche su una serie di eventi di una giornata), bozza generata dalle lezioni con anteprima tratteggiata,
+  backup esportabile/importabile (due conferme) e iCloud segnato come Work in progress nelle Impostazioni.
+  "Modifica orario" (menu in alto a destra) apre la modifica grafica, sempre nella vista Giorno: spostare e
+  ridimensionare gli eventi, doppio tocco per crearli, tocco per l'editor. Lì si sceglie l'allineamento, che vale
+  per tutto l'orario (non solo per il trascinamento): automatico = eventi da 30/60 minuti alla mezz'ora (anche gli
+  orari inseriti a mano), libero = qualsiasi orario. Passando a automatico con eventi non allineati serve una
+  conferma, poi vengono allineati (quelli più lunghi di un'ora divisi in eventi uguali di seguito).
 - **Tu**: overview account + tutte le altre funzioni: bacheca, scrutini, assenze e ritardi, note disciplinari e
   annotazioni, file docenti (cartelle, filtrabili per docente), anno precedente, funzioni minori.
 - **UI**: componenti nativi per elementi base (pulsanti, nav bar **Liquid Glass** nativa); font **New York**
@@ -29,9 +40,16 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   avviare con `-demoMode YES -BCWSnapshot YES -BCWSections dashboard,grades -BCWSizes 1280x840,900x640`
   (facoltativi `-BCWSettings YES`, `-appearance light`, `-BCWDaysAgo 2`, `-BCWOpenNotice YES`, `-dashboardMode calendar`,
   `-BCWHover YES` per portare il puntatore sulla barra della finestra, `-BCWSearch testo` per aprire e chiudere la ricerca,
-  `-BCWOpenSubject YES` per aprire in Voti la materia con il nome più lungo, cioè una pagina aperta da un'altra);
+  `-BCWOpenSubject YES` per aprire in Voti la materia con il nome più lungo, cioè una pagina aperta da un'altra;
+  `-BCWTimetableDemo YES` crea l'orario della demo dalle lezioni se è vuoto, `-BCWTimetableDraft YES` lo mostra in
+  anteprima, `-timetableMode list|calendar|day` sceglie la vista, `-BCWTimetableEditing YES` apre la modifica, `-BCWTimetableDay N` apre l'orario N giorni dopo oggi; i
+  valori negativi non passano come argomenti, usare quelli positivi);
   le immagini finiscono in `~/Library/Containers/com.bcw-classeviva.app/Data/tmp/BCWSnapshots` (o in `-BCWSnapshotDir`
   con un build senza sandbox) e l'app si chiude da sola.
+- Autotest dell'orario (solo DEBUG): `-BCWTimetableSelfTest YES` prova backup (esportazione, importazione, file,
+  rifiuto di file non validi, riapertura da disco), modifiche estese agli eventi con lo stesso nome, generazione e
+  passaggio dall'allineamento libero all'automatico;
+  stampa `BCW-SELFTEST PASS/FAIL` ed esce. Si lancia l'eseguibile del Mac direttamente.
 - Simulatori: sono disponibili iOS 26.3 e iOS 27. Lo strumento del simulatore di Claude Code (tocchi, pressioni lunghe,
   screenshot) funziona con il simulatore acceso; per le animazioni registrare con `simctl io … recordVideo`. Quello di iOS 27 appena avviato satura la CPU per minuti e fa
   bloccare `simctl install/launch`: tenerne acceso uno alla volta.
@@ -50,7 +68,7 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `.tabViewSearchActivation(.searchTabSelection)` (verificato: torna il pulsante separato con il campo in basso;
   selezionando la scheda si apre subito la tastiera e la X riporta alla scheda precedente). `.searchable` sulla
   `TabView` invece mette il campo anche in Dashboard: non usarlo.
-- iOS, barra delle schede: tenendo premuta la scheda Tu si apre il popup degli account (`TabBarItemLongPress`, un
+- iOS, barra delle schede: tenendo premuta la scheda Tu (indice 3, dopo Dashboard, Orario, Voti) si apre il popup degli account (`TabBarItemLongPress`, un
   riconoscitore di pressione prolungata sulla `UITabBar` che risponde solo sopra quella scheda e, quando scatta,
   annulla i gesti della barra, altrimenti la scheda verrebbe selezionata). `Tab.contextMenu` su iPhone non fa nulla
   (verificato). Toccando di nuovo Dashboard (`MainTabView.tabSelection` riconosce il secondo tocco) si torna in
@@ -113,11 +131,35 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (scrutini, didattica, libri) non finiscono nel banner globale `lastError`; `Preferences` (UserDefaults); `GradeBook` (medie,
   andamento, voto necessario); `Reminders` (notifiche locali); `ArchiveModel` (anno precedente);
   `DemoServer.swift` (dati finti deterministici per "Prova la demo").
-- `Networking/Keychain.swift`: su macOS usa il Portachiavi moderno (data protection) e ripiega su quello di login
-  se l'app non è firmata con un team (`errSecMissingEntitlement`).
+- `Networking/Keychain.swift`: su macOS usa il Portachiavi moderno (data protection) se l'app ha l'autorizzazione
+  `application-identifier` (profilo di sviluppo), altrimenti quello di login; la scelta si fa all'avvio con una
+  cancellazione di prova. Senza autorizzazione cancellare e salvare rispondono `errSecMissingEntitlement` (-34018) ma
+  leggere risponde `errSecItemNotFound` (-25300): decidere solo al primo errore faceva sparire gli account a ogni
+  riavvio (verificato; l'app esportata con il team non ha il profilo). Le voci rimaste nel portachiavi di login
+  vengono spostate in quello moderno quando diventa disponibile. Prove: `-BCWKeychainService nome` (solo DEBUG) usa
+  un'altra voce e non tocca gli account veri.
+- Orario: `Models/Timetable.swift` (modello `Codable` con decodifica tollerante, minuti dalla mezzanotte, giorni 1 = lunedì),
+  `Store/TimetableStore.swift` (in `AppModel.timetable`, un JSON per account in Application Support/Timetable/<account>,
+  file allegati in `Files`, cancellati quando nessuno li usa; la demo si cancella uscendo), `Store/TimetableGenerator.swift`,
+  `Features/Timetable/`. L'allineamento automatico è una regola sui dati (`setAlignment` allinea gli eventi,
+  `TimetableAlignmentPicker` chiede conferma); anche la bozza generata viene allineata. Fuori dalla modalità di
+  modifica la vista Giorno è in sola lettura.
+  Nelle viste Lista/Calendario gli intervalli sono separatori di sfondo (`BreakRow`, linea ondulata `WavyLine`, come
+  "Libero · x min" ma con l'orario); le verifiche lì si vedono solo con `Preferences.timetableShowsTests` (spenta di
+  serie, in Impostazioni e nel menu dell'orario); nel dettaglio e nella vista Giorno si vedono sempre.
+  Gruppi di eventi uguali: `TimetableLayout(entries:splitAtBreaks:)`. Nelle viste Lista e Calendario
+  (`splitAtBreaks: true`, righe da `listItems`) un intervallo sul passaggio tra due eventi uguali li separa e va tra
+  i due; nella vista Giorno il gruppo resta unito e l'intervallo sta sopra.
+  Su macOS un testo con `fixedSize(horizontal: false, vertical: true)` fuori da uno scorrimento fa calcolare
+  un'altezza minima enorme (testo largo zero) e la finestra impagina tutto fuori posto: usare `lineLimit`.
+  Dentro `TimetableStore.mutate` non leggere `timetable` (accesso simultaneo → crash): calcolare prima ciò che serve.
+  Nella vista Giorno `contentShape` e gesti vanno prima di `.offset` (dopo valgono per la posizione di partenza);
+  su iPhone il trascinamento usa `LongPressDragRecognizer` (UIKit): quelli di SwiftUI perdevano contro lo scorrimento.
+  `fileImporter` chiude il selettore (e il suo `isPresented`) prima di consegnare i file: lo stato che serve dopo va
+  tenuto a parte. Su macOS i file scelti dall'utente richiedono `ENABLE_USER_SELECTED_FILES = readwrite`.
 - `Theme/Theme.swift`: palette (crema `#F7F2E8` / grafite `#1E1D1C`, accento `#A23E2F`), font New York anche
   nella UINavigationBar, modificatore `.card()`.
-- `Features/`: Dashboard, Grades, You (sottosezioni), Search, Settings, Login.
+- `Features/`: Dashboard, Timetable, Grades, You (sottosezioni), Search, Settings, Login.
 
 ## API Classeviva
 - Base `https://web.spaggiari.eu/rest/v1`, header `User-Agent: CVVS/std/4.2.3 Android/12`,
@@ -145,6 +187,19 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 
 ## Layout su macOS
 - Barra laterale al posto delle schede; "Tu" diventa un riepilogo (profilo, statistiche, riquadri delle sezioni).
+- Orario su iPhone: solo viste Lista e Giorno (`TimetableMode.available`; la Calendario resta su Mac e nella Dashboard).
+  La settimana (`TimetableWeekHeader`) galleggia sopra gli eventi in uno `ZStack`; lo scorrimento ha
+  `safeAreaPadding(.top)` pari all'altezza della settimana intera più ciò che galleggia sotto (bozza, modifica),
+  costante quando si riduce, così la pagina non salta e il titolo grande si comporta come nelle altre schede.
+  Si riduce a una striscia di numeri seguendo la barra delle schede (`FloatingHeaderCollapse`): `UITabBar._isMinimized`
+  non si può usare ("This can only be called by an approved app", l'app si chiude), quindi si guarda quale dei due
+  `_UITabBarPlatterView` è visibile (il ridotto è il più stretto); se la struttura cambia vale una regola di riserva
+  misurata (riduce oltre 140 punti dalla cima, riapre in cima e tirando in fondo con il dito, non scorrendo in su).
+  `ScrollGeometry.containerSize` è già senza i margini (verificato). Il passaggio è una vista `Animatable`
+  (`progress` 0–1) che interpola posizioni, rettangolo → cerchio e dissolvenze; si controlla registrando il simulatore.
+- Orario su Mac: Lista e Calendario con `SplitColumns` (settimana o mese + riepilogo della settimana | giorno); la
+  vista Giorno (`MacWeekTimeline`) mostra tutta la settimana con gli eventi trascinabili anche tra i giorni.
+  Fuori da uno scorrimento `WeekStrip` va con `.fixedSize(horizontal: false, vertical: true)`, altrimenti si allunga.
 - Pagine a due colonne con `SplitColumns` (laterale fissa + principale, scorrimento separato; sotto ~780 pt si
   impilano): Dashboard (calendario + prossimi giorni | giorno, con lezioni in colonna a parte da 580 pt), Voti,
   dettaglio materia, Scrutini, Anni precedenti, Lezioni. Bacheca: elenco + dettaglio affiancati sopra 820 pt.

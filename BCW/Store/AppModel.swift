@@ -16,6 +16,8 @@ final class AppModel {
     private(set) var isDemo = false
     private(set) var client: ClassevivaClient?
     let preferences = Preferences()
+    /// Orario settimanale dell'account attivo (salvato solo sul dispositivo).
+    let timetable = TimetableStore()
 
     // Account salvati
     private(set) var accounts: [SavedAccount] = []
@@ -191,6 +193,7 @@ final class AppModel {
         activeAccountID = account.id
         UserDefaults.standard.set(account.id, forKey: Self.activeAccountKey)
         loginName = account.name
+        timetable.load(owner: account.id)
         client = ClassevivaClient(transport: URLSessionTransport(baseURL: ClassevivaClient.officialBaseURL),
                                   cacheNamespace: "live-\(account.id)", credentials: account.credentials)
         loadFromCache()
@@ -219,6 +222,7 @@ final class AppModel {
         resetData()
         isDemo = true
         UserDefaults.standard.set(true, forKey: Self.demoKey)
+        timetable.load(owner: "demo")
         client = ClassevivaClient(transport: DemoTransport(), cacheNamespace: "demo",
                                   credentials: Credentials(username: "demo", password: "demo"))
         withAnimation { phase = .signedIn }
@@ -250,6 +254,9 @@ final class AppModel {
     private func leaveDemo() {
         resetData()
         removeCaches(owner: "demo")
+        // L'orario della demo è di prova: uscendo si cancella come il resto.
+        timetable.load(owner: nil)
+        TimetableStore.removeData(owner: "demo")
         UserDefaults.standard.set(false, forKey: Self.demoKey)
         isDemo = false
     }
@@ -283,6 +290,7 @@ final class AppModel {
     private func endSession() {
         resetData()
         activeAccountID = nil
+        timetable.load(owner: nil)
         UserDefaults.standard.removeObject(forKey: Self.activeAccountKey)
         Task { await Reminders.reschedule(events: [], hour: 18, enabled: false, completed: []) }
         withAnimation { phase = .signedOut }

@@ -9,6 +9,9 @@ struct BCWApp: App {
 
     init() {
         Theme.configureAppearance()
+        #if DEBUG
+        TimetableSelfTest.runIfRequested()
+        #endif
     }
 
     var body: some Scene {
@@ -115,14 +118,18 @@ struct MainTabView: View {
     @State private var searchQuery = ""
     /// Incrementato toccando la scheda Dashboard quando è già quella aperta.
     @State private var dashboardReselection = 0
+    @State private var timetableReselection = 0
     @State private var switchingAccount = false
 
-    enum AppTab: Hashable { case dashboard, grades, you, search }
+    enum AppTab: Hashable { case dashboard, timetable, grades, you, search }
 
     var body: some View {
         TabView(selection: tabSelection) {
             Tab("Dashboard", systemImage: "calendar.day.timeline.left", value: AppTab.dashboard) {
                 DashboardView(reselection: dashboardReselection)
+            }
+            Tab("Orario", systemImage: "tablecells", value: AppTab.timetable) {
+                TimetableView(reselection: timetableReselection)
             }
             Tab("Voti", systemImage: "chart.line.uptrend.xyaxis", value: AppTab.grades) {
                 GradesView()
@@ -139,7 +146,7 @@ struct MainTabView: View {
         .tabBarMinimizeBehavior(.onScrollDown)
         // Tenendo premuta la scheda Tu si cambia account al volo.
         .background {
-            TabBarItemLongPress(index: 2) { switchingAccount = true }
+            TabBarItemLongPress(index: 3) { switchingAccount = true }
         }
         .sheet(isPresented: $switchingAccount) {
             AccountSwitcherSheet()
@@ -152,6 +159,7 @@ struct MainTabView: View {
             selection
         } set: { tab in
             if tab == selection, tab == .dashboard { dashboardReselection += 1 }
+            if tab == selection, tab == .timetable { timetableReselection += 1 }
             selection = tab
         }
     }

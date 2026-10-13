@@ -45,6 +45,23 @@ BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 - riepilogo per periodo con le insufficienze
 - conto alla rovescia alle prossime vacanze
 
+### Orario
+
+La scheda Orario contiene l'orario settimanale, che si compila a mano o si genera dalle lezioni registrate:
+
+- tre viste: Lista (la settimana in alto e gli eventi del giorno sotto), Calendario (il mese in alto e gli eventi del giorno sotto) e Giorno (le ore della giornata, come nell'app Calendario)
+- toccando un evento si vedono i dettagli e si aggiungono note, file e foto, per un solo giorno o per ogni settimana
+- le verifiche segnate dai docenti su Classeviva compaiono da sole sulla lezione della materia e si possono nascondere; altre verifiche si segnano a mano, per un giorno o per ogni settimana
+- modificando un evento si può applicare la modifica a tutti quelli con lo stesso nome
+- gli eventi uguali di seguito (es. due ore di matematica) sono uniti in un gruppo, quelli contemporanei sono affiancati
+- intervalli che nella vista Giorno stanno sopra le lezioni senza cambiarne la durata e nella vista Lista sono un separatore ondulato con l'orario
+- le verifiche nella vista Lista si mostrano solo attivando "Mostra le verifiche" (Impostazioni o menu dell'orario)
+- modalità Modifica orario (dal menu in alto a destra), nella vista Giorno: gli eventi si spostano tenendoli premuti e trascinandoli, si allungano dal bordo inferiore, se ne crea uno nuovo toccando due volte un'ora vuota e toccandoli si modificano gli orari a mano
+- allineamento dell'orario, scelto in Modifica orario: automatico (eventi da 30 minuti o un'ora, alla mezz'ora, anche inserendo gli orari a mano) o libero (qualsiasi orario e durata); passando all'automatico gli eventi non allineati vengono allineati dopo una conferma; gli intervalli si posizionano sempre liberamente
+- colori: quelli delle lezioni, colori personalizzati salvati, colori presi dalle palette (anche personalizzate) oppure una palette a sfumatura applicata a una serie di eventi di una giornata
+- generazione automatica di una bozza dell'orario dalle lezioni registrate, mostrata in anteprima con i bordi tratteggiati prima di applicarla
+- backup dell'orario da esportare e reimportare dalle Impostazioni (con file allegati); la sincronizzazione con iCloud è in lavorazione
+
 ### Su Mac
 
 BCW è anche un'app nativa per macOS (non Catalyst), con le stesse funzioni e lo stesso design dell'app per iPhone, ma con un layout pensato per lo schermo grande:
@@ -52,10 +69,11 @@ BCW è anche un'app nativa per macOS (non Catalyst), con le stesse funzioni e lo
 - barra laterale con tutte le sezioni (Dashboard, Voti, Tu, Bacheca, Note, Scrutini, Assenze, Didattica…) e i contatori delle cose da leggere o giustificare
 - ricerca sempre a portata di mano nel campo in alto a destra (⌘F), che diventa un'icona se la finestra è stretta
 - Dashboard a colonne: calendario e prossimi giorni a sinistra, il giorno scelto a destra, con le lezioni in una colonna a parte
+- Orario a colonne: calendario e riepilogo della settimana a sinistra, il giorno scelto a destra; la vista Giorno mostra l'intera settimana e, in Modifica orario, gli eventi si trascinano anche da un giorno all'altro
 - Voti con medie e andamento sempre visibili accanto all'elenco
 - Bacheca con elenco e comunicazione aperta affiancati, come in Mail
 - griglie di card per note, assenze, agenda, materiale, materie e libri
-- menu Vai e Account, scorciatoie da tastiera (⌘1…⌘9 per le sezioni, ⌘F per cercare, ⌘R per aggiornare, ⌘← ⌘→ ⌘T ⇧⌘T per spostarsi tra i giorni)
+- menu Vai e Account, scorciatoie da tastiera (⌘1…⌘9 per le sezioni, ⌘F per cercare, ⌘R per aggiornare, ⌘← ⌘→ ⌘T ⇧⌘T per spostarsi tra i giorni, ⌘N per un nuovo evento dell'orario)
 - finestra Impostazioni (⌘,) a schede
 - le pagine si adattano alla larghezza della finestra: se è stretta, le colonne si impilano
 
@@ -79,6 +97,7 @@ BCW usa le stesse API REST usate dall'app ufficiale di Classeviva (`https://web.
 
 Le credenziali sono salvate solo nel Portachiavi del dispositivo e inviate esclusivamente ai server di Classeviva.
 Le risposte vengono salvate nella cache dell'app per l'uso offline.
+L'orario è salvato solo sul dispositivo, separato per ogni account.
 
 Per gli anni precedenti l'app scarica le pagelle dall'archivio di Classeviva (`webYY.spaggiari.eu`, es. `web25` per il 2025/26).
 Voti, assenze e note degli anni passati non sono disponibili tramite le API, quindi l'app apre il sito di Classeviva in un browser integrato (su Mac nel browser predefinito).
@@ -90,11 +109,11 @@ BCW/
 ├── App/            Entry point, tab bar (iOS), finestra con barra laterale e menu (macOS), blocco biometrico
 ├── Networking/     Client Classeviva, cache su disco, Portachiavi
 ├── Models/         Modelli decodificati in modo tollerante
-├── Store/          Stato dell'app, calcolo medie, preferenze, promemoria, server demo
+├── Store/          Stato dell'app, orario e sua generazione, calcolo medie, preferenze, promemoria, server demo
 ├── Theme/          Colori, font e stili
 ├── Utilities/      Date, decodifica e adattatori tra iOS e macOS
 ├── Components/     Componenti riutilizzabili (card, badge voto, anelli, righe agenda…)
-└── Features/       Dashboard, Voti, Tu (e sottosezioni), Cerca, Impostazioni, Login
+└── Features/       Dashboard, Orario, Voti, Tu (e sottosezioni), Cerca, Impostazioni, Login
 ```
 
 ---
