@@ -5,7 +5,7 @@ import SwiftUI
 /// stanno dentro "Tu", così ogni funzione è a un clic di distanza. La ricerca non è una
 /// sezione: è il campo sempre visibile nella barra della finestra.
 enum MacSection: String, CaseIterable, Identifiable {
-    case dashboard, grades, you
+    case dashboard, timetable, grades, you
     case noticeboard, notes
     case reports, previousYears
     case absences
@@ -16,6 +16,7 @@ enum MacSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .dashboard: "Dashboard"
+        case .timetable: "Orario"
         case .grades: "Voti"
         case .you: "Tu"
         case .noticeboard: "Bacheca"
@@ -35,6 +36,7 @@ enum MacSection: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .dashboard: "calendar.day.timeline.left"
+        case .timetable: "tablecells"
         case .grades: "chart.line.uptrend.xyaxis"
         case .you: "person.crop.circle"
         case .noticeboard: "megaphone"
@@ -54,7 +56,7 @@ enum MacSection: String, CaseIterable, Identifiable {
     /// Stessi colori delle righe di "Tu" su iOS.
     var tint: Color {
         switch self {
-        case .dashboard, .grades, .you, .noticeboard: Theme.accent
+        case .dashboard, .timetable, .grades, .you, .noticeboard: Theme.accent
         case .notes: Theme.poor
         case .reports: Theme.neutral
         case .previousYears: Theme.secondaryInk
@@ -71,20 +73,20 @@ enum MacSection: String, CaseIterable, Identifiable {
     var shortcut: KeyEquivalent? {
         switch self {
         case .dashboard: "1"
-        case .grades: "2"
-        case .you: "3"
-        case .noticeboard: "4"
-        case .notes: "5"
-        case .absences: "6"
-        case .agenda: "7"
-        case .didactics: "8"
-        case .lessons: "9"
+        case .timetable: "2"
+        case .grades: "3"
+        case .you: "4"
+        case .noticeboard: "5"
+        case .notes: "6"
+        case .absences: "7"
+        case .agenda: "8"
+        case .didactics: "9"
         default: nil
         }
     }
 
     static let groups: [(title: String?, sections: [MacSection])] = [
-        (nil, [.dashboard, .grades, .you]),
+        (nil, [.dashboard, .timetable, .grades, .you]),
         ("Comunicazioni", [.noticeboard, .notes]),
         ("Valutazioni", [.reports, .previousYears]),
         ("Frequenza", [.absences]),
@@ -236,6 +238,7 @@ private struct MacDetailView: View {
     private var content: some View {
         switch section {
         case .dashboard: DashboardView()
+        case .timetable: TimetableView()
         case .grades: GradesView()
         case .you: YouView()
         case .noticeboard: NoticeboardView()

@@ -6,6 +6,7 @@ struct SettingsView: View {
             GradeSettingsSection()
             NotificationSettingsSection()
             DashboardSettingsSection()
+            TimetableSettingsSection()
             AppearanceSettingsSection()
             DataSettingsSection()
             AboutSettingsSection()
@@ -174,7 +175,7 @@ struct AboutSettingsSection: View {
 #if os(macOS)
 /// Finestra Impostazioni di macOS (⌘,): le stesse sezioni di iOS, divise in schede.
 struct MacSettingsView: View {
-    enum Pane: Hashable { case general, grades, dashboard, notifications, accounts }
+    enum Pane: Hashable { case general, grades, dashboard, timetable, notifications, accounts }
     @State private var pane: Pane = .general
 
     var body: some View {
@@ -191,6 +192,9 @@ struct MacSettingsView: View {
             }
             Tab("Dashboard", systemImage: "calendar.day.timeline.left", value: .dashboard) {
                 settingsForm { DashboardSettingsSection() }
+            }
+            Tab("Orario", systemImage: "tablecells", value: .timetable) {
+                settingsForm { TimetableSettingsSection() }
             }
             Tab("Notifiche", systemImage: "bell.badge", value: .notifications) {
                 settingsForm { NotificationSettingsSection() }
