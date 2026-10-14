@@ -416,6 +416,12 @@ struct StackAware<Content: View>: View {
 /// Pagina a due colonne per macOS: una colonna laterale stretta e una principale, ognuna
 /// con il proprio scorrimento, così la colonna laterale resta visibile mentre si legge.
 /// Se la finestra è troppo stretta le colonne si impilano come su iPhone.
+///
+/// Ridimensionando la finestra conta solo il passaggio da affiancate a impilate (`stacked`, non
+/// la larghezza, che cambierebbe a ogni fotogramma ricalcolando tutta la pagina), con un po' di
+/// isteresi. Misurato
+/// (`-BCWResizeBench`): tenere la colonna principale nello stesso scorrimento e spostare solo la
+/// laterale è molto più lento al passaggio (~400 ms contro ~70) che ricostruire le due strutture.
 struct SplitColumns<Side: View, Main: View>: View {
     var sideWidth: CGFloat = 340
     /// Larghezza minima della pagina per affiancare le colonne.
@@ -423,11 +429,11 @@ struct SplitColumns<Side: View, Main: View>: View {
     var spacing: CGFloat = 20
     @ViewBuilder let side: () -> Side
     @ViewBuilder let main: () -> Main
-    @State private var width: CGFloat = 1000
+    @State private var stacked = false
 
     var body: some View {
         Group {
-            if width >= minWidth {
+            if !stacked {
                 HStack(alignment: .top, spacing: 0) {
                     ScrollView {
                         VStack(alignment: .leading, spacing: spacing) { side() }
@@ -464,7 +470,15 @@ struct SplitColumns<Side: View, Main: View>: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .themedBackground()
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        // Con un margine di 12 punti intorno alla soglia, così trascinando il bordo lì vicino le
+        // colonne non passano avanti e indietro (ogni passaggio ricostruisce la pagina).
+        .onGeometryChange(for: Int.self) { geometry in
+            let width = geometry.size.width
+            return width < minWidth - 12 ? 0 : (width >= minWidth + 12 ? 2 : 1)
+        } action: { band in
+            if band == 0, !stacked { stacked = true }
+            if band == 2, stacked { stacked = false }
+        }
     }
 }
 #endif

@@ -61,7 +61,11 @@ struct DashboardView: View {
     var body: some View {
         PlatformNavigationStack {
             content
+                #if os(iOS)
+                // Solo per abbreviare il titolo su iPhone: su Mac ricalcolerebbe la pagina a ogni
+                // fotogramma mentre si ridimensiona la finestra.
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { barWidth = $0 }
+                #endif
                 .refreshable { await model.refreshAll() }
                 .screenTitle(title)
                 .inlineLargeTitleDisplay()

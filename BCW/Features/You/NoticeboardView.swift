@@ -22,10 +22,11 @@ struct NoticeboardView: View {
 
     /// Su macOS, comunicazione aperta nel pannello di destra.
     @State private var selection: Notice.ID?
-    @State private var width: CGFloat = 1000
+    /// Solo il passaggio conta (la larghezza cambierebbe a ogni fotogramma).
+    @State private var isWide = true
 
     /// Elenco e dettaglio affiancati, come in Mail (solo su macOS e se c'è spazio).
-    private var isSplit: Bool { Platform.isMac && width >= 820 }
+    private var isSplit: Bool { Platform.isMac && isWide }
 
     var body: some View {
         Group {
@@ -40,7 +41,7 @@ struct NoticeboardView: View {
             }
         }
         .themedBackground()
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onGeometryChange(for: Bool.self) { $0.size.width >= 820 } action: { isWide = $0 }
         #if DEBUG
         .onAppear {
             // Per gli screenshot di sviluppo: `-BCWOpenNotice YES` apre la prima comunicazione.

@@ -212,9 +212,148 @@ private struct TabBarFinder: UIViewRepresentable {
     }
 }
 
+/// Settimana della vista Lista su iPhone, legata allo scorrimento: in cima è intera e, scorrendo,
+/// il suo lato inferiore segue gli eventi finché non è ridotta del tutto (dopo `range` punti);
+/// da lì resta ferma in alto. Lo scorrimento si ferma volentieri solo in cima o dove la settimana è
+/// appena ridotta (`WeekHeaderSnap`), con resistenza tra le due posizioni (`ScrollResistance`); più
+/// in basso scorre normalmente. Toccata da ridotta torna intera finché non si riprende a scorrere.
+/// L'avanzamento si legge solo nella settimana (`progress`): il resto della pagina non si ricalcola
+/// a ogni fotogramma.
+@Observable
+final class WeekHeaderScroll {
+    static let range = TimetableWeekHeader.expandedHeight - TimetableWeekHeader.collapsedHeight
+    /// Tratto da scorrere, con la settimana riaperta a mano, prima che torni ridotta.
+    static let resumeDistance: CGFloat = 20
+
+    /// Avanzamento dato dallo scorrimento: 0 in cima, 1 dopo `range` punti.
+    private(set) var scrollProgress: CGFloat = 0
+    /// Riaperta toccandola: resta intera finché non si riprende a scorrere.
+    private(set) var isForcedOpen = false
+
+    var progress: CGFloat { isForcedOpen ? 0 : scrollProgress }
+
+    @ObservationIgnored private var lastOffset: CGFloat = 0
+    @ObservationIgnored private var moved: CGFloat = 0
+    @ObservationIgnored fileprivate var phase: ScrollPhase = .idle
+
+    fileprivate func update(offset: CGFloat) {
+        let delta = offset - lastOffset
+        lastOffset = offset
+        let progress = min(max(offset / Self.range, 0), 1)
+        if progress != scrollProgress { scrollProgress = progress }
+        guard isForcedOpen, phase.isScrolling, phase != .animating else { return }
+        moved += abs(delta)
+        if moved >= Self.resumeDistance { close() }
+    }
+
+    /// Riapre la settimana ridotta (tocco sulla striscia).
+    func open() {
+        guard !isForcedOpen, scrollProgress > 0 else { return }
+        moved = 0
+        withAnimation(FloatingHeaderCollapse.animation) { isForcedOpen = true }
+    }
+
+    /// Torna a seguire lo scorrimento.
+    func close() {
+        guard isForcedOpen else { return }
+        moved = 0
+        withAnimation(FloatingHeaderCollapse.animation) { isForcedOpen = false }
+    }
+
+    /// Da applicare allo scorrimento degli eventi.
+    struct Tracking: ViewModifier {
+        let state: WeekHeaderScroll
+
+        func body(content: Content) -> some View {
+            content
+                .scrollTargetBehavior(WeekHeaderSnap(range: WeekHeaderScroll.range))
+                .onScrollPhaseChange { _, phase in state.phase = phase }
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.contentOffset.y + geometry.contentInsets.top
+                } action: { _, offset in
+                    state.update(offset: offset)
+                }
+        }
+    }
+}
+
+/// Fine dello scorrimento con la settimana a metà: si va in cima o dove è appena ridotta, verso la
+/// più vicina, ma con un po' di isteresi (dalla cima serve superare il 60% del tratto, da ridotta
+/// risalire oltre il 60%). Oltre il tratto lo scorrimento non cambia.
+struct WeekHeaderSnap: ScrollTargetBehavior {
+    let range: CGFloat
+
+    func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
+        // Coordinate già senza il margine della settimana (verificato): 0 è la cima.
+        let y = target.rect.minY
+        let maxOffset = context.contentSize.height - context.containerSize.height
+        guard y > 0, y < range, maxOffset >= range else { return }
+        let start = context.originalTarget.rect.minY
+        let threshold: CGFloat = start <= 1 ? 0.6 : (abs(start - range) <= 1 ? 0.4 : 0.5)
+        target.rect.origin.y = y / range > threshold ? range : 0
+    }
+}
+
+/// Resistenza trascinando tra la cima e la settimana ridotta: lì il contenuto segue il dito a metà
+/// velocità. Lo scorrimento di SwiftUI non lo permette: si osserva lo `UIScrollView` sottostante e,
+/// mentre l'utente trascina, si riduce ogni spostamento che cade nel tratto.
+/// Va messa nello sfondo del contenuto dello scorrimento (dentro lo `UIScrollView`).
+struct ScrollResistance: UIViewRepresentable {
+    let range: CGFloat
+
+    final class Coordinator: NSObject {
+        let range: CGFloat
+        weak var scrollView: UIScrollView?
+        var observation: NSKeyValueObservation?
+        var adjusting = false
+
+        init(range: CGFloat) { self.range = range }
+
+        func attach(to scrollView: UIScrollView) {
+            guard self.scrollView !== scrollView else { return }
+            self.scrollView = scrollView
+            observation = scrollView.observe(\.contentOffset, options: [.old, .new]) { [weak self] view, change in
+                guard let old = change.oldValue, let new = change.newValue else { return }
+                MainActor.assumeIsolated { self?.resist(view, old: old.y, new: new.y) }
+            }
+        }
+
+        private func resist(_ view: UIScrollView, old: CGFloat, new: CGFloat) {
+            guard !adjusting, view.isTracking, old != new else { return }
+            let top = -view.adjustedContentInset.top
+            // Parte dello spostamento che cade nel tratto [cima, cima + range].
+            let low = max(min(old, new), top), high = min(max(old, new), top + range)
+            guard high > low else { return }
+            let damped = (high - low) * 0.5
+            adjusting = true
+            view.contentOffset.y = new - (new > old ? damped : -damped)
+            adjusting = false
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(range: range) }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.isUserInteractionEnabled = false
+        view.isHidden = true
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        let coordinator = context.coordinator
+        DispatchQueue.main.async {
+            var current = view.superview
+            while let candidate = current, !(candidate is UIScrollView) { current = candidate.superview }
+            if let scrollView = current as? UIScrollView { coordinator.attach(to: scrollView) }
+        }
+    }
+}
+
 /// La settimana dell'orario su iPhone: una card che galleggia sopra gli eventi. Scorrendo si
-/// riduce a una striscia con i soli numeri dei giorni (`FloatingHeaderCollapse`); toccandola
-/// torna intera. Il passaggio è animato elemento per elemento (`progress` va da 0, intera, a 1,
+/// riduce a una striscia con i soli numeri dei giorni (nella vista Lista seguendo lo scorrimento,
+/// `WeekHeaderScroll`; nella vista Giorno insieme alla barra delle schede, `FloatingHeaderCollapse`);
+/// toccandola torna intera. Il passaggio è animato elemento per elemento (`progress` va da 0, intera, a 1,
 /// ridotta): i numeri salgono al centro della striscia, il rettangolo del giorno scelto diventa
 /// un cerchio intorno al suo numero, la riga del mese, le iniziali dei giorni e i pallini
 /// scompaiono salendo, e la card diventa una capsula.
@@ -222,6 +361,8 @@ struct TimetableWeekHeader: View, Animatable {
     @Environment(AppModel.self) private var model
     @Binding var selectedDay: Date
     var progress: CGFloat
+    /// Avanzamento richiesto (`progress` cambia durante le animazioni).
+    let target: CGFloat
     let isCollapsed: Bool
     let onExpand: () -> Void
     /// Settimana mostrata (inizio settimana): segue lo scorrimento orizzontale a pagine.
@@ -238,10 +379,14 @@ struct TimetableWeekHeader: View, Animatable {
         set { progress = newValue }
     }
 
-    init(selectedDay: Binding<Date>, isCollapsed: Bool, onExpand: @escaping () -> Void) {
+    /// Posizione di riposo per il feedback aptico: vibra arrivando intera o ridotta.
+    private enum Detent { case expanded, between, collapsed }
+
+    init(selectedDay: Binding<Date>, progress: CGFloat, onExpand: @escaping () -> Void) {
         _selectedDay = selectedDay
-        progress = isCollapsed ? 1 : 0
-        self.isCollapsed = isCollapsed
+        self.progress = progress
+        target = progress
+        isCollapsed = progress >= 1
         self.onExpand = onExpand
         _visibleWeek = State(initialValue: Self.week(containing: selectedDay.wrappedValue))
     }
@@ -308,7 +453,11 @@ struct TimetableWeekHeader: View, Animatable {
             }
         }
         .sensoryFeedback(.selection, trigger: selectedDay)
-        .sensoryFeedback(.impact(weight: .light), trigger: isCollapsed)
+        .sensoryFeedback(.impact(weight: .light), trigger: detent) { _, new in new != .between }
+    }
+
+    private var detent: Detent {
+        isCollapsed ? .collapsed : (target <= 0 ? .expanded : .between)
     }
 
     private var monthRow: some View {

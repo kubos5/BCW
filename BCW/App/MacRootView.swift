@@ -134,6 +134,8 @@ struct MacRootView: View {
     @Environment(\.openSettings) private var openSettings
     #endif
     @FocusState private var searchFocused: Bool
+    /// Nella pagina c'è contenuto che scorre sotto la barra della finestra.
+    @State private var barScrolled = false
 
     var body: some View {
         @Bindable var nav = nav
@@ -149,6 +151,14 @@ struct MacRootView: View {
             // anche per le pagine aperte da un'altra.
             .toolbar {
                 ToolbarSpacer(.flexible)
+            }
+            // Barra trasparente finché il contenuto non le scorre sotto; poi più chiara,
+            // semitrasparente e sfocata, come nelle app di Apple (`WindowBarScrollObserver`).
+            .toolbarBackgroundVisibility(barScrolled ? .automatic : .hidden, for: .windowToolbar)
+            .background {
+                WindowBarScrollObserver(page: "\(nav.isSearching)-\(nav.section.rawValue)") { scrolled in
+                    if barScrolled != scrolled { barScrolled = scrolled }
+                }
             }
             // Cambiando sezione (o aprendo la ricerca) si riparte dalla pagina principale.
             .id(nav.isSearching ? "ricerca" : nav.section.rawValue)
@@ -195,6 +205,88 @@ struct MacRootView: View {
 
     private var signOutTitle: String {
         model.isDemo ? "Vuoi uscire dalla demo?" : "Vuoi uscire da \(model.displayName)?"
+    }
+}
+
+/// Osserva gli scorrimenti della pagina (non della barra laterale) e dice se qualcuno è scorso
+/// sotto la barra della finestra. Di serie la barra di macOS ha sempre il suo sfondo (con la riga
+/// sotto), anche con la pagina in cima: verificato anche con un'app SwiftUI minima, dove le
+/// "tasche" di scorrimento di AppKit (`NSScrollPocket`) restano spente. Così la barra resta
+/// trasparente in cima e si vede solo quando serve. Si ascoltano i cambi dei limiti delle
+/// `NSClipView` (lo scorrimento), non ogni fotogramma della pagina; `page` cambia con la
+/// sezione e fa ricontrollare (la nuova pagina parte dalla cima).
+struct WindowBarScrollObserver: NSViewRepresentable {
+    let page: String
+    let onChange: (Bool) -> Void
+
+    final class Coordinator {
+        var onChange: (Bool) -> Void = { _ in }
+        weak var view: NSView?
+        var token: NSObjectProtocol?
+        var last: Bool?
+
+        deinit { if let token { NotificationCenter.default.removeObserver(token) } }
+
+        func start() {
+            guard token == nil else { return }
+            token = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: nil,
+                                                           queue: .main) { [weak self] note in
+                guard let clip = note.object as? NSClipView else { return }
+                MainActor.assumeIsolated {
+                    guard let self, clip.window === self.view?.window else { return }
+                    self.check()
+                }
+            }
+        }
+
+        func check() {
+            guard let window = view?.window, let root = window.contentView else { return }
+            let sidebar = Self.sidebar(in: root)
+            let scrolled = Self.scrolled(in: root, window: window, sidebar: sidebar)
+            guard scrolled != last else { return }
+            last = scrolled
+            onChange(scrolled)
+        }
+
+        /// La colonna della barra laterale (il primo elemento della vista divisa).
+        private static func sidebar(in view: NSView) -> NSView? {
+            if let split = view as? NSSplitView { return split.arrangedSubviews.first }
+            for subview in view.subviews {
+                if let found = sidebar(in: subview) { return found }
+            }
+            return nil
+        }
+
+        private static func scrolled(in view: NSView, window: NSWindow, sidebar: NSView?) -> Bool {
+            if view === sidebar || view.isHiddenOrHasHiddenAncestor { return false }
+            if let scroll = view as? NSScrollView, let document = scroll.documentView,
+               document.frame.height > scroll.contentView.bounds.height + 1 {
+                // Solo gli scorrimenti che arrivano sotto la barra (il bordo alto in cima alla finestra).
+                let frame = scroll.convert(scroll.bounds, to: nil)
+                let underBar = frame.maxY >= (window.contentView?.bounds.height ?? 0) - 1
+                let rest = -scroll.contentInsets.top
+                if underBar && scroll.contentView.bounds.origin.y > rest + 1 { return true }
+            }
+            return view.subviews.contains { scrolled(in: $0, window: window, sidebar: sidebar) }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        context.coordinator.view = view
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.onChange = onChange
+        _ = page
+        coordinator.start()
+        // Dopo il cambio di pagina la nuova vista non è ancora al suo posto.
+        DispatchQueue.main.async { coordinator.check() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { coordinator.check() }
     }
 }
 

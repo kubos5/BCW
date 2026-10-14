@@ -30,9 +30,28 @@ enum DebugSnapshots {
                     nav.show(section)
                     try? await Task.sleep(for: .seconds(3))
                     guard let window = mainWindow else { continue }
+                    // `-BCWScroll N`: scorre di N punti tutti gli scorrimenti verticali della pagina
+                    // (con `-BCWWheel YES` come una rotella vera, con eventi della finestra).
+                    let scroll = defaults.double(forKey: "BCWScroll")
+                    if scroll > 0, let content = window.contentView {
+                        if defaults.bool(forKey: "BCWWheel") {
+                            // Come una rotella vera: passa dagli eventi della finestra.
+                            for _ in 0..<Int(scroll / 20) {
+                                wheel(window, at: NSPoint(x: content.bounds.width * 0.7, y: content.bounds.height * 0.5), by: -20)
+                                try? await Task.sleep(for: .milliseconds(16))
+                            }
+                        } else {
+                            scrollAll(in: content, by: scroll)
+                        }
+                        try? await Task.sleep(for: .seconds(1))
+                    }
                     // Il numero del passo distingue le stesse dimensioni ripetute (prove di ridimensionamento).
                     let name = "\(section.rawValue)-\(Int(size.width))" + (sizes.count > 2 ? "-\(step)" : "")
                     capture(window, to: folder.appendingPathComponent("\(name).png"))
+                    // Un foglio aperto (es. `-BCWTimetableSheet`) è una finestra a parte.
+                    if let sheet = window.attachedSheet {
+                        capture(sheet, to: folder.appendingPathComponent("\(name)-sheet.png"))
+                    }
                     if defaults.bool(forKey: "BCWHover") {
                         for (index, fraction) in [0.3, 0.75].enumerated() {
                             hover(over: window, fraction: fraction)
@@ -42,6 +61,41 @@ enum DebugSnapshots {
                         restorePointer()
                         try? await Task.sleep(for: .seconds(1))
                     }
+                }
+            }
+            let toggles = defaults.integer(forKey: "BCWResizeToggle")
+            if toggles > 0, let window = mainWindow {
+                // Solo il passaggio tra due colonne e una, ripetuto (per `sample`).
+                print("BCWResizeToggle pronto")
+                try? await Task.sleep(for: .seconds(3))
+                for index in 0..<toggles {
+                    window.setContentSize(NSSize(width: index % 2 == 0 ? 1050 : 1150, height: 840))
+                    window.contentView?.layoutSubtreeIfNeeded()
+                    window.displayIfNeeded()
+                    await Task.yield()
+                }
+                print("BCWResizeToggle fine")
+            }
+            if defaults.bool(forKey: "BCWResizeBench"), let window = mainWindow {
+                // Ridimensionamento come trascinando il bordo: 10 punti per passo, avanti e indietro
+                // attraverso il passaggio da due colonne a una. Stampa il tempo medio per passo e il peggiore.
+                for section in sections {
+                    nav.show(section)
+                    try? await Task.sleep(for: .seconds(2))
+                    var times: [Double] = []
+                    for round in 0..<3 {
+                        let widths = Array(stride(from: 1300, through: 900, by: -10)) + Array(stride(from: 900, through: 1300, by: 10))
+                        for width in widths {
+                            let start = CACurrentMediaTime()
+                            window.setContentSize(NSSize(width: CGFloat(width), height: 840))
+                            window.contentView?.layoutSubtreeIfNeeded()
+                            window.displayIfNeeded()
+                            if round > 0 { times.append((CACurrentMediaTime() - start) * 1000) }
+                        }
+                    }
+                    let average = times.reduce(0, +) / Double(times.count)
+                    let slow = times.filter { $0 > 33 }.map { String(format: "%.0f", $0) }.joined(separator: " ")
+                    print(String(format: "BCWResize %@: media %.2f ms, peggiore %.2f ms, lenti: %@", section.rawValue, average, times.max() ?? 0, slow))
                 }
             }
             if defaults.bool(forKey: "BCWClickSearch") {
@@ -79,6 +133,21 @@ enum DebugSnapshots {
                 nav.searchQuery = text
                 try? await Task.sleep(for: .seconds(2))
                 if let window = mainWindow { capture(window, to: folder.appendingPathComponent("search.png")) }
+                if defaults.bool(forKey: "BCWSearchClickAway"), let window = mainWindow, let content = window.contentView {
+                    // Clic su un risultato e poi su un'area vuota a destra: solo il secondo deve
+                    // togliere la selezione al campo. La finestra deve essere attiva, altrimenti il
+                    // primo clic serve solo ad attivarla.
+                    NSApp.activate()
+                    window.makeKeyAndOrderFront(nil)
+                    try? await Task.sleep(for: .seconds(1))
+                    for (label, point) in [("risultato", NSPoint(x: content.bounds.width * 0.45, y: content.bounds.height - 150)),
+                                           ("vuoto", NSPoint(x: content.bounds.width * 0.9, y: content.bounds.height * 0.5))] {
+                        click(window, at: point)
+                        try? await Task.sleep(for: .seconds(1))
+                        print("BCWSearchClick \(label): primo risponditore \(String(describing: window.firstResponder.map { type(of: $0) })) ricerca aperta \(nav.isSearching)")
+                    }
+                    capture(window, to: folder.appendingPathComponent("search-clicked.png"))
+                }
                 nav.searchQuery = ""
                 mainWindow?.makeFirstResponder(nil)
                 try? await Task.sleep(for: .seconds(2))
@@ -114,6 +183,33 @@ enum DebugSnapshots {
             return URL(fileURLWithPath: path, isDirectory: true)
         }
         return FileManager.default.temporaryDirectory.appendingPathComponent("BCWSnapshots", isDirectory: true)
+    }
+
+    private static func click(_ window: NSWindow, at point: NSPoint) {
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            if let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                              windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) {
+                window.sendEvent(event)
+            }
+        }
+    }
+
+    private static func wheel(_ window: NSWindow, at point: NSPoint, by delta: Int32) {
+        guard let cg = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: delta, wheel2: 0, wheel3: 0) else { return }
+        let screenPoint = window.convertPoint(toScreen: point)
+        let height = NSScreen.screens.first?.frame.height ?? 0
+        cg.location = CGPoint(x: screenPoint.x, y: height - screenPoint.y)
+        if let event = NSEvent(cgEvent: cg) { window.sendEvent(event) }
+    }
+
+    private static func scrollAll(in view: NSView, by amount: CGFloat) {
+        if let scrollView = view as? NSScrollView, let document = scrollView.documentView,
+           document.frame.height > scrollView.contentView.bounds.height {
+            let top = -scrollView.contentInsets.top
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: (document.isFlipped ? top + amount : document.frame.height - scrollView.contentView.bounds.height - amount)))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+        for subview in view.subviews { scrollAll(in: subview, by: amount) }
     }
 
     private static var savedPointer: CGPoint?

@@ -262,7 +262,7 @@ struct TimetableEntryDetail: View {
         if !registerTests.isEmpty {
             parts.append("Le verifiche segnate dai docenti su Classeviva compaiono da sole. Se sono sbagliate puoi nasconderle dall'orario.")
         } else if !hiddenTests.isEmpty {
-            parts.append("Hai nascosto le verifiche di Classeviva di questo giorno.")
+            parts.append("Le verifiche di Classeviva di questo giorno sono nascoste (le trovi anche in Verifiche nascoste, nel menu dell'orario).")
         } else {
             parts.append("Le verifiche segnate dai docenti su Classeviva compaiono da sole; qui puoi segnarne altre a mano.")
         }

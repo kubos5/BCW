@@ -138,7 +138,7 @@ struct TimetableDayList: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Theme.secondaryInk)
             ForEach(content.unmatchedTests) { test in
-                RegisterTestRow(test: test, isHidden: false)
+                RegisterTestRow(test: test, isHidden: false, unmatched: true)
             }
         }
         .card()
@@ -358,11 +358,12 @@ struct EntryContextMenu: View {
     }
 }
 
-/// Verifica di Classeviva collegata (o non collegata) all'orario.
+/// Verifica di Classeviva collegata (o non collegata, `unmatched`) all'orario.
 struct RegisterTestRow: View {
     @Environment(AppModel.self) private var model
     let test: AgendaEvent
     let isHidden: Bool
+    var unmatched = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -383,10 +384,15 @@ struct RegisterTestRow: View {
                         .font(.caption)
                         .foregroundStyle(Theme.secondaryInk)
                 }
+                if isHidden, let reason = model.timetable.hiddenReason(for: test, unmatched: unmatched) {
+                    Text(reason.description)
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondaryInk)
+                }
             }
             Spacer(minLength: 4)
             Button(isHidden ? "Mostra" : "Nascondi") {
-                withAnimation(.snappy) { model.timetable.setTestHidden(!isHidden, eventID: test.id) }
+                withAnimation(.snappy) { model.timetable.setTestHidden(!isHidden, test: test, unmatched: unmatched) }
             }
             .font(.caption.weight(.semibold))
             .buttonStyle(.borderless)

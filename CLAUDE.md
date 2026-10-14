@@ -41,9 +41,16 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (facoltativi `-BCWSettings YES`, `-appearance light`, `-BCWDaysAgo 2`, `-BCWOpenNotice YES`, `-dashboardMode calendar`,
   `-BCWHover YES` per portare il puntatore sulla barra della finestra, `-BCWSearch testo` per aprire e chiudere la ricerca,
   `-BCWOpenSubject YES` per aprire in Voti la materia con il nome più lungo, cioè una pagina aperta da un'altra;
-  `-BCWTimetableDemo YES` crea l'orario della demo dalle lezioni se è vuoto, `-BCWTimetableDraft YES` lo mostra in
+  `-BCWTimetableDemo YES` crea l'orario della demo dalle lezioni se è vuoto, `-BCWHideTests YES` aggiunge una regola
+  e una verifica nascosta, `-BCWTimetableSheet generator|hidden` apre il generatore (con `-BCWGeneratorBreaks N` intervalli)
+  o le verifiche nascoste (i fogli si salvano come `<sezione>-<larghezza>-sheet.png`), `-BCWTimetableDraft YES` lo mostra in
   anteprima, `-timetableMode list|calendar|day` sceglie la vista, `-BCWTimetableEditing YES` apre la modifica, `-BCWTimetableDay N` apre l'orario N giorni dopo oggi; i
   valori negativi non passano come argomenti, usare quelli positivi);
+  `-BCWScroll N` (con `-BCWWheel YES` come una rotella vera) scorre la pagina prima della foto,
+  `-BCWSearchClickAway YES` (con `-BCWSearch`) prova il clic su un risultato e su un'area vuota,
+  `-BCWResizeBench YES` misura il ridimensionamento della finestra (tempo per passo, passaggi lenti),
+  `-BCWResizeToggle N` passa N volte da due colonne a una (per `sample`),
+  `-BCWKeychainService nome` usa un Portachiavi vuoto (con `-demoMode NO` mostra l'accesso: `login.png`);
   le immagini finiscono in `~/Library/Containers/com.bcw-classeviva.app/Data/tmp/BCWSnapshots` (o in `-BCWSnapshotDir`
   con un build senza sandbox, `ENABLE_APP_SANDBOX=NO`) e l'app si chiude da sola. Per ogni immagine stampa anche gli
   elementi della barra della finestra con la loro posizione (`BCWToolbar …`): con lo schermo bloccato le immagini escono
@@ -179,17 +186,40 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   La settimana (`TimetableWeekHeader`) galleggia sopra gli eventi in uno `ZStack`; lo scorrimento ha
   `safeAreaPadding(.top)` pari all'altezza della settimana intera più ciò che galleggia sotto (bozza, modifica),
   costante quando si riduce, così la pagina non salta e il titolo grande si comporta come nelle altre schede.
-  Si riduce a una striscia di numeri seguendo la barra delle schede (`FloatingHeaderCollapse`): `UITabBar._isMinimized`
+  Nella vista Lista la riduzione segue lo scorrimento (`WeekHeaderScroll`): il bordo inferiore segue gli eventi per
+  98 punti (intera − ridotta), poi resta ferma; l'avanzamento si legge solo in `WeekHeaderHost` (cambia a ogni
+  fotogramma). `WeekHeaderSnap` (le coordinate di `ScrollTarget` sono già senza il margine: 0 = cima, verificato) porta
+  la fine dello scorrimento in cima o a 98 con isteresi; `ScrollResistance` dimezza il trascinamento in quel tratto
+  osservando il `contentOffset` dello `UIScrollView` (va nello sfondo del contenuto, dentro lo scorrimento); vibra
+  arrivando intera o ridotta. Toccata da ridotta si riapre finché non si scorre di 20 punti.
+  Nella vista Giorno si riduce a una striscia di numeri seguendo la barra delle schede (`FloatingHeaderCollapse`): `UITabBar._isMinimized`
   non si può usare ("This can only be called by an approved app", l'app si chiude), quindi si guarda quale dei due
   `_UITabBarPlatterView` è visibile (il ridotto è il più stretto); se la struttura cambia vale una regola di riserva
   misurata (riduce oltre 140 punti dalla cima, riapre in cima e tirando in fondo con il dito, non scorrendo in su).
   `ScrollGeometry.containerSize` è già senza i margini (verificato). Il passaggio è una vista `Animatable`
   (`progress` 0–1) che interpola posizioni, rettangolo → cerchio e dissolvenze; si controlla registrando il simulatore.
+- Impostazioni su iPhone: elenco di sottopagine (Generale, Voti, Dashboard, Orario, Notifiche, Account) con le stesse
+  sezioni delle schede della finestra Impostazioni del Mac.
+- Verifiche nascoste (menu dell'orario, `TimetableHiddenTestsView`): nascoste a mano (`hiddenTests`) o da regole
+  (`Timetable.testRules`, `TestHidingRules`: docenti, materie, giorni, periodi, parole, senza lezione in orario);
+  mostrandone a mano una nascosta da una regola finisce in `shownTests` (eccezione), nascondendola di nuovo l'eccezione
+  si toglie. Il motivo viene da `TimetableStore.hiddenReason(for:unmatched:)`; la Dashboard non ne è toccata.
 - Orario, barra: niente frecce per cambiare giorno; "Oggi" compare solo se il giorno scelto non è oggi (⌘T su Mac),
   come "Domani" nella Dashboard.
 - Orario su Mac: Lista e Calendario con `SplitColumns` (settimana o mese + riepilogo della settimana | giorno); la
   vista Giorno (`MacWeekTimeline`) mostra tutta la settimana con gli eventi trascinabili anche tra i giorni.
   Fuori da uno scorrimento `WeekStrip` va con `.fixedSize(horizontal: false, vertical: true)`, altrimenti si allunga.
+- Barra della finestra: di serie macOS le dà sempre lo sfondo con la riga, anche con la pagina in cima (verificato
+  anche con un'app SwiftUI minima: le `NSScrollPocket` restano spente). `MacRootView` la tiene trasparente
+  (`toolbarBackgroundVisibility(.hidden)`) e la mostra (chiara e sfocata) solo quando uno scorrimento della pagina che
+  arriva sotto la barra non è in cima (`WindowBarScrollObserver`, che ascolta i cambi dei limiti delle `NSClipView`).
+  Nella schermata di accesso la barra c'è ma senza sfondo: toglierla del tutto cambierebbe pulsanti e angoli.
+- Ricerca su Mac: un clic su un'area vuota della pagina di ricerca toglie la selezione al campo (sfondo con
+  `onTapGesture` sotto i risultati, che lo coprono; il contenuto riempie almeno l'altezza visibile).
+- `Form` su Mac: più controlli in una riga (es. `DatePicker` + `Stepper`) finiscono uno sopra l'altro e tagliati, e un
+  `Stepper` con un `LabeledContent` come etichetta stacca il valore dalle frecce: usare `LabeledContent` con i
+  controlli in un `HStack` (`labelsHidden`) e `LabeledStepper`. Nel generatore gli intervalli si tolgono con il
+  pulsante rosso (su iPhone scorrendo).
 - Pagine a due colonne con `SplitColumns` (laterale fissa + principale, scorrimento separato; sotto ~780 pt si
   impilano): Dashboard (calendario + prossimi giorni | giorno, con lezioni in colonna a parte da 580 pt), Voti,
   dettaglio materia, Scrutini, Anni precedenti, Lezioni. Bacheca: elenco + dettaglio affiancati sopra 820 pt.
@@ -216,6 +246,10 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (il calendario di Foundation dominava i profili) e le celle del calendario lo fanno a ogni aggiornamento.
 - Nelle viste calcolare gli elenchi una volta per aggiornamento (`let` nel `body`, o una struttura come
   `DayDetail.Content` e `SearchView.Results`), mai in proprietà calcolate richiamate più volte o dentro le righe.
+- Ridimensionando la finestra: niente `@State` con la larghezza (`onGeometryChange` di un `CGFloat`), che ricalcola la
+  pagina a ogni fotogramma; misurare solo il passaggio (`Bool`, con un po' di isteresi in `SplitColumns`). Il passaggio
+  da due colonne a una ricostruisce le due strutture (50–130 ms, quasi tutto in SwiftUI); tenere la colonna principale
+  nello stesso scorrimento è risultato molto più lento (~400 ms).
 - Misure che cambiano a ogni fotogramma e servono solo in certi momenti (es. `dayDetailHeight`) vanno in
   `UnobservedValue`, non in uno `@State` osservato: altrimenti l'intera pagina si ricalcola a ogni fotogramma.
 - `.card()` mette l'ombra sulla sola forma di sfondo: un'ombra sull'intera vista va ricalcolata dal contenuto.

@@ -107,6 +107,9 @@ struct LoginView: View {
             }
             .sharedBackgroundVisibility(.hidden)
         }
+        // La barra resta (con lei i margini dei pulsanti a semaforo e gli angoli arrotondati della
+        // finestra), ma senza sfondo né riga: non si vede.
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         #endif
         .animation(.snappy, value: errorMessage)
         .sheet(isPresented: Binding(get: { !choices.isEmpty }, set: { if !$0 { choices = [] } })) {

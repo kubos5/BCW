@@ -37,7 +37,14 @@ struct SavedAccount: Codable, Identifiable, Equatable {
 }
 
 enum Keychain {
-    private static let service = "com.bcw.app.credentials"
+    private static let service: String = {
+        #if DEBUG
+        // Per gli screenshot della schermata di accesso: `-BCWKeychainService nome` usa un
+        // Portachiavi vuoto senza toccare gli account salvati.
+        if let name = UserDefaults.standard.string(forKey: "BCWKeychainService") { return name }
+        #endif
+        return "com.bcw.app.credentials"
+    }()
     /// Voce usata dalle versioni con un solo account (migrata alla prima apertura).
     private static let legacyAccount = "classeviva"
     private static let accountsKey = "classeviva.accounts"

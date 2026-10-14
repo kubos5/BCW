@@ -19,12 +19,15 @@ struct TimetableView: View {
     @State private var detail: TimetableDetailRequest?
     @State private var paletteWeekday: PaletteWeekday?
     @State private var showingGenerator = false
+    @State private var showingHiddenTests = false
     @State private var deleting: TimetableEntry?
     /// Modalità di modifica grafica: vista Giorno con eventi trascinabili.
     @State private var isEditing = false
     #if os(iOS)
-    /// La settimana, che galleggia sopra gli eventi, è ridotta a una striscia.
+    /// La settimana, che galleggia sopra gli eventi, è ridotta a una striscia (vista Giorno).
     @State private var headerCollapsed = false
+    /// Nella vista Lista la settimana segue invece lo scorrimento.
+    @State private var weekScroll = WeekHeaderScroll()
     /// Altezza di ciò che galleggia sotto la settimana (bozza, modifica, avvisi).
     @State private var extrasHeight: CGFloat = 0
     #endif
@@ -85,6 +88,9 @@ struct TimetableView: View {
                 .sheet(isPresented: $showingGenerator) {
                     TimetableGeneratorSheet()
                 }
+                .sheet(isPresented: $showingHiddenTests) {
+                    TimetableHiddenTestsView()
+                }
                 .confirmationDialog("Eliminare «\(deleting?.displayTitle ?? "")»?",
                                     isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
                                     titleVisibility: .visible, presenting: deleting) { entry in
@@ -104,6 +110,7 @@ struct TimetableView: View {
                     select(Date().startOfDay)
                     #if os(iOS)
                     withAnimation(FloatingHeaderCollapse.animation) { headerCollapsed = false }
+                    weekScroll.open()
                     #endif
                 }
                 // Con una bozza in anteprima non si modifica l'orario.
@@ -121,6 +128,12 @@ struct TimetableView: View {
         #if DEBUG
         // Per gli screenshot di sviluppo: `-BCWTimetableEditing YES` apre la modalità di modifica.
         if UserDefaults.standard.bool(forKey: "BCWTimetableEditing") { isEditing = true }
+        // `-BCWTimetableSheet generator|hidden` apre il generatore o le verifiche nascoste.
+        switch UserDefaults.standard.string(forKey: "BCWTimetableSheet") {
+        case "generator": showingGenerator = true
+        case "hidden": showingHiddenTests = true
+        default: break
+        }
         // `-BCWTimetableDay N` apre l'orario N giorni dopo oggi (come argomento solo valori positivi).
         if UserDefaults.standard.object(forKey: "BCWTimetableDay") != nil {
             selectedDay = Date().adding(days: UserDefaults.standard.integer(forKey: "BCWTimetableDay")).startOfDay
@@ -232,6 +245,7 @@ struct TimetableView: View {
             // Cambia ciò che mostra la lista: sta con la scelta della vista.
             Toggle("Mostra le verifiche", systemImage: "pencil.and.list.clipboard",
                    isOn: Bindable(model.preferences).timetableShowsTests)
+            Button("Verifiche nascoste…", systemImage: "eye.slash") { showingHiddenTests = true }
             Divider()
             Button("Nuovo intervallo", systemImage: "cup.and.saucer") {
                 editor = TimetableEditorRequest(weekday: selectedDay.timetableWeekday, kind: .breakTime)
@@ -272,17 +286,19 @@ struct TimetableView: View {
                         .transition(.opacity)
                         .pagePadding()
                         .padding(.bottom, Theme.bottomInset)
+                        .background { ScrollResistance(range: WeekHeaderScroll.range) }
                 }
                 .scrollDismissesKeyboard(.immediately)
                 .safeAreaPadding(.top, floatingHeight)
-                .modifier(FloatingHeaderCollapse(isCollapsed: $headerCollapsed))
+                .modifier(WeekHeaderScroll.Tracking(state: weekScroll))
             case .day:
                 TimetableTimeline(days: [selectedDay], selectedDay: selectedDay, actions: actions, isEditing: isEditing,
                                   topInset: floatingHeight, headerCollapsed: $headerCollapsed)
             }
 
             VStack(spacing: 10) {
-                TimetableWeekHeader(selectedDay: daySelection, isCollapsed: headerCollapsed) {
+                WeekHeaderHost(selectedDay: daySelection, scroll: mode == .day ? nil : weekScroll,
+                               collapsed: headerCollapsed) {
                     withAnimation(FloatingHeaderCollapse.animation) { headerCollapsed = false }
                 }
                 floatingExtras
@@ -295,12 +311,29 @@ struct TimetableView: View {
         .animation(.snappy, value: isEditing)
         .animation(.snappy, value: store.draft == nil)
         .themedBackground()
-        .onChange(of: mode) { headerCollapsed = false }
+        .onChange(of: mode) { headerCollapsed = false; weekScroll.close() }
         .onChange(of: isEditing) { headerCollapsed = false }
         #endif
     }
 
     #if os(iOS)
+    /// La settimana con l'avanzamento giusto per la vista: nella Lista quello dello scorrimento,
+    /// letto solo qui (cambia a ogni fotogramma), nella vista Giorno lo stato ridotto.
+    private struct WeekHeaderHost: View {
+        @Binding var selectedDay: Date
+        let scroll: WeekHeaderScroll?
+        let collapsed: Bool
+        let expandDay: () -> Void
+
+        var body: some View {
+            if let scroll {
+                TimetableWeekHeader(selectedDay: $selectedDay, progress: scroll.progress, onExpand: scroll.open)
+            } else {
+                TimetableWeekHeader(selectedDay: $selectedDay, progress: collapsed ? 1 : 0, onExpand: expandDay)
+            }
+        }
+    }
+
     /// Spazio occupato in cima dagli elementi mobili con la settimana intera: gli eventi cominciano
     /// sotto. Resta lo stesso quando la settimana si riduce, così la pagina non salta.
     private var floatingHeight: CGFloat {
@@ -388,11 +421,12 @@ private struct MacWeekTimeline<Banner: View>: View {
     let actions: TimetableActions
     let isEditing: Bool
     @ViewBuilder let banner: () -> Banner
-    @State private var width: CGFloat = 1000
+    /// Solo il passaggio conta, non la larghezza (che cambierebbe a ogni fotogramma).
+    @State private var wide = true
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
-            if width >= 780 {
+            if wide {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         MonthCalendar(selectedDay: $selectedDay)
@@ -408,7 +442,7 @@ private struct MacWeekTimeline<Banner: View>: View {
                 .frame(width: 340 + 38)
             }
             VStack(spacing: 10) {
-                if width < 780 {
+                if !wide {
                     WeekStrip(selectedDay: $selectedDay)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -417,19 +451,19 @@ private struct MacWeekTimeline<Banner: View>: View {
                     TimetableEditBar()
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
-                TimetableTimeline(days: width >= 780 ? days : [selectedDay], selectedDay: selectedDay,
+                TimetableTimeline(days: wide ? days : [selectedDay], selectedDay: selectedDay,
                                   onSelectDay: { day in withAnimation(.snappy) { selectedDay = day } },
                                   actions: actions, isEditing: isEditing)
                     .card(padding: 0)
             }
-            .padding(.leading, width >= 780 ? 10 : 28)
+            .padding(.leading, wide ? 10 : 28)
             .padding(.trailing, 28)
             .padding(.top, 8)
             .padding(.bottom, 20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .themedBackground()
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onGeometryChange(for: Bool.self) { $0.size.width >= 780 } action: { wide = $0 }
     }
 }
 #endif
@@ -517,6 +551,28 @@ struct TimetableWeekOverview: View {
 /// `-BCWTimetableDraft YES` mostra invece la bozza generata in anteprima.
 enum DebugTimetable {
     static func prepareIfRequested(model: AppModel) async {
+        await prepareTable(model: model)
+        // Le verifiche arrivano con l'agenda, che può non essere ancora pronta.
+        for _ in 0..<20 where model.agenda.isEmpty { try? await Task.sleep(for: .milliseconds(250)) }
+        hideTestsIfRequested(model: model)
+    }
+
+    private static func hideTestsIfRequested(model: AppModel) {
+        let defaults = UserDefaults.standard
+        let store = model.timetable
+        // `-BCWHideTests YES`: una regola (il docente della prima verifica) e una verifica nascosta a mano.
+        if model.isDemo, defaults.bool(forKey: "BCWHideTests") {
+            let tests = model.agenda.filter { $0.kind == .test }.sorted { $0.begin < $1.begin }
+            var rules = TestHidingRules()
+            if let teacher = tests.first(where: { !$0.authorName.isEmpty })?.authorName { rules.teachers = [teacher] }
+            store.setTestRules(rules)
+            if let other = tests.first(where: { store.hiddenReason(for: $0, unmatched: false) == nil && $0.begin > Date() }) {
+                store.setTestHidden(true, test: other)
+            }
+        }
+    }
+
+    private static func prepareTable(model: AppModel) async {
         let defaults = UserDefaults.standard
         let wantsTable = defaults.bool(forKey: "BCWTimetableDemo")
         let wantsDraft = defaults.bool(forKey: "BCWTimetableDraft")
@@ -771,6 +827,53 @@ enum TimetableSelfTest {
         let inside = TimetableEntry(weekday: 1, start: 9 * 60 + 20, end: 9 * 60 + 30, kind: .breakTime, title: "Intervallo")
         let insideOrder = TimetableLayout(entries: [first, second, inside], splitAtBreaks: true).listItems.count
         check(insideOrder == 2, "intervallo dentro una lezione: \(insideOrder) righe")
+
+        // Verifiche nascoste: a mano, dalle regole, mostrate a mano nonostante le regole.
+        let ownerE = "selftest-e-\(UUID().uuidString)"
+        defer { TimetableStore.removeData(owner: ownerE) }
+        let hiding = TimetableStore()
+        hiding.load(owner: ownerE)
+        let saturday = Date().startOfWeek.adding(days: 5)
+        let testsJSON: [[String: Any]] = [
+            ["evtId": 1, "evtCode": "AGNT", "evtDatetimeBegin": CVDate.dayKey(Date().startOfWeek.adding(days: 1)) + "T10:00:00",
+             "authorName": "ROSSI GIORGIO", "subjectDesc": "MATEMATICA", "notes": "Verifica scritta"],
+            ["evtId": 2, "evtCode": "AGNT", "evtDatetimeBegin": CVDate.dayKey(saturday),
+             "authorName": "BIANCHI LAURA", "subjectDesc": "LATINO", "notes": "Verifica di recupero"],
+            ["evtId": 3, "evtCode": "AGNT", "evtDatetimeBegin": CVDate.dayKey(Date().startOfWeek.adding(days: 2)) + "T10:00:00",
+             "authorName": "VERDI ANDREA", "subjectDesc": "STORIA", "notes": "Interrogazione"],
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: testsJSON),
+           let tests = try? JSONDecoder().decode([AgendaEvent].self, from: data), tests.count == 3 {
+            let (rossi, sabato, verdi) = (tests[0], tests[1], tests[2])
+            check(tests.allSatisfy { hiding.hiddenReason(for: $0, unmatched: false) == nil }, "verifiche nascoste senza regole")
+            var rules = TestHidingRules()
+            rules.teachers = [rossi.authorName]
+            rules.weekdays = [6]
+            hiding.setTestRules(rules)
+            check(hiding.hiddenReason(for: rossi, unmatched: false) == .rule("Docente: \(rossi.authorName)"), "regola del docente")
+            check(hiding.hiddenReason(for: sabato, unmatched: false) != nil, "regola del giorno")
+            check(hiding.hiddenReason(for: verdi, unmatched: false) == nil, "verifica nascosta da nessuna regola")
+            hiding.setTestHidden(false, test: rossi)
+            check(hiding.hiddenReason(for: rossi, unmatched: false) == nil, "verifica non mostrata nonostante la regola")
+            hiding.setTestHidden(true, test: rossi)
+            check(hiding.hiddenReason(for: rossi, unmatched: false) == .rule("Docente: \(rossi.authorName)")
+                  && !hiding.isTestHidden(rossi.id), "verifica non restituita alla regola")
+            hiding.setTestHidden(true, test: verdi)
+            check(hiding.hiddenReason(for: verdi, unmatched: false) == .manual, "verifica nascosta a mano")
+            rules.weekdays = []
+            rules.keywords = ["recupero"]
+            rules.unmatched = true
+            hiding.setTestRules(rules)
+            check(hiding.hiddenReason(for: sabato, unmatched: false) == .rule("Contiene «recupero»"), "regola delle parole")
+            check(hiding.hiddenReason(for: verdi, unmatched: true) == .manual, "a mano prima delle regole")
+            if let backup = try? TimetableStore.readBackup(hiding.makeBackup()) {
+                check(backup.timetable.testRules == rules, "regole perse nel backup")
+            } else {
+                failures.append("backup delle regole non riuscito")
+            }
+        } else {
+            failures.append("verifiche di prova non decodificate")
+        }
 
         print(failures.isEmpty ? "BCW-SELFTEST PASS" : "BCW-SELFTEST FAIL\n- " + failures.joined(separator: "\n- "))
         exit(failures.isEmpty ? 0 : 1)

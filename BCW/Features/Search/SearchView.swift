@@ -10,6 +10,10 @@ struct SearchView: View {
     @Binding var query: String
 
     private var trimmed: String { query.trimmingCharacters(in: .whitespaces) }
+    #if os(macOS)
+    /// Altezza visibile: il contenuto la riempie, così un clic sotto i risultati cade sullo sfondo.
+    @State private var viewportHeight: CGFloat = 0
+    #endif
 
     /// Risultati della ricerca, calcolati una volta per aggiornamento (a ogni lettera digitata):
     /// prima ogni elenco veniva rifiltrato e riordinato più volte, anche una per ogni riga.
@@ -64,7 +68,22 @@ struct SearchView: View {
                 }
                 .pagePadding()
                 .padding(.bottom, 24)
+                #if os(macOS)
+                // Un clic su un'area vuota (non sui risultati o sui suggerimenti, che stanno
+                // davanti e lo coprono) toglie la selezione al campo di ricerca della barra.
+                .frame(maxWidth: .infinity, minHeight: viewportHeight, alignment: .topLeading)
+                .background {
+                    Color.clear
+                        .contentShape(.rect)
+                        .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) }
+                }
+                #endif
             }
+            #if os(macOS)
+            .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.height } action: { _, height in
+                viewportHeight = height
+            }
+            #endif
             .themedBackground()
             .screenTitle("Cerca")
             #if os(iOS)
