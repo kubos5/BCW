@@ -50,7 +50,7 @@ BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 La scheda Orario contiene l'orario settimanale, che si compila a mano o si genera dalle lezioni registrate:
 
 - tre viste: Lista (la settimana in alto e gli eventi del giorno sotto), Calendario (il mese in alto e gli eventi del giorno sotto) e Giorno (le ore della giornata, come nell'app Calendario)
-- su iPhone la settimana si riduce a una striscia di numeri seguendo lo scorrimento della vista Lista, con una leggera resistenza e una vibrazione tra la posizione in cima e quella con la settimana ridotta; toccandola si riapre
+- su iPhone, nella vista Lista, la settimana scatta tra intera e ridotta (una striscia di numeri) seguendo il dito, con una vibrazione; lo scorrimento normale comincia da settimana ridotta e per riaprirla si tira giù da lì, oppure la si tocca
 - toccando un evento si vedono i dettagli e si aggiungono note, file e foto, per un solo giorno o per ogni settimana
 - le verifiche segnate dai docenti su Classeviva compaiono da sole sulla lezione della materia e si possono nascondere; altre verifiche si segnano a mano, per un giorno o per ogni settimana
 - Verifiche nascoste (dal menu dell'orario): l'elenco delle verifiche nascoste, con il motivo, da cui si possono mostrare di nuovo, e le regole per nasconderle in automatico (per docente, materia, giorno della settimana, periodo, parole nel testo o materie che quel giorno non sono in orario)

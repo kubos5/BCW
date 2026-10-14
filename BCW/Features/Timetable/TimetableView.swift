@@ -28,6 +28,8 @@ struct TimetableView: View {
     @State private var headerCollapsed = false
     /// Nella vista Lista la settimana segue invece lo scorrimento.
     @State private var weekScroll = WeekHeaderScroll()
+    /// Altezza visibile della lista (cambia solo ruotando o con la tastiera).
+    @State private var listViewport: CGFloat = 0
     /// Altezza di ciò che galleggia sotto la settimana (bozza, modifica, avvisi).
     @State private var extrasHeight: CGFloat = 0
     #endif
@@ -286,7 +288,12 @@ struct TimetableView: View {
                         .transition(.opacity)
                         .pagePadding()
                         .padding(.bottom, Theme.bottomInset)
-                        .background { ScrollResistance(range: WeekHeaderScroll.range) }
+                        // Sempre abbastanza lungo da ridurre la settimana, anche nei giorni corti.
+                        .frame(minHeight: listViewport + WeekHeaderScroll.range, alignment: .top)
+                        .background { WeekHeaderScrollControl(state: weekScroll) }
+                }
+                .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.height } action: { _, height in
+                    listViewport = height
                 }
                 .scrollDismissesKeyboard(.immediately)
                 .safeAreaPadding(.top, floatingHeight)
