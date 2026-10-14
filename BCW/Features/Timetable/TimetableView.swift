@@ -15,6 +15,9 @@ struct TimetableView: View {
 
     @State private var selectedDay = Date().startOfDay
     @State private var adjustedInitialDay = false
+    /// "Oggi" nella barra: segue il giorno scelto sempre con un'animazione, anche quando il giorno
+    /// cambia senza (scorrendo di lato, dove il contenuto si scambia di colpo).
+    @State private var showsToday = false
     @State private var editor: TimetableEditorRequest?
     @State private var detail: TimetableDetailRequest?
     @State private var paletteWeekday: PaletteWeekday?
@@ -104,6 +107,10 @@ struct TimetableView: View {
                     Button("Annulla", role: .cancel) {}
                 }
                 .onAppear(perform: adjustInitialDay)
+                .onChange(of: selectedDay, initial: true) { _, day in
+                    guard showsToday == day.isToday else { return }
+                    withAnimation(.snappy) { showsToday = !day.isToday }
+                }
                 .onChange(of: reselection) {
                     select(Date().startOfDay)
                     #if os(iOS)
@@ -165,7 +172,7 @@ struct TimetableView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         // "Oggi" c'è solo se il giorno scelto non è oggi, come "Domani" nella Dashboard.
-        if !selectedDay.isToday {
+        if showsToday {
             ToolbarItem(placement: .trailingBar) {
                 Button("Oggi") { select(Date()) }
                     #if os(macOS)
@@ -283,7 +290,15 @@ struct TimetableView: View {
                         .pagePadding()
                         .padding(.bottom, Theme.bottomInset)
                         .background { CalendarHeaderPan(state: weekScroll) }
+                        // Il giorno accanto, già visibile mentre si scorre di lato.
+                        .modifier(SwipeNeighbor(state: weekScroll) { direction in
+                            TimetableDayList(content: TimetableDayContent(day: selectedDay.adding(days: direction).startOfDay, model: model),
+                                             actions: actions)
+                                .pagePadding()
+                                .padding(.bottom, Theme.bottomInset)
+                        })
                 }
+                .scrollClipDisabled()
                 .scrollDismissesKeyboard(.immediately)
                 .safeAreaPadding(.top, collapsedFloatingHeight)
                 .modifier(WeekHeaderScroll.Shift(state: weekScroll))

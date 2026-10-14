@@ -15,6 +15,8 @@ struct DashboardView: View {
     @State private var selectedDay = Date().adding(days: DashboardView.initialOffset).startOfDay
     /// Larghezza della barra di navigazione, per capire se il titolo esteso ci sta.
     @State private var barWidth: CGFloat = 0
+    /// "Domani" nella barra (vedi `onChange` del giorno scelto).
+    @State private var showsTomorrow = false
     /// Identità dei giorni successivi: cambia (con transizione) solo quando cambia il giorno
     /// scelto e con esso il contenuto della sezione espansa (vedi `select`).
     @State private var upcomingGeneration = 0
@@ -71,8 +73,13 @@ struct DashboardView: View {
                 .refreshable { await model.refreshAll() }
                 .screenTitle(title)
                 .inlineLargeTitleDisplay()
+                .onChange(of: selectedDay, initial: true) { _, day in
+                    // Sempre con un'animazione, anche quando il giorno cambia senza (scorrendo di lato).
+                    guard showsTomorrow == day.isTomorrow else { return }
+                    withAnimation(.snappy) { showsTomorrow = !day.isTomorrow }
+                }
                 .toolbar {
-                    if !selectedDay.isTomorrow {
+                    if showsTomorrow {
                         ToolbarItem(placement: .trailingBar) {
                             Button("Domani") {
                                 select(Date().adding(days: 1).startOfDay)
@@ -183,7 +190,13 @@ struct DashboardView: View {
                 .padding(.bottom, 24)
                 .animation(.snappy, value: selectedDay)
                 .background { CalendarHeaderPan(state: headerState) }
+                // Il giorno accanto, già visibile mentre si scorre di lato.
+                .modifier(SwipeNeighbor(state: headerState) { direction in
+                    neighborPage(selectedDay.adding(days: direction).startOfDay)
+                })
             }
+            // Il giorno accanto sta fuori dai bordi dello scorrimento finché non entra.
+            .scrollClipDisabled()
             .scrollPosition($scrollPosition)
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 geometry.contentOffset.y + geometry.contentInsets.top <= 1
@@ -222,6 +235,20 @@ struct DashboardView: View {
         .themedBackground()
         #endif
     }
+
+    #if os(iOS)
+    /// Il giorno accanto durante lo scorrimento laterale: come la pagina, senza avvisi.
+    private func neighborPage(_ day: Date) -> some View {
+        VStack(alignment: .leading, spacing: 22) {
+            DayDetail(day: day)
+            if mode == .list && model.preferences.showUpcomingDays {
+                UpcomingDays(after: day) { _ in }
+            }
+        }
+        .pagePadding()
+        .padding(.bottom, 24)
+    }
+    #endif
 
     /// I giorni successivi cambiano insieme al giorno scelto, con la stessa transizione,
     /// ma solo se il loro contenuto cambia davvero: da compressi o con gli stessi giorni ed

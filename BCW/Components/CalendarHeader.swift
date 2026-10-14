@@ -172,7 +172,10 @@ final class WeekHeaderScroll: NSObject {
         let speed = velocity / max(range, 1)
         // Dove arriverebbe il dito in un decimo di secondo, rispetto al punto di resistenza.
         let heading = finger + speed * 0.1
-        settle(collapsed: heading >= Self.threshold, velocity: speed * (isDirect ? 1 : Self.slope(finger)))
+        let collapsed = heading >= Self.threshold
+        // Un colpo veloce supera il punto di resistenza solo lasciando il dito: si vibra qui.
+        if collapsed != (finger >= Self.threshold) { haptics.impactOccurred() }
+        settle(collapsed: collapsed, velocity: speed * (isDirect ? 1 : Self.slope(finger)))
         isDirect = false
     }
 
@@ -251,29 +254,55 @@ final class WeekHeaderScroll: NSObject {
 
     // MARK: Scorrimento laterale (cambio di giorno)
 
+    /// Giorno accanto mostrato durante lo scorrimento laterale (+1 il successivo, a destra; -1 il
+    /// precedente, a sinistra; 0 nessuno). Cambia solo quando cambia il verso, non a ogni fotogramma.
+    fileprivate(set) var swipeDirection = 0
+    /// Cambio di giorno in corso (il contenuto sta uscendo), da completare se un nuovo gesto lo
+    /// interrompe.
+    @ObservationIgnored private var pendingSwipe: Int?
+
     fileprivate func swipeBegan() {
         stopSwipe()
+        // Un gesto durante il cambio di giorno: il cambio si completa subito e il giorno nuovo,
+        // che era già quasi al suo posto, diventa quello trascinato.
+        if let direction = pendingSwipe {
+            pendingSwipe = nil
+            onSwipeDay?(direction)
+            swipeOffset += CGFloat(direction) * swipeWidth
+            updateSwipeDirection()
+        }
         swipeStart = swipeOffset
     }
 
     fileprivate func swipeChanged(_ translation: CGFloat) {
         swipeOffset = swipeStart + translation
+        updateSwipeDirection()
+    }
+
+    private func updateSwipeDirection() {
+        let direction = swipeOffset < -0.5 ? 1 : (swipeOffset > 0.5 ? -1 : swipeDirection)
+        if direction != swipeDirection { swipeDirection = direction }
     }
 
     /// Oltre un terzo della larghezza (contando la velocità) si cambia giorno: il contenuto esce
-    /// dal lato verso cui si è spinto e il giorno nuovo entra dall'altro.
+    /// dal lato verso cui si è spinto mentre il giorno accanto, che lo segue già, prende il suo
+    /// posto; poi i due si scambiano (il giorno accanto diventa quello scelto, nella stessa
+    /// posizione, senza salti). Altrimenti tutto torna al suo posto.
     fileprivate func swipeEnded(velocity: CGFloat) {
         let heading = swipeOffset + velocity * 0.15
         guard abs(heading) > swipeWidth * 0.3, let onSwipeDay else {
-            animateSwipe(to: 0, velocity: velocity)
+            animateSwipe(to: 0, velocity: velocity) { [weak self] in self?.swipeDirection = 0 }
             return
         }
         let direction = heading < 0 ? 1 : -1
+        pendingSwipe = direction
+        if swipeDirection != direction { swipeDirection = direction }
         animateSwipe(to: -CGFloat(direction) * swipeWidth, velocity: velocity) { [weak self] in
             guard let self else { return }
+            pendingSwipe = nil
             onSwipeDay(direction)
-            swipeOffset = CGFloat(direction) * swipeWidth
-            animateSwipe(to: 0, velocity: 0)
+            swipeOffset = 0
+            swipeDirection = 0
         }
     }
 
@@ -292,14 +321,16 @@ final class WeekHeaderScroll: NSObject {
         var value = swipeOffset
         let steps = 4
         let dt = elapsed / CGFloat(steps)
+        var crossed = false
         for _ in 0..<steps {
-            let acceleration = -420 * (value - current.target) - 41 * current.velocity
+            let before = value - current.target
+            let acceleration = -420 * before - 41 * current.velocity
             current.velocity += acceleration * dt
             value += current.velocity * dt
+            // Nessun rimbalzo oltre la posizione finale: ci si ferma lì.
+            if before != 0, (value - current.target).sign != before.sign { crossed = true; break }
         }
-        // In uscita basta arrivare quasi al bordo; in entrata ci si ferma esattamente.
-        let tolerance: CGFloat = current.completion != nil ? 6 : 0.5
-        if abs(value - current.target) < tolerance && (current.completion != nil || abs(current.velocity) < 20) {
+        if crossed || (abs(value - current.target) < 0.3 && abs(current.velocity) < 20) {
             swipeOffset = current.target
             let completion = current.completion
             stopSwipe()
@@ -328,6 +359,29 @@ final class WeekHeaderScroll: NSObject {
                 .offset(x: state.swipeOffset, y: (1 - state.progress) * state.range)
                 .scrollDisabled(!state.isCollapsed && !state.expandedScrolls)
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { state.swipeWidth = $0 }
+        }
+    }
+}
+
+/// Il giorno accanto, mostrato a fianco del contenuto durante lo scorrimento laterale: va messo sul
+/// contenuto dello scorrimento (che deve avere `scrollClipDisabled`), così scorre e si sposta con
+/// lui ed è già al suo posto quando i due si scambiano.
+struct SwipeNeighbor<Neighbor: View>: ViewModifier {
+    let state: WeekHeaderScroll
+    @ViewBuilder let neighbor: (Int) -> Neighbor
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .topLeading) {
+            let direction = state.swipeDirection
+            if direction != 0 {
+                neighbor(direction)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .offset(x: CGFloat(direction) * state.swipeWidth)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .transaction { $0.animation = nil }
+            }
         }
     }
 }

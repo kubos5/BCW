@@ -62,8 +62,14 @@ struct TimetableTimeline: View {
                     .background {
                         if let headerState { CalendarHeaderPan(state: headerState, swipeEnabled: !isEditing) }
                     }
+                    .modifier(OptionalSwipeNeighbor(state: headerState) { direction in
+                        neighborPage(selectedDay.adding(days: direction).startOfDay)
+                    })
                     #endif
                 }
+                #if os(iOS)
+                .scrollClipDisabled(headerState != nil)
+                #endif
                 .scrollIndicators(.hidden)
                 .safeAreaPadding(.top, topInset)
                 #if os(iOS)
@@ -79,6 +85,22 @@ struct TimetableTimeline: View {
             }
         }
     }
+
+    #if os(iOS)
+    /// Il giorno accanto durante lo scorrimento laterale (iPhone): le stesse ore, in sola lettura.
+    private func neighborPage(_ day: Date) -> some View {
+        ZStack(alignment: .topLeading) {
+            HourGrid(hourHeight: hourHeight, showsNow: day.isToday)
+            TimelineDayColumn(content: TimetableDayContent(day: day, model: model), dayIndex: 0, days: [day],
+                              isSelected: true, hourHeight: hourHeight, isEditing: false, actions: actions)
+                .padding(.leading, Self.gutter)
+                .padding(.trailing, 6)
+        }
+        .frame(height: 24 * hourHeight)
+        .padding(.vertical, Self.verticalPadding)
+        .padding(.bottom, 60)
+    }
+    #endif
 
     private func initialHour(_ contents: [TimetableDayContent]) -> Int {
         let starts = contents.compactMap { $0.layout.span?.start }
@@ -549,6 +571,16 @@ private struct TimelineSegment: View {
 
 #if os(iOS)
 import UIKit
+
+/// `SwipeNeighbor` solo se c'è un'intestazione mobile.
+private struct OptionalSwipeNeighbor<Neighbor: View>: ViewModifier {
+    let state: WeekHeaderScroll?
+    @ViewBuilder let neighbor: (Int) -> Neighbor
+
+    func body(content: Content) -> some View {
+        if let state { content.modifier(SwipeNeighbor(state: state, neighbor: neighbor)) } else { content }
+    }
+}
 
 /// `WeekHeaderScroll.Shift` solo se c'è un'intestazione mobile.
 private struct OptionalHeaderShift: ViewModifier {

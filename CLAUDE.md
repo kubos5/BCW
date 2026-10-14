@@ -191,8 +191,11 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   contenuto) un pan verticale, che parte sempre da intero (l'area è ferma, `scrollDisabled`; in Dashboard
   `expandedScrolls` lascia allo scorrimento i gesti verso il basso, per aggiornare), da ridotto solo verso il basso con
   l'area in cima e sempre durante uno scatto; e uno orizzontale per il giorno prima/dopo (`onSwipeDay`, solo da
-  fermo): il contenuto segue il dito, esce di lato e il giorno nuovo entra dall'altro (cambiato senza animazioni,
-  mentre è fuori). Lo scorrimento li aspetta (`shouldBeRequiredToFailBy`); misure nella finestra; la traslazione
+  fermo): il giorno accanto (`SwipeNeighbor`, sovrapposto al contenuto dello scorrimento, che ha `scrollClipDisabled`)
+  segue il dito già durante il gesto; a fine corsa i due si scambiano senza animazioni (il giorno accanto diventa
+  quello scelto nella stessa posizione). Un gesto durante il cambio lo completa subito. "Oggi"/"Domani" nella barra
+  seguono il giorno con uno stato a parte animato (`showsToday`, `showsTomorrow`), perché lo scambio è senza animazioni.
+  La vibrazione del punto di resistenza scatta anche quando lo supera solo la velocità del rilascio. Lo scorrimento li aspetta (`shouldBeRequiredToFailBy`); misure nella finestra; la traslazione
   riparte da zero quando il gesto è riconosciuto (altrimenti il contenuto saltava dei punti di riconoscimento).
   Il contenuto segue il dito con una curva di resistenza (`resisted`): prima del punto (metà del tratto) resta sempre
   più indietro, superato lo rincorre (`catchUp`) con una vibrazione ed è tirato verso l'altra posizione. Un gesto che
