@@ -233,7 +233,23 @@ final class WeekHeaderScroll: NSObject {
     /// Ridotta: solo allora gli eventi scorrono. Cambia solo nei passaggi.
     fileprivate(set) var isCollapsed = false
 
-    @ObservationIgnored fileprivate var startProgress: CGFloat = 0
+    /// Punto di resistenza, a metà del tratto percorso dal dito. Prima il contenuto resta sempre
+    /// più indietro rispetto al dito; superato il punto lo raggiunge (con una breve animazione e
+    /// una vibrazione) e da lì è tirato verso l'altra posizione, davanti al dito. Lasciando il
+    /// dito conta da che parte del punto si è (e la velocità).
+    static let threshold: CGFloat = 0.5
+    /// Asintoto della curva di resistenza: quanto al massimo il contenuto si muove prima del punto.
+    private static let lag: CGFloat = 0.35
+    /// Durata (costante di tempo) della rincorsa al passaggio del punto.
+    private static let catchUpTime: CGFloat = 0.06
+
+    /// Posizione del dito in avanzamento (0 intera, 1 ridotta), senza resistenza.
+    @ObservationIgnored private var finger: CGFloat = 0
+    @ObservationIgnored private var fingerStart: CGFloat = 0
+    /// Scarto tra il contenuto e la curva, che si riassorbe in fretta (rincorsa dopo il punto).
+    @ObservationIgnored private var catchUp: CGFloat = 0
+    @ObservationIgnored private var isDragging = false
+    @ObservationIgnored private let haptics = UIImpactFeedbackGenerator(style: .medium)
     /// Molla calcolata a ogni fotogramma (non un'animazione di SwiftUI): `progress` è sempre il
     /// valore visibile, così un gesto può riprendere la settimana a metà di uno scatto.
     @ObservationIgnored private var spring: (target: CGFloat, velocity: CGFloat)?
@@ -241,28 +257,107 @@ final class WeekHeaderScroll: NSObject {
     @ObservationIgnored private var lastTimestamp: CFTimeInterval = 0
 
     /// Riapre la settimana ridotta (tocco sulla striscia, nuovo tocco sulla scheda).
-    func open() { settle(collapsed: false) }
+    func open() {
+        if progress > 0.5 { haptics.impactOccurred() }
+        settle(collapsed: false)
+    }
 
     /// Settimana intera senza animazione (cambio di vista: lo scorrimento riparte dalla cima).
     func reset() {
-        stopSpring()
+        stopLink()
+        isDragging = false
         progress = 0
         isCollapsed = false
     }
 
-    /// Porta la settimana intera o ridotta con una molla che parte dalla velocità del dito
+    // MARK: Curva di resistenza
+
+    /// Rallentamento crescente: segue il dito all'inizio, poi sempre meno.
+    private static func slowed(_ x: CGFloat) -> CGFloat {
+        lag * (1 - exp(-x / lag))
+    }
+
+    /// Dove sta il contenuto con il dito in `finger`: indietro prima del punto, avanti dopo; oltre
+    /// la ridotta non si va in un gesto, oltre l'intera c'è un elastico sempre più duro.
+    static func resisted(_ finger: CGFloat) -> CGFloat {
+        if finger < 0 { return -(1 - 1 / (1 - finger * 0.55)) * 0.5 }
+        if finger >= 1 { return 1 }
+        return finger < threshold ? slowed(finger) : 1 - slowed(1 - finger)
+    }
+
+    /// Quanto si muove il contenuto per un movimento del dito, in `finger`.
+    private static func slope(_ finger: CGFloat) -> CGFloat {
+        guard finger >= 0, finger < 1 else { return 0.3 }
+        return exp(-(finger < threshold ? finger : 1 - finger) / lag)
+    }
+
+    /// Posizione del dito che corrisponde al contenuto in `value` (per riprendere un gesto a
+    /// metà di uno scatto); nel salto della rincorsa si sceglie il lato più vicino.
+    private static func finger(for value: CGFloat) -> CGFloat {
+        if value <= 0 { return 0 }
+        if value >= 1 { return 1 }
+        let edge = slowed(threshold)
+        if value <= edge { return -lag * log(max(0.0001, 1 - value / lag)) }
+        if value >= 1 - edge { return 1 + lag * log(max(0.0001, 1 - (1 - value) / lag)) }
+        return value < 0.5 ? threshold - 0.0001 : threshold
+    }
+
+    // MARK: Gesto
+
+    fileprivate func began() {
+        stopLink()
+        isDragging = true
+        finger = Self.finger(for: progress)
+        fingerStart = finger
+        // Riprendendo a metà di uno scatto il contenuto resta dov'è e poi raggiunge la curva.
+        catchUp = progress - Self.resisted(finger)
+        haptics.prepare()
+        if catchUp != 0 { startLink() }
+    }
+
+    /// `translation`: spostamento del dito verso l'alto, in punti, dall'inizio del gesto.
+    fileprivate func changed(_ translation: CGFloat) {
+        let previous = finger
+        finger = fingerStart + translation / Self.range
+        if (previous < Self.threshold) != (finger < Self.threshold), max(previous, finger) > 0, min(previous, finger) < 1 {
+            // Superato il punto: il contenuto parte da dov'è e rincorre la nuova posizione.
+            catchUp = progress - Self.resisted(finger)
+            haptics.impactOccurred()
+            haptics.prepare()
+            startLink()
+        }
+        progress = Self.resisted(finger) + catchUp
+    }
+
+    /// `velocity`: velocità del dito verso l'alto, in punti al secondo.
+    fileprivate func ended(velocity: CGFloat) {
+        isDragging = false
+        let speed = velocity / Self.range
+        // Dove arriverebbe il dito in un decimo di secondo, rispetto al punto di resistenza.
+        let heading = finger + speed * 0.1
+        settle(collapsed: heading >= Self.threshold, velocity: speed * Self.slope(finger))
+    }
+
+    // MARK: Molla
+
+    /// Porta la settimana intera o ridotta con una molla che parte dalla velocità del contenuto
     /// (`velocity` in avanzamento al secondo).
     fileprivate func settle(collapsed: Bool, velocity: CGFloat = 0) {
         isCollapsed = collapsed
+        catchUp = 0
         let target: CGFloat = collapsed ? 1 : 0
         // Già lì (es. un gesto arrivato fino in fondo): niente molla, che con la velocità del dito
         // andrebbe oltre.
         guard abs(progress - target) > 0.001 else {
-            stopSpring()
+            stopLink()
             progress = target
             return
         }
         spring = (target, velocity)
+        startLink()
+    }
+
+    private func startLink() {
         guard displayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(step(_:)))
         link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
@@ -272,18 +367,25 @@ final class WeekHeaderScroll: NSObject {
     }
 
     @objc private func step(_ link: CADisplayLink) {
-        guard var current = spring else { stopSpring(); return }
         let now = link.timestamp
-        let elapsed = lastTimestamp == 0 ? link.duration : min(now - lastTimestamp, 1.0 / 30)
+        let elapsed = CGFloat(lastTimestamp == 0 ? link.duration : min(now - lastTimestamp, 1.0 / 30))
         lastTimestamp = now
-        // Molla appena sotto lo smorzamento critico (rigidità 320, smorzamento 34), in passi brevi.
+        if isDragging {
+            // Rincorsa dopo il punto di resistenza (o dopo aver ripreso uno scatto a metà).
+            catchUp *= exp(-elapsed / Self.catchUpTime)
+            if abs(catchUp) < 0.0005 { catchUp = 0; stopLink() }
+            progress = Self.resisted(finger) + catchUp
+            return
+        }
+        guard var current = spring else { stopLink(); return }
+        // Molla rigida, appena sotto lo smorzamento critico, in passi brevi.
         var value = progress
         let steps = 4
-        let dt = CGFloat(elapsed) / CGFloat(steps)
+        let dt = elapsed / CGFloat(steps)
         var crossed = false
         for _ in 0..<steps {
             let before = value - current.target
-            let acceleration = -320 * before - 34 * current.velocity
+            let acceleration = -560 * before - 43 * current.velocity
             current.velocity += acceleration * dt
             value += current.velocity * dt
             // Niente rimbalzo oltre la posizione finale (con un colpo veloce gli eventi salirebbero
@@ -292,37 +394,17 @@ final class WeekHeaderScroll: NSObject {
         }
         if crossed || (abs(value - current.target) < 0.0008 && abs(current.velocity) < 0.01) {
             value = current.target
-            stopSpring()
+            stopLink()
         } else {
             spring = current
         }
         progress = value
     }
 
-    private func stopSpring() {
+    private func stopLink() {
         displayLink?.invalidate()
         displayLink = nil
         spring = nil
-    }
-
-    fileprivate func began() {
-        stopSpring()
-        startProgress = progress
-    }
-
-    /// `translation`: spostamento del dito verso l'alto, in punti, dall'inizio del gesto.
-    fileprivate func changed(_ translation: CGFloat) {
-        let raw = startProgress + translation / Self.range
-        // Oltre la ridotta non si va in un gesto; oltre l'intera c'è un elastico sempre più duro.
-        progress = raw >= 0 ? min(raw, 1) : -(1 - 1 / (1 - raw * 0.55)) * 0.5
-    }
-
-    /// `velocity`: velocità del dito verso l'alto, in punti al secondo.
-    fileprivate func ended(velocity: CGFloat) {
-        let speed = velocity / Self.range
-        // Dove arriverebbe in circa un decimo di secondo: un colpo veloce basta per cambiare.
-        let heading = progress + speed * 0.12
-        settle(collapsed: heading > 0.5, velocity: speed)
     }
 
     /// Sposta l'area degli eventi con la settimana e abilita lo scorrimento solo da ridotta.
@@ -449,7 +531,12 @@ struct TimetableWeekHeader: View, Animatable {
     /// Posizione di riposo per il feedback aptico: vibra arrivando intera o ridotta.
     private enum Detent { case expanded, between, collapsed }
 
-    init(selectedDay: Binding<Date>, progress: CGFloat, onExpand: @escaping () -> Void) {
+    /// Vibra arrivando intera o ridotta (nella vista Lista vibra invece il gesto, al punto di
+    /// resistenza: `WeekHeaderScroll`).
+    var arrivalFeedback = true
+
+    init(selectedDay: Binding<Date>, progress: CGFloat, arrivalFeedback: Bool = true, onExpand: @escaping () -> Void) {
+        self.arrivalFeedback = arrivalFeedback
         _selectedDay = selectedDay
         self.progress = progress
         target = progress
@@ -521,7 +608,7 @@ struct TimetableWeekHeader: View, Animatable {
             }
         }
         .sensoryFeedback(.selection, trigger: selectedDay)
-        .sensoryFeedback(.impact(weight: .light), trigger: detent) { _, new in new != .between }
+        .sensoryFeedback(.impact(weight: .light), trigger: detent) { _, new in arrivalFeedback && new != .between }
     }
 
     private var detent: Detent {

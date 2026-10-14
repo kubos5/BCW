@@ -329,7 +329,8 @@ struct TimetableView: View {
 
         var body: some View {
             if let scroll {
-                TimetableWeekHeader(selectedDay: $selectedDay, progress: scroll.progress, onExpand: scroll.open)
+                TimetableWeekHeader(selectedDay: $selectedDay, progress: scroll.progress, arrivalFeedback: false,
+                                    onExpand: scroll.open)
             } else {
                 TimetableWeekHeader(selectedDay: $selectedDay, progress: collapsed ? 1 : 0, onExpand: expandDay)
             }

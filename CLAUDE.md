@@ -192,11 +192,13 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `UIPanGestureRecognizer` aggiunto allo `UIScrollView` (trovato dallo sfondo del contenuto), che parte sempre con la
   settimana intera (lo scorrimento è spento, `scrollDisabled`) e da ridotta solo verso il basso con gli eventi in cima;
   lo scorrimento lo aspetta (`shouldBeRequiredToFailBy`). Misure nella finestra, così lo spostamento dell'area non le
-  altera. In un gesto si arriva al massimo a ridotta; oltre l'intera c'è un elastico. Lasciando il dito una molla
-  calcolata a ogni fotogramma (`CADisplayLink`, non un'animazione di SwiftUI, così un nuovo gesto la riprende dal valore
-  visibile) va alla posizione più vicina tenendo conto della velocità, senza superarla. Da ridotta gli eventi scorrono e
-  rimbalzano in cima normalmente. L'avanzamento si legge solo in `WeekHeaderHost` e `Shift`. Vibra arrivando intera o
-  ridotta; toccata da ridotta si riapre. Il titolo grande resta grande finché gli eventi non scorrono.
+  altera. Il contenuto segue il dito con una curva di resistenza (`WeekHeaderScroll.resisted`): prima del punto di
+  resistenza (metà del tratto del dito) resta sempre più indietro; superato il punto lo rincorre in fretta (`catchUp`),
+  vibra, e da lì è tirato verso l'altra posizione, davanti al dito. In un gesto si arriva al massimo a ridotta; oltre
+  l'intera c'è un elastico. Lasciando il dito decide il lato del punto (con la velocità) e una molla rigida calcolata a
+  ogni fotogramma (`CADisplayLink`, non un'animazione di SwiftUI, così un nuovo gesto la riprende dal valore visibile)
+  porta alla posizione, senza superarla. Da ridotta gli eventi scorrono e rimbalzano in cima normalmente.
+  L'avanzamento si legge solo in `WeekHeaderHost` e `Shift`. Toccata da ridotta si riapre (con una vibrazione). Il titolo grande resta grande finché gli eventi non scorrono.
   Le registrazioni del simulatore salvano fotogrammi solo quando lo schermo cambia: le pause spariscono.
   Nella vista Giorno si riduce a una striscia di numeri seguendo la barra delle schede (`FloatingHeaderCollapse`): `UITabBar._isMinimized`
   non si può usare ("This can only be called by an approved app", l'app si chiude), quindi si guarda quale dei due
