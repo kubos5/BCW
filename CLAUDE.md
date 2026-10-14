@@ -183,31 +183,42 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 ## Layout su macOS
 - Barra laterale al posto delle schede; "Tu" diventa un riepilogo (profilo, statistiche, riquadri delle sezioni).
 - Orario su iPhone: solo viste Lista e Giorno (`TimetableMode.available`; la Calendario resta su Mac e nella Dashboard).
-  La settimana (`TimetableWeekHeader`) galleggia sopra gli eventi in uno `ZStack`; lo scorrimento ha
-  `safeAreaPadding(.top)` pari all'altezza della settimana intera più ciò che galleggia sotto (bozza, modifica),
-  costante quando si riduce, così la pagina non salta e il titolo grande si comporta come nelle altre schede.
-  Nella vista Lista la settimana non fa parte dello scorrimento: l'area degli eventi parte sotto la settimana ridotta
-  (`safeAreaPadding` costante) e scende di 98 punti (intera − ridotta) con `.offset` (`WeekHeaderScroll.Shift`, solo
-  disegno, niente impaginazione a ogni fotogramma). Il passaggio non usa lo scorrimento di iOS: `WeekHeaderPan` è un
-  `UIPanGestureRecognizer` aggiunto allo `UIScrollView` (trovato dallo sfondo del contenuto), che parte sempre con la
-  settimana intera (lo scorrimento è spento, `scrollDisabled`) e da ridotta solo verso il basso con gli eventi in cima;
-  lo scorrimento lo aspetta (`shouldBeRequiredToFailBy`). Misure nella finestra, così lo spostamento dell'area non le
-  altera. Il contenuto segue il dito con una curva di resistenza (`WeekHeaderScroll.resisted`): prima del punto di
-  resistenza (metà del tratto del dito) resta sempre più indietro; superato il punto lo rincorre in fretta (`catchUp`),
-  vibra, e da lì è tirato verso l'altra posizione, davanti al dito. In un gesto si arriva al massimo a ridotta; oltre
-  l'intera c'è un elastico. Lasciando il dito decide il lato del punto (con la velocità) e una molla rigida calcolata a
-  ogni fotogramma (`CADisplayLink`, non un'animazione di SwiftUI, così un nuovo gesto la riprende dal valore visibile)
-  porta alla posizione, senza superarla. Da ridotta gli eventi scorrono e rimbalzano in cima normalmente.
-  L'avanzamento si legge solo in `WeekHeaderHost` e `Shift`. Toccata da ridotta si riapre (con una vibrazione). Il titolo grande resta grande finché gli eventi non scorrono.
-  Le registrazioni del simulatore salvano fotogrammi solo quando lo schermo cambia: le pause spariscono.
-  Nella vista Giorno si riduce a una striscia di numeri seguendo la barra delle schede (`FloatingHeaderCollapse`): `UITabBar._isMinimized`
-  non si può usare ("This can only be called by an approved app", l'app si chiude), quindi si guarda quale dei due
-  `_UITabBarPlatterView` è visibile (il ridotto è il più stretto); se la struttura cambia vale una regola di riserva
-  misurata (riduce oltre 140 punti dalla cima, riapre in cima e tirando in fondo con il dito, non scorrendo in su).
-  `ScrollGeometry.containerSize` è già senza i margini (verificato). Il passaggio è una vista `Animatable`
-  (`progress` 0–1) che interpola posizioni, rettangolo → cerchio e dissolvenze; si controlla registrando il simulatore.
+- Calendario mobile su iPhone (`Components/CalendarHeader.swift`), uguale in Orario (Lista e Giorno) e Dashboard
+  (Lista = settimana, Calendario = mese): `CalendarHeader` galleggia sopra l'area che scorre in uno `ZStack` e non fa
+  parte dello scorrimento. L'area parte sotto il calendario ridotto (`safeAreaPadding` costante) e scende di `range`
+  (intero − ridotto; nel mese dipende dalle settimane) con `.offset` (`WeekHeaderScroll.Shift`, solo disegno).
+  Il passaggio non usa lo scorrimento di iOS: `CalendarHeaderPan` aggiunge allo `UIScrollView` (trovato dallo sfondo del
+  contenuto) un pan verticale, che parte sempre da intero (l'area è ferma, `scrollDisabled`; in Dashboard
+  `expandedScrolls` lascia allo scorrimento i gesti verso il basso, per aggiornare), da ridotto solo verso il basso con
+  l'area in cima e sempre durante uno scatto; e uno orizzontale per il giorno prima/dopo (`onSwipeDay`, solo da
+  fermo): il contenuto segue il dito, esce di lato e il giorno nuovo entra dall'altro (cambiato senza animazioni,
+  mentre è fuori). Lo scorrimento li aspetta (`shouldBeRequiredToFailBy`); misure nella finestra; la traslazione
+  riparte da zero quando il gesto è riconosciuto (altrimenti il contenuto saltava dei punti di riconoscimento).
+  Il contenuto segue il dito con una curva di resistenza (`resisted`): prima del punto (metà del tratto) resta sempre
+  più indietro, superato lo rincorre (`catchUp`) con una vibrazione ed è tirato verso l'altra posizione. Un gesto che
+  riprende uno scatto a metà segue il dito senza curva. In un gesto si arriva al massimo a ridotto. Lasciando il dito
+  decide il lato del punto (con la velocità) e una molla calcolata a ogni fotogramma (`CADisplayLink`, così un gesto
+  la riprende dal valore visibile) porta alla posizione senza superarla. Lasciare allo scorrimento un gesto durante
+  la molla lo faceva tremare (si muove con l'area): non farlo. L'avanzamento si legge solo negli host del calendario
+  e in `Shift`. Tutto è tagliato solo dal bordo della card (`scrollClipDisabled`, niente `clipped` interni); da ridotto
+  le griglie invisibili non devono prendere i tocchi (`allowsHitTesting`), altrimenti rubano i gesti all'area.
+  Il mese si riduce alla settimana del giorno scelto: le altre settimane salgono e svaniscono, i giorni dei mesi
+  accanto che la completano compaiono (`MonthMorphCell`), e riducendo si torna al mese del giorno scelto.
+  Le registrazioni del simulatore salvano fotogrammi solo quando lo schermo cambia (le pause spariscono): per misurare
+  un'animazione stampare i valori con l'ora (`CACurrentMediaTime`).
 - Impostazioni su iPhone: elenco di sottopagine (Generale, Voti, Dashboard, Orario, Notifiche, Account) con le stesse
   sezioni delle schede della finestra Impostazioni del Mac.
+- Dashboard, "Nei prossimi giorni": ogni giorno è una card comprimibile (`UpcomingDayCard`, intestazione = comprimi).
+  Toccando il resto della card si va a quel giorno, ma i tocchi propri vincono: la casella del compito e il testo
+  tagliato di una riga (che si apre); `AgendaEventRow.onPlainTap` misura se il testo è tagliato.
+- Notifiche delle novità (`Store/NewsNotifications.swift`): dopo ogni `refreshAll` confronta voti, comunicazioni,
+  note, assenze e compiti/verifiche futuri con gli id già visti per account (`UserDefaults`), e notifica solo i tipi
+  attivi in Impostazioni › Notifiche (`Preferences.newsNotifications`); la prima volta ricorda senza notificare; più
+  di 4 novità di un tipo = una notifica riassuntiva. Su iPhone c'è l'aggiornamento in background
+  (`.backgroundTask(.appRefresh)`, `Config/Info-iOS.plist` con `BGTaskSchedulerPermittedIdentifiers` e
+  `UIBackgroundModes`, unito all'Info.plist generato). `NotificationPresenter` le mostra anche con l'app aperta (senza
+  delegato iOS le scarta). `-BCWNewsDemo YES` le prova nella demo. Sul simulatore gli interruttori dei `Form` vogliono
+  un tocco un po' lungo (`touch_path` di 120 ms): quello istantaneo non li cambia.
 - Verifiche nascoste (menu dell'orario, `TimetableHiddenTestsView`): nascoste a mano (`hiddenTests`) o da regole
   (`Timetable.testRules`, `TestHidingRules`: docenti, materie, giorni, periodi, parole, senza lezione in orario);
   mostrandone a mano una nascosta da una regola finisce in `shownTests` (eccezione), nascondendola di nuovo l'eccezione

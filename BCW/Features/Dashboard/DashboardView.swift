@@ -8,6 +8,8 @@ struct DashboardView: View {
     #if os(iOS)
     @State private var scrollPosition = ScrollPosition(edge: .top)
     @State private var isAtTop = true
+    /// Calendario mobile, intero o ridotto (`CalendarHeader`).
+    @State private var headerState = WeekHeaderScroll()
     #endif
     /// Si apre sul giorno dopo, come richiesto: è quello per cui servono i compiti.
     @State private var selectedDay = Date().adding(days: DashboardView.initialOffset).startOfDay
@@ -159,38 +161,62 @@ struct DashboardView: View {
         }
         .animation(.snappy, value: selectedDay)
         #else
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                if let error = model.lastError {
-                    StatusBanner(message: error, symbol: model.isOffline ? "wifi.slash" : "exclamationmark.triangle")
+        // Il calendario (settimana o mese) galleggia sopra il contenuto (`CalendarHeader`), come
+        // nell'Orario: il contenuto parte sotto il calendario ridotto e si sposta con lui.
+        ZStack(alignment: .top) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    if let error = model.lastError {
+                        StatusBanner(message: error, symbol: model.isOffline ? "wifi.slash" : "exclamationmark.triangle")
+                    }
+
+                    DayDetail(day: selectedDay)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { if $0 > 0 { dayDetailHeight.value = $0 } }
+                        .id(selectedDay)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+
+                    if mode == .list {
+                        upcoming
+                    }
                 }
+                .pagePadding()
+                .padding(.bottom, 24)
+                .animation(.snappy, value: selectedDay)
+                .background { CalendarHeaderPan(state: headerState) }
+            }
+            .scrollPosition($scrollPosition)
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top <= 1
+            } action: { _, atTop in
+                isAtTop = atTop
+            }
+            .safeAreaPadding(.top, 4 + CalendarHeader.collapsedHeight + 12)
+            .modifier(WeekHeaderScroll.Shift(state: headerState))
 
-                calendar
-
-                DayDetail(day: selectedDay)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { if $0 > 0 { dayDetailHeight.value = $0 } }
-                    .id(selectedDay)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-
-                if mode == .list {
-                    upcoming
+            DashboardHeaderHost(selectedDay: daySelection, style: mode == .list ? .week : .month, state: headerState)
+                .padding(.horizontal)
+                .padding(.top, 4)
+        }
+        .onAppear {
+            // Da calendario intero si può tirare giù per aggiornare; scorrendo di lato si cambia giorno.
+            headerState.expandedScrolls = true
+            headerState.onSwipeDay = { direction in
+                // Il contenuto è fuori dallo schermo: si cambia senza le transizioni del giorno.
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    select(selectedDay.adding(days: direction).startOfDay, animated: false)
                 }
             }
-            .pagePadding()
-            .padding(.bottom, 24)
-            .animation(.snappy, value: selectedDay)
         }
-        .scrollPosition($scrollPosition)
-        .onScrollGeometryChange(for: Bool.self) { geometry in
-            geometry.contentOffset.y + geometry.contentInsets.top <= 1
-        } action: { _, atTop in
-            isAtTop = atTop
-        }
+        .onChange(of: mode) { headerState.reset() }
         .onChange(of: reselection) {
-            if isAtTop {
-                select(Date().adding(days: 1).startOfDay)
-            } else {
+            if !isAtTop {
                 withAnimation(.smooth) { scrollPosition.scrollTo(edge: .top) }
+            } else if headerState.isCollapsed {
+                headerState.open()
+            } else {
+                select(Date().adding(days: 1).startOfDay)
             }
         }
         .themedBackground()
@@ -236,6 +262,21 @@ struct DashboardView: View {
         }
     }
 }
+
+#if os(iOS)
+/// Il calendario con l'avanzamento dello stato, letto solo qui (cambia a ogni fotogramma).
+private struct DashboardHeaderHost: View {
+    @Binding var selectedDay: Date
+    let style: CalendarHeader.Style
+    let state: WeekHeaderScroll
+
+    var body: some View {
+        CalendarHeader(selectedDay: $selectedDay, style: style, progress: state.progress, onExpand: state.open) { height in
+            state.range = height - CalendarHeader.collapsedHeight
+        }
+    }
+}
+#endif
 
 // MARK: - Striscia settimanale
 
@@ -438,25 +479,63 @@ private struct UpcomingDays: View {
     private func upcomingList(_ days: [(Date, [AgendaEvent])]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(days, id: \.0) { day, events in
-                VStack(alignment: .leading, spacing: 12) {
-                    Button { onSelect(day) } label: {
-                        HStack {
-                            Eyebrow(text: day.relativeDayName, color: Theme.accent)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(Theme.secondaryInk)
-                        }
+                UpcomingDayCard(day: day, events: events) { onSelect(day) }
+            }
+        }
+    }
+}
+
+/// Un giorno in "Nei prossimi giorni". Toccando l'intestazione si comprime (come le altre
+/// sezioni); toccando un punto del contenuto che non fa già qualcosa si va a quel giorno: non la
+/// casella di un compito, né il testo di un evento tagliato (che si apre); i margini e le righe
+/// con il testo intero sì. Lo stato compresso resta
+/// finché la Dashboard è aperta.
+private struct UpcomingDayCard: View {
+    let day: Date
+    let events: [AgendaEvent]
+    let onSelect: () -> Void
+    @State private var isCollapsed = false
+
+    var body: some View {
+        let lastID = events.last?.id
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.snappy) { isCollapsed.toggle() }
+            } label: {
+                HStack {
+                    Eyebrow(text: day.relativeDayName, color: Theme.accent)
+                    Spacer()
+                    if isCollapsed {
+                        Text(events.count == 1 ? "1 elemento" : "\(events.count) elementi")
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondaryInk)
+                            .transition(.opacity)
                     }
-                    .buttonStyle(.plain)
-                    let lastID = events.last?.id
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.secondaryInk)
+                        .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(HeaderButtonStyle())
+            .sensoryFeedback(.selection, trigger: isCollapsed)
+            .accessibilityHint(isCollapsed ? "Mostra gli elementi" : "Nasconde gli elementi")
+
+            CollapsibleContent(isExpanded: !isCollapsed, spacing: 12) {
+                VStack(alignment: .leading, spacing: 12) {
                     ForEach(events) { event in
-                        AgendaEventRow(event: event)
+                        AgendaEventRow(event: event, onPlainTap: onSelect)
                         if event.id != lastID { Divider().overlay(Theme.separator) }
                     }
                 }
-                .card()
             }
         }
+        .card()
+        // Intestazione e righe hanno i loro tocchi (comprimere, aprire, segnare come fatto), che
+        // hanno la precedenza: questo vale solo negli spazi vuoti, margini della card compresi.
+        .contentShape(.rect(cornerRadius: Theme.corner))
+        .onTapGesture(perform: onSelect)
+        .accessibilityAction(named: "Vai a \(day.relativeDayName)", onSelect)
     }
 }

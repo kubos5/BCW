@@ -193,6 +193,8 @@
 				"ENABLE_RESOURCE_ACCESS_CALENDARS[sdk=macosx*]" = YES;
 				"ENABLE_USER_SELECTED_FILES[sdk=macosx*]" = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				"INFOPLIST_FILE[sdk=iphoneos*]" = "Config/Info-iOS.plist";
+				"INFOPLIST_FILE[sdk=iphonesimulator*]" = "Config/Info-iOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = BCW;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
@@ -246,6 +248,8 @@
 				"ENABLE_RESOURCE_ACCESS_CALENDARS[sdk=macosx*]" = YES;
 				"ENABLE_USER_SELECTED_FILES[sdk=macosx*]" = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				"INFOPLIST_FILE[sdk=iphoneos*]" = "Config/Info-iOS.plist";
+				"INFOPLIST_FILE[sdk=iphonesimulator*]" = "Config/Info-iOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = BCW;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";

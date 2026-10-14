@@ -24,9 +24,7 @@ struct TimetableView: View {
     /// Modalità di modifica grafica: vista Giorno con eventi trascinabili.
     @State private var isEditing = false
     #if os(iOS)
-    /// La settimana, che galleggia sopra gli eventi, è ridotta a una striscia (vista Giorno).
-    @State private var headerCollapsed = false
-    /// Nella vista Lista la settimana segue invece lo scorrimento.
+    /// La settimana che galleggia sopra gli eventi, intera o ridotta (`CalendarHeader`).
     @State private var weekScroll = WeekHeaderScroll()
     /// Altezza di ciò che galleggia sotto la settimana (bozza, modifica, avvisi).
     @State private var extrasHeight: CGFloat = 0
@@ -109,7 +107,6 @@ struct TimetableView: View {
                 .onChange(of: reselection) {
                     select(Date().startOfDay)
                     #if os(iOS)
-                    withAnimation(FloatingHeaderCollapse.animation) { headerCollapsed = false }
                     weekScroll.open()
                     #endif
                 }
@@ -274,35 +271,29 @@ struct TimetableView: View {
         #if os(macOS)
         macContent
         #else
-        // La settimana galleggia sopra gli eventi, che le scorrono sotto: così la pagina scorre come
-        // le altre schede (con il titolo grande che si riduce) e la settimana si riduce a una
-        // striscia scorrendo verso il basso (`FloatingHeaderCollapse`).
+        // La settimana galleggia sopra gli eventi (`CalendarHeader`): l'area degli eventi parte sotto
+        // la settimana ridotta e si sposta con lei (`WeekHeaderScroll.Shift`), senza scorrerle insieme.
         ZStack(alignment: .top) {
             switch mode {
             case .list, .calendar:
-                // L'area degli eventi parte sotto la settimana ridotta e si sposta con lei
-                // (`WeekHeaderScroll.Shift`): non scorre insieme alla settimana.
                 ScrollView {
                     TimetableDayList(content: TimetableDayContent(day: selectedDay, model: model), actions: actions)
                         .id(selectedDay)
                         .transition(.opacity)
                         .pagePadding()
                         .padding(.bottom, Theme.bottomInset)
-                        .background { WeekHeaderPan(state: weekScroll) }
+                        .background { CalendarHeaderPan(state: weekScroll) }
                 }
                 .scrollDismissesKeyboard(.immediately)
                 .safeAreaPadding(.top, collapsedFloatingHeight)
                 .modifier(WeekHeaderScroll.Shift(state: weekScroll))
             case .day:
                 TimetableTimeline(days: [selectedDay], selectedDay: selectedDay, actions: actions, isEditing: isEditing,
-                                  topInset: floatingHeight, headerCollapsed: $headerCollapsed)
+                                  topInset: collapsedFloatingHeight, headerState: weekScroll)
             }
 
             VStack(spacing: 10) {
-                WeekHeaderHost(selectedDay: daySelection, scroll: mode == .day ? nil : weekScroll,
-                               collapsed: headerCollapsed) {
-                    withAnimation(FloatingHeaderCollapse.animation) { headerCollapsed = false }
-                }
+                WeekHeaderHost(selectedDay: daySelection, state: weekScroll)
                 floatingExtras
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { extrasHeight = $0 }
             }
@@ -313,40 +304,35 @@ struct TimetableView: View {
         .animation(.snappy, value: isEditing)
         .animation(.snappy, value: store.draft == nil)
         .themedBackground()
-        .onChange(of: mode) { headerCollapsed = false; weekScroll.reset() }
-        .onChange(of: isEditing) { headerCollapsed = false }
+        .onAppear {
+            // Scorrendo di lato si passa al giorno prima o dopo (non durante la modifica).
+            weekScroll.onSwipeDay = { direction in
+                guard !isEditing else { return }
+                // Il contenuto è fuori dallo schermo: si cambia senza dissolvenza.
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { selectedDay = selectedDay.adding(days: direction).startOfDay }
+            }
+        }
+        .onChange(of: mode) { weekScroll.reset() }
         #endif
     }
 
     #if os(iOS)
-    /// La settimana con l'avanzamento giusto per la vista: nella Lista quello dello scorrimento,
-    /// letto solo qui (cambia a ogni fotogramma), nella vista Giorno lo stato ridotto.
+    /// La settimana con l'avanzamento dello stato, letto solo qui (cambia a ogni fotogramma).
     private struct WeekHeaderHost: View {
         @Binding var selectedDay: Date
-        let scroll: WeekHeaderScroll?
-        let collapsed: Bool
-        let expandDay: () -> Void
+        let state: WeekHeaderScroll
 
         var body: some View {
-            if let scroll {
-                TimetableWeekHeader(selectedDay: $selectedDay, progress: scroll.progress, arrivalFeedback: false,
-                                    onExpand: scroll.open)
-            } else {
-                TimetableWeekHeader(selectedDay: $selectedDay, progress: collapsed ? 1 : 0, onExpand: expandDay)
-            }
+            CalendarHeader(selectedDay: $selectedDay, style: .week, progress: state.progress, onExpand: state.open)
         }
     }
 
-    /// Come `floatingHeight`, ma con la settimana ridotta: l'inizio dell'area degli eventi nella
-    /// vista Lista, che scende di `WeekHeaderScroll.range` con la settimana intera.
+    /// Inizio dell'area degli eventi: sotto la settimana ridotta e ciò che le galleggia sotto (bozza,
+    /// modifica, avvisi). Con la settimana intera l'area scende di `WeekHeaderScroll.range`.
     private var collapsedFloatingHeight: CGFloat {
-        floatingHeight - WeekHeaderScroll.range
-    }
-
-    /// Spazio occupato in cima dagli elementi mobili con la settimana intera: gli eventi cominciano
-    /// sotto. Resta lo stesso quando la settimana si riduce, così la pagina non salta.
-    private var floatingHeight: CGFloat {
-        4 + TimetableWeekHeader.expandedHeight + (extrasHeight > 0 ? 10 + extrasHeight : 0) + 12
+        4 + CalendarHeader.collapsedHeight + (extrasHeight > 0 ? 10 + extrasHeight : 0) + 12
     }
 
     /// Sotto la settimana: bozza in anteprima, modifica dell'orario e, nella vista Giorno, le

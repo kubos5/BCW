@@ -102,6 +102,10 @@ final class Preferences {
     var completedHomework: Set<Int> {
         didSet { defaults.set(Array(completedHomework), forKey: "completedHomework") }
     }
+    /// Tipi di novità per cui arriva una notifica (`NewsNotifications`).
+    var newsNotifications: Set<NewsKind> {
+        didSet { defaults.set(newsNotifications.map(\.rawValue), forKey: "newsNotifications") }
+    }
 
     init() {
         let defaults = UserDefaults.standard
@@ -122,6 +126,7 @@ final class Preferences {
         showUpcomingDays = defaults.object(forKey: "showUpcomingDays") as? Bool ?? true
         titleAbbreviation = TitleAbbreviation(rawValue: defaults.string(forKey: "titleAbbreviation") ?? "") ?? .automatic
         collapsedSections = Set(defaults.stringArray(forKey: "collapsedSections") ?? [])
+        newsNotifications = Set((defaults.stringArray(forKey: "newsNotifications") ?? []).compactMap(NewsKind.init(rawValue:)))
     }
 
     func isCollapsed(_ section: DashboardSection) -> Bool { collapsedSections.contains(section.rawValue) }

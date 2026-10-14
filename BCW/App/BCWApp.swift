@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct BCWApp: App {
@@ -9,6 +10,7 @@ struct BCWApp: App {
 
     init() {
         Theme.configureAppearance()
+        UNUserNotificationCenter.current().delegate = NotificationPresenter.shared
         #if DEBUG
         TimetableSelfTest.runIfRequested()
         #endif
@@ -44,6 +46,10 @@ struct BCWApp: App {
                 .fontDesign(.serif)
                 .tint(Theme.accent)
                 .preferredColorScheme(model.preferences.appearance.colorScheme)
+        }
+        // Aggiornamento in background per le notifiche delle novità (`NewsNotifications`).
+        .backgroundTask(.appRefresh(NewsNotifications.refreshTaskID)) {
+            await NewsNotifications.runBackgroundRefresh(model: model)
         }
         #endif
     }
@@ -104,6 +110,9 @@ struct RootView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
+            #if os(iOS)
+            if phase == .background { NewsNotifications.scheduleBackgroundRefresh(model: model) }
+            #endif
             guard model.preferences.useBiometrics, model.phase == .signedIn else { return }
             if phase == .background { lock.lock() }
             if phase == .active, lock.isLocked { Task { await lock.unlock() } }

@@ -121,11 +121,46 @@ struct NotificationSettingsSection: View {
                 .onChange(of: preferences.reminderHour) { Task { await model.rescheduleReminders() } }
             }
         } header: {
-            Text("Notifiche")
+            Text("Promemoria")
         } footer: {
             Text("Ricevi una notifica la sera prima di ogni compito o verifica. I compiti segnati come fatti vengono saltati.")
         }
         .listRowBackground(Theme.surface)
+
+        Section {
+            ForEach(NewsKind.allCases) { kind in
+                Toggle(isOn: Binding {
+                    preferences.newsNotifications.contains(kind)
+                } set: { isOn in
+                    if isOn { enableNews(kind) } else { preferences.newsNotifications.remove(kind) }
+                }) {
+                    Label(kind.title, systemImage: kind.symbol)
+                }
+            }
+        } header: {
+            Text("Novità")
+        } footer: {
+            Text(Platform.isMac
+                 ? "Una notifica per ogni novità trovata aggiornando i dati mentre BCW è aperta."
+                 : "Una notifica per ogni novità trovata aggiornando i dati, anche con BCW chiusa: iOS sceglie quando aggiornare in background, in base a quanto usi l'app, quindi le notifiche possono arrivare con un po' di ritardo.")
+        }
+        .listRowBackground(Theme.surface)
+        .onChange(of: preferences.newsNotifications) {
+            #if os(iOS)
+            NewsNotifications.scheduleBackgroundRefresh(model: model)
+            #endif
+        }
+    }
+
+    /// Attiva un tipo di novità chiedendo prima il permesso per le notifiche.
+    private func enableNews(_ kind: NewsKind) {
+        model.preferences.newsNotifications.insert(kind)
+        Task {
+            if !(await Reminders.requestAuthorization()) {
+                notificationsDenied = true
+                model.preferences.newsNotifications.remove(kind)
+            }
+        }
     }
 }
 
