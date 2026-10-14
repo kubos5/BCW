@@ -186,17 +186,18 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   La settimana (`TimetableWeekHeader`) galleggia sopra gli eventi in uno `ZStack`; lo scorrimento ha
   `safeAreaPadding(.top)` pari all'altezza della settimana intera più ciò che galleggia sotto (bozza, modifica),
   costante quando si riduce, così la pagina non salta e il titolo grande si comporta come nelle altre schede.
-  Nella vista Lista (`WeekHeaderScroll`) ci sono due posizioni di riposo, cima (intera) e 98 punti (ridotta, il bordo
-  inferiore ha seguito gli eventi); lo scorrimento normale comincia da 98. Tra le due si scatta, non si scorre: un gesto
-  dalla cima arriva al massimo a 98 (anche con l'inerzia); un gesto o l'inerzia da più in basso si ferma a 98 con la
-  resistenza di un bordo e la settimana resta ridotta; solo un gesto che parte da fermi a 98 apre la settimana tirando
-  (a metà velocità); lasciando il dito si va alla posizione più vicina, mai a metà. Il tipo di gesto si decide all'inizio
-  del pan (`WeekHeaderScroll.Gesture`); `WeekHeaderScrollControl` limita e rallenta il `contentOffset` dello
-  `UIScrollView` mentre si trascina (va nello sfondo del contenuto, dentro lo scorrimento) e `WeekHeaderSnap` sceglie
-  dove fermarsi (le coordinate di `ScrollTarget` sono già senza il margine: 0 = cima, verificato). Il contenuto è alto
-  almeno quanto la vista più 98, così la settimana si riduce anche nei giorni corti. L'avanzamento si legge solo in
-  `WeekHeaderHost` (cambia a ogni fotogramma). Vibra arrivando intera o ridotta; toccata da ridotta si riapre finché
-  non si scorre di 20 punti.
+  Nella vista Lista la settimana non fa parte dello scorrimento: l'area degli eventi parte sotto la settimana ridotta
+  (`safeAreaPadding` costante) e scende di 98 punti (intera − ridotta) con `.offset` (`WeekHeaderScroll.Shift`, solo
+  disegno, niente impaginazione a ogni fotogramma). Il passaggio non usa lo scorrimento di iOS: `WeekHeaderPan` è un
+  `UIPanGestureRecognizer` aggiunto allo `UIScrollView` (trovato dallo sfondo del contenuto), che parte sempre con la
+  settimana intera (lo scorrimento è spento, `scrollDisabled`) e da ridotta solo verso il basso con gli eventi in cima;
+  lo scorrimento lo aspetta (`shouldBeRequiredToFailBy`). Misure nella finestra, così lo spostamento dell'area non le
+  altera. In un gesto si arriva al massimo a ridotta; oltre l'intera c'è un elastico. Lasciando il dito una molla
+  calcolata a ogni fotogramma (`CADisplayLink`, non un'animazione di SwiftUI, così un nuovo gesto la riprende dal valore
+  visibile) va alla posizione più vicina tenendo conto della velocità, senza superarla. Da ridotta gli eventi scorrono e
+  rimbalzano in cima normalmente. L'avanzamento si legge solo in `WeekHeaderHost` e `Shift`. Vibra arrivando intera o
+  ridotta; toccata da ridotta si riapre. Il titolo grande resta grande finché gli eventi non scorrono.
+  Le registrazioni del simulatore salvano fotogrammi solo quando lo schermo cambia: le pause spariscono.
   Nella vista Giorno si riduce a una striscia di numeri seguendo la barra delle schede (`FloatingHeaderCollapse`): `UITabBar._isMinimized`
   non si può usare ("This can only be called by an approved app", l'app si chiude), quindi si guarda quale dei due
   `_UITabBarPlatterView` è visibile (il ridotto è il più stretto); se la struttura cambia vale una regola di riserva

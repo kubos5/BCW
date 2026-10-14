@@ -28,8 +28,6 @@ struct TimetableView: View {
     @State private var headerCollapsed = false
     /// Nella vista Lista la settimana segue invece lo scorrimento.
     @State private var weekScroll = WeekHeaderScroll()
-    /// Altezza visibile della lista (cambia solo ruotando o con la tastiera).
-    @State private var listViewport: CGFloat = 0
     /// Altezza di ciò che galleggia sotto la settimana (bozza, modifica, avvisi).
     @State private var extrasHeight: CGFloat = 0
     #endif
@@ -282,22 +280,19 @@ struct TimetableView: View {
         ZStack(alignment: .top) {
             switch mode {
             case .list, .calendar:
+                // L'area degli eventi parte sotto la settimana ridotta e si sposta con lei
+                // (`WeekHeaderScroll.Shift`): non scorre insieme alla settimana.
                 ScrollView {
                     TimetableDayList(content: TimetableDayContent(day: selectedDay, model: model), actions: actions)
                         .id(selectedDay)
                         .transition(.opacity)
                         .pagePadding()
                         .padding(.bottom, Theme.bottomInset)
-                        // Sempre abbastanza lungo da ridurre la settimana, anche nei giorni corti.
-                        .frame(minHeight: listViewport + WeekHeaderScroll.range, alignment: .top)
-                        .background { WeekHeaderScrollControl(state: weekScroll) }
-                }
-                .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.height } action: { _, height in
-                    listViewport = height
+                        .background { WeekHeaderPan(state: weekScroll) }
                 }
                 .scrollDismissesKeyboard(.immediately)
-                .safeAreaPadding(.top, floatingHeight)
-                .modifier(WeekHeaderScroll.Tracking(state: weekScroll))
+                .safeAreaPadding(.top, collapsedFloatingHeight)
+                .modifier(WeekHeaderScroll.Shift(state: weekScroll))
             case .day:
                 TimetableTimeline(days: [selectedDay], selectedDay: selectedDay, actions: actions, isEditing: isEditing,
                                   topInset: floatingHeight, headerCollapsed: $headerCollapsed)
@@ -318,7 +313,7 @@ struct TimetableView: View {
         .animation(.snappy, value: isEditing)
         .animation(.snappy, value: store.draft == nil)
         .themedBackground()
-        .onChange(of: mode) { headerCollapsed = false; weekScroll.close() }
+        .onChange(of: mode) { headerCollapsed = false; weekScroll.reset() }
         .onChange(of: isEditing) { headerCollapsed = false }
         #endif
     }
@@ -339,6 +334,12 @@ struct TimetableView: View {
                 TimetableWeekHeader(selectedDay: $selectedDay, progress: collapsed ? 1 : 0, onExpand: expandDay)
             }
         }
+    }
+
+    /// Come `floatingHeight`, ma con la settimana ridotta: l'inizio dell'area degli eventi nella
+    /// vista Lista, che scende di `WeekHeaderScroll.range` con la settimana intera.
+    private var collapsedFloatingHeight: CGFloat {
+        floatingHeight - WeekHeaderScroll.range
     }
 
     /// Spazio occupato in cima dagli elementi mobili con la settimana intera: gli eventi cominciano

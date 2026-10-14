@@ -212,205 +212,185 @@ private struct TabBarFinder: UIViewRepresentable {
     }
 }
 
-/// Settimana della vista Lista su iPhone, legata allo scorrimento. Ha due posizioni di riposo: in
-/// cima (intera) e `range` punti più giù (ridotta, il lato inferiore ha seguito gli eventi); lo
-/// scorrimento normale comincia solo da lì. Tra le due non si scorre davvero, si scatta:
-/// - un gesto che parte dalla cima porta al massimo a ridurre la settimana (il contenuto segue il
-///   dito ma si ferma a `range`, e l'inerzia non va oltre); per il resto serve un altro gesto;
-/// - un gesto (o l'inerzia) che parte più in basso si ferma a `range`, con la settimana ancora
-///   ridotta: oltre c'è solo la resistenza di un bordo, e lasciando il dito torna lì;
-/// - solo un gesto che parte da fermi a `range` (la cima dello scorrimento normale) può aprire la
-///   settimana: tirando oltre, con resistenza, si apre seguendo il dito;
-/// - lasciando il dito si va sempre alla posizione più vicina, mai a metà
-///   (`WeekHeaderSnap`, `WeekHeaderScrollControl`).
-/// Toccata da ridotta la settimana si riapre sopra gli eventi finché non si riprende a scorrere.
-/// L'avanzamento si legge solo nella settimana (`progress`): il resto della pagina non si ricalcola
-/// a ogni fotogramma.
+/// Settimana della vista Lista su iPhone. La settimana non fa parte dello scorrimento: sta sopra
+/// l'area degli eventi, che si sposta insieme a lei quando si riduce o si apre
+/// (`WeekHeaderScroll.Shift`). Il passaggio non usa lo scorrimento di iOS ma un gesto proprio
+/// (`WeekHeaderPan`) che segue il dito e, lasciandolo, finisce con una molla nella posizione più
+/// vicina (tenendo conto della velocità), mai a metà:
+/// - con la settimana intera gli eventi non scorrono: trascinando verso l'alto la settimana si
+///   riduce e l'area sale con lei, al massimo fino a ridotta in un gesto; verso il basso c'è un
+///   po' di elastico;
+/// - con la settimana ridotta gli eventi scorrono normalmente (e rimbalzano in cima, con la
+///   settimana che resta ridotta); un nuovo gesto verso il basso, partendo dalla cima, la riapre.
+/// Toccata da ridotta la settimana si riapre. L'avanzamento si legge solo nella settimana e nello
+/// spostamento dell'area: il resto della pagina non si ricalcola a ogni fotogramma.
 @Observable
-final class WeekHeaderScroll {
+final class WeekHeaderScroll: NSObject {
     static let range = TimetableWeekHeader.expandedHeight - TimetableWeekHeader.collapsedHeight
-    /// Tratto da scorrere, con la settimana riaperta a mano, prima che torni ridotta.
-    static let resumeDistance: CGFloat = 20
 
-    /// Da dove è partito il gesto in corso (o l'ultimo): dalla settimana intera, da fermi con la
-    /// settimana appena ridotta o più in basso.
-    enum Gesture { case fromExpanded, fromCollapsedTop, fromBelow }
+    /// 0 intera, 1 ridotta; trascinando oltre l'intera scende un poco sotto lo 0 (elastico).
+    fileprivate(set) var progress: CGFloat = 0
+    /// Ridotta: solo allora gli eventi scorrono. Cambia solo nei passaggi.
+    fileprivate(set) var isCollapsed = false
 
-    /// Avanzamento dato dallo scorrimento: 0 in cima, 1 dopo `range` punti.
-    private(set) var scrollProgress: CGFloat = 0
-    /// Riaperta toccandola: resta intera finché non si riprende a scorrere.
-    private(set) var isForcedOpen = false
+    @ObservationIgnored fileprivate var startProgress: CGFloat = 0
+    /// Molla calcolata a ogni fotogramma (non un'animazione di SwiftUI): `progress` è sempre il
+    /// valore visibile, così un gesto può riprendere la settimana a metà di uno scatto.
+    @ObservationIgnored private var spring: (target: CGFloat, velocity: CGFloat)?
+    @ObservationIgnored private var displayLink: CADisplayLink?
+    @ObservationIgnored private var lastTimestamp: CFTimeInterval = 0
 
-    var progress: CGFloat { isForcedOpen ? 0 : scrollProgress }
+    /// Riapre la settimana ridotta (tocco sulla striscia, nuovo tocco sulla scheda).
+    func open() { settle(collapsed: false) }
 
-    @ObservationIgnored private var lastOffset: CGFloat = 0
-    @ObservationIgnored private var moved: CGFloat = 0
-    @ObservationIgnored fileprivate var phase: ScrollPhase = .idle
-    /// Posizione aggiornata subito dallo `UIScrollView` (0 = cima), per decidere dove fermarsi.
-    @ObservationIgnored fileprivate var liveOffset: CGFloat = 0
-    @ObservationIgnored fileprivate var gesture: Gesture?
-    @ObservationIgnored fileprivate weak var scrollView: UIScrollView?
-
-    fileprivate func update(offset: CGFloat) {
-        let delta = offset - lastOffset
-        lastOffset = offset
-        // Un gesto partito più in basso rimbalza sotto la settimana, che resta ridotta (solo mentre
-        // l'utente scorre: una salita in cima fatta dal sistema la riapre).
-        let bouncing = gesture == .fromBelow && (phase == .tracking || phase == .interacting || phase == .decelerating)
-        let progress = bouncing ? 1 : min(max(offset / Self.range, 0), 1)
-        if progress != scrollProgress { scrollProgress = progress }
-        guard isForcedOpen, phase.isScrolling, phase != .animating else { return }
-        moved += abs(delta)
-        if moved >= Self.resumeDistance { close() }
+    /// Settimana intera senza animazione (cambio di vista: lo scorrimento riparte dalla cima).
+    func reset() {
+        stopSpring()
+        progress = 0
+        isCollapsed = false
     }
 
-    /// Fermo a metà (es. un tocco che ha interrotto lo scatto senza trascinare): si va alla
-    /// posizione più vicina.
-    fileprivate func settleIfNeeded() {
-        guard let scrollView, !scrollView.isTracking, !scrollView.isDecelerating else { return }
-        let offset = liveOffset
-        guard offset > 0.5, offset < Self.range - 0.5 else { return }
-        let top = -scrollView.adjustedContentInset.top
-        scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x,
-                                            y: top + (offset < Self.range / 2 ? 0 : Self.range)), animated: true)
+    /// Porta la settimana intera o ridotta con una molla che parte dalla velocità del dito
+    /// (`velocity` in avanzamento al secondo).
+    fileprivate func settle(collapsed: Bool, velocity: CGFloat = 0) {
+        isCollapsed = collapsed
+        let target: CGFloat = collapsed ? 1 : 0
+        // Già lì (es. un gesto arrivato fino in fondo): niente molla, che con la velocità del dito
+        // andrebbe oltre.
+        guard abs(progress - target) > 0.001 else {
+            stopSpring()
+            progress = target
+            return
+        }
+        spring = (target, velocity)
+        guard displayLink == nil else { return }
+        let link = CADisplayLink(target: self, selector: #selector(step(_:)))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+        lastTimestamp = 0
+        link.add(to: .main, forMode: .common)
+        displayLink = link
     }
 
-    /// Riapre la settimana ridotta (tocco sulla striscia).
-    func open() {
-        guard !isForcedOpen, scrollProgress > 0 else { return }
-        moved = 0
-        withAnimation(FloatingHeaderCollapse.animation) { isForcedOpen = true }
+    @objc private func step(_ link: CADisplayLink) {
+        guard var current = spring else { stopSpring(); return }
+        let now = link.timestamp
+        let elapsed = lastTimestamp == 0 ? link.duration : min(now - lastTimestamp, 1.0 / 30)
+        lastTimestamp = now
+        // Molla appena sotto lo smorzamento critico (rigidità 320, smorzamento 34), in passi brevi.
+        var value = progress
+        let steps = 4
+        let dt = CGFloat(elapsed) / CGFloat(steps)
+        var crossed = false
+        for _ in 0..<steps {
+            let before = value - current.target
+            let acceleration = -320 * before - 34 * current.velocity
+            current.velocity += acceleration * dt
+            value += current.velocity * dt
+            // Niente rimbalzo oltre la posizione finale (con un colpo veloce gli eventi salirebbero
+            // oltre la settimana ridotta e tornerebbero giù): ci si ferma lì.
+            if before != 0, (value - current.target).sign != before.sign { crossed = true; break }
+        }
+        if crossed || (abs(value - current.target) < 0.0008 && abs(current.velocity) < 0.01) {
+            value = current.target
+            stopSpring()
+        } else {
+            spring = current
+        }
+        progress = value
     }
 
-    /// Torna a seguire lo scorrimento.
-    func close() {
-        guard isForcedOpen else { return }
-        moved = 0
-        withAnimation(FloatingHeaderCollapse.animation) { isForcedOpen = false }
+    private func stopSpring() {
+        displayLink?.invalidate()
+        displayLink = nil
+        spring = nil
     }
 
-    /// Da applicare allo scorrimento degli eventi (con `WeekHeaderScrollControl` nello sfondo del
-    /// contenuto).
-    struct Tracking: ViewModifier {
+    fileprivate func began() {
+        stopSpring()
+        startProgress = progress
+    }
+
+    /// `translation`: spostamento del dito verso l'alto, in punti, dall'inizio del gesto.
+    fileprivate func changed(_ translation: CGFloat) {
+        let raw = startProgress + translation / Self.range
+        // Oltre la ridotta non si va in un gesto; oltre l'intera c'è un elastico sempre più duro.
+        progress = raw >= 0 ? min(raw, 1) : -(1 - 1 / (1 - raw * 0.55)) * 0.5
+    }
+
+    /// `velocity`: velocità del dito verso l'alto, in punti al secondo.
+    fileprivate func ended(velocity: CGFloat) {
+        let speed = velocity / Self.range
+        // Dove arriverebbe in circa un decimo di secondo: un colpo veloce basta per cambiare.
+        let heading = progress + speed * 0.12
+        settle(collapsed: heading > 0.5, velocity: speed)
+    }
+
+    /// Sposta l'area degli eventi con la settimana e abilita lo scorrimento solo da ridotta.
+    struct Shift: ViewModifier {
         let state: WeekHeaderScroll
 
         func body(content: Content) -> some View {
             content
-                .scrollTargetBehavior(WeekHeaderSnap(state: state))
-                .onScrollPhaseChange { _, phase in
-                    state.phase = phase
-                    if phase == .idle {
-                        state.gesture = nil
-                        Task { @MainActor in state.settleIfNeeded() }
-                    }
-                }
-                .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                    geometry.contentOffset.y + geometry.contentInsets.top
-                } action: { _, offset in
-                    state.update(offset: offset)
-                }
+                .offset(y: (1 - state.progress) * WeekHeaderScroll.range)
+                .scrollDisabled(!state.isCollapsed)
         }
     }
 }
 
-/// Dove si ferma lo scorrimento lasciando il dito (le coordinate di `ScrollTarget` sono già senza il
-/// margine della settimana: 0 è la cima, verificato).
-/// - Gesto partito dalla settimana intera: in cima o a `range`, la più vicina (contando un poco la
-///   velocità del gesto), mai oltre.
-/// - Gesto partito da fermi con la settimana appena ridotta: se si è tirato oltre metà del tratto si
-///   apre (cima), altrimenti si torna a `range`.
-/// - Gesto partito più in basso: non si sale sopra `range` (anche con l'inerzia di un colpo veloce).
-struct WeekHeaderSnap: ScrollTargetBehavior {
+/// Il gesto che riduce e apre la settimana, aggiunto allo `UIScrollView` degli eventi (va nello
+/// sfondo del contenuto dello scorrimento, per trovarlo). Parte solo per trascinamenti verticali:
+/// sempre con la settimana intera (lo scorrimento è spento), da ridotta solo verso il basso e con
+/// gli eventi in cima. Quando parte, lo scorrimento aspetta che fallisca e quindi non si muove;
+/// le misure sono nella finestra, così lo spostamento dell'area non le altera.
+struct WeekHeaderPan: UIViewRepresentable {
     let state: WeekHeaderScroll
 
-    func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
-        let range = WeekHeaderScroll.range
-        let current = state.liveOffset
-        switch state.gesture {
-        case .fromExpanded:
-            // La velocità è in punti al millisecondo: conta per circa un decimo di secondo.
-            let heading = current + context.velocity.dy * 100
-            target.rect.origin.y = heading > range / 2 ? range : 0
-        case .fromCollapsedTop:
-            if current < range / 2 {
-                target.rect.origin.y = 0
-            } else if target.rect.minY < range {
-                target.rect.origin.y = range
-            }
-        case .fromBelow:
-            if target.rect.minY < range || current < range { target.rect.origin.y = range }
-        case nil:
-            let y = target.rect.minY
-            if y > 0, y < range { target.rect.origin.y = y < range / 2 ? 0 : range }
-        }
-    }
-}
-
-/// Controllo dello `UIScrollView` sotto lo scorrimento di SwiftUI, che da solo non permette di
-/// limitare un gesto: si osserva il `contentOffset` mentre l'utente trascina.
-/// - Gesto partito dalla settimana intera: il contenuto non va oltre `range`.
-/// - Gesto partito da ridotta: sopra `range` il contenuto segue il dito più lentamente, come
-///   tirando oltre il bordo di uno scorrimento (a metà velocità se il gesto può aprire la settimana,
-///   meno se è partito più in basso).
-/// Va messo nello sfondo del contenuto dello scorrimento (dentro lo `UIScrollView`).
-struct WeekHeaderScrollControl: UIViewRepresentable {
-    let state: WeekHeaderScroll
-
-    final class Coordinator: NSObject {
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         let state: WeekHeaderScroll
         weak var scrollView: UIScrollView?
-        var observation: NSKeyValueObservation?
-        var adjusting = false
+        let recognizer = UIPanGestureRecognizer()
 
-        init(state: WeekHeaderScroll) { self.state = state }
+        init(state: WeekHeaderScroll) {
+            self.state = state
+            super.init()
+            recognizer.addTarget(self, action: #selector(pan(_:)))
+            recognizer.delegate = self
+        }
 
         func attach(to scrollView: UIScrollView) {
             guard self.scrollView !== scrollView else { return }
+            self.scrollView?.removeGestureRecognizer(recognizer)
             self.scrollView = scrollView
-            state.scrollView = scrollView
-            scrollView.panGestureRecognizer.addTarget(self, action: #selector(pan(_:)))
-            observation = scrollView.observe(\.contentOffset, options: [.old, .new]) { [weak self] view, change in
-                guard let old = change.oldValue, let new = change.newValue else { return }
-                MainActor.assumeIsolated { self?.control(view, old: old.y, new: new.y) }
-            }
+            scrollView.addGestureRecognizer(recognizer)
         }
 
         @objc private func pan(_ recognizer: UIPanGestureRecognizer) {
-            guard recognizer.state == .began, let scrollView else { return }
-            let offset = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
-            let range = WeekHeaderScroll.range
-            state.gesture = offset < range - 1 ? .fromExpanded : (offset <= range + 1 ? .fromCollapsedTop : .fromBelow)
+            let window = recognizer.view?.window
+            switch recognizer.state {
+            case .began:
+                state.began()
+            case .changed:
+                state.changed(-recognizer.translation(in: window).y)
+            case .ended, .cancelled, .failed:
+                state.ended(velocity: recognizer.state == .ended ? -recognizer.velocity(in: window).y : 0)
+            default:
+                break
+            }
         }
 
-        private func control(_ view: UIScrollView, old: CGFloat, new: CGFloat) {
-            let top = -view.adjustedContentInset.top
-            let range = WeekHeaderScroll.range
-            state.liveOffset = new - top
-            guard !adjusting, view.isTracking, old != new, let gesture = state.gesture else { return }
-            var adjusted = new
-            switch gesture {
-            case .fromExpanded:
-                adjusted = min(new, top + range)
-            case .fromCollapsedTop:
-                // Parte dello spostamento sopra `range` (verso la cima), a metà velocità.
-                let low = min(old, new), high = min(max(old, new), top + range)
-                guard high > low else { return }
-                let damped = (high - low) * 0.5
-                adjusted = new + (new < old ? damped : -damped)
-            case .fromBelow:
-                // Come il bordo di uno scorrimento: più si va oltre `range`, meno ci si muove.
-                let edge = top + range
-                guard new < old, new < edge else { return }
-                let start = min(old, edge)
-                let overshoot = edge - min(old, edge)
-                let factor = max(0.03, 0.3 * (1 - overshoot / 50))
-                adjusted = start - (start - new) * factor
-            }
-            guard adjusted != new else { return }
-            adjusting = true
-            view.contentOffset.y = adjusted
-            adjusting = false
-            state.liveOffset = adjusted - top
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let scrollView else { return false }
+            let velocity = recognizer.velocity(in: scrollView.window)
+            guard abs(velocity.y) > abs(velocity.x) else { return false }
+            if !state.isCollapsed { return true }
+            let atTop = scrollView.contentOffset.y <= -scrollView.adjustedContentInset.top + 0.5
+            return atTop && velocity.y > 0
+        }
+
+        /// Lo scorrimento parte solo se questo gesto non parte.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            otherGestureRecognizer === scrollView?.panGestureRecognizer
         }
     }
 
@@ -430,6 +410,10 @@ struct WeekHeaderScrollControl: UIViewRepresentable {
             while let candidate = current, !(candidate is UIScrollView) { current = candidate.superview }
             if let scrollView = current as? UIScrollView { coordinator.attach(to: scrollView) }
         }
+    }
+
+    static func dismantleUIView(_ view: UIView, coordinator: Coordinator) {
+        coordinator.scrollView?.removeGestureRecognizer(coordinator.recognizer)
     }
 }
 
@@ -527,7 +511,8 @@ struct TimetableWeekHeader: View, Animatable {
             // Scorrendo si passa alla settimana accanto mantenendo lo stesso giorno della settimana.
             guard let week, !week.isSameDay(as: selectedDay.startOfWeek) else { return }
             let weekday = CVDate.calendar.dateComponents([.day], from: selectedDay.startOfWeek, to: selectedDay.startOfDay).day ?? 0
-            selectedDay = week.adding(days: weekday)
+            // Con l'animazione, come toccando un giorno: anche "Oggi" nella barra compare animato.
+            withAnimation(.snappy) { selectedDay = week.adding(days: weekday) }
         }
         .onChange(of: selectedDay) { _, day in
             let week = Self.week(containing: day)
