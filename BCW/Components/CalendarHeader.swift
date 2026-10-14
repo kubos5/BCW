@@ -257,20 +257,9 @@ final class WeekHeaderScroll: NSObject {
     /// Giorno accanto mostrato durante lo scorrimento laterale (+1 il successivo, a destra; -1 il
     /// precedente, a sinistra; 0 nessuno). Cambia solo quando cambia il verso, non a ogni fotogramma.
     fileprivate(set) var swipeDirection = 0
-    /// Cambio di giorno in corso (il contenuto sta uscendo), da completare se un nuovo gesto lo
-    /// interrompe.
-    @ObservationIgnored private var pendingSwipe: Int?
-
     fileprivate func swipeBegan() {
+        // Anche durante il cambio di giorno: si riprende il contenuto da dov'è.
         stopSwipe()
-        // Un gesto durante il cambio di giorno: il cambio si completa subito e il giorno nuovo,
-        // che era già quasi al suo posto, diventa quello trascinato.
-        if let direction = pendingSwipe {
-            pendingSwipe = nil
-            onSwipeDay?(direction)
-            swipeOffset += CGFloat(direction) * swipeWidth
-            updateSwipeDirection()
-        }
         swipeStart = swipeOffset
     }
 
@@ -284,10 +273,10 @@ final class WeekHeaderScroll: NSObject {
         if direction != swipeDirection { swipeDirection = direction }
     }
 
-    /// Oltre un terzo della larghezza (contando la velocità) si cambia giorno: il contenuto esce
-    /// dal lato verso cui si è spinto mentre il giorno accanto, che lo segue già, prende il suo
-    /// posto; poi i due si scambiano (il giorno accanto diventa quello scelto, nella stessa
-    /// posizione, senza salti). Altrimenti tutto torna al suo posto.
+    /// Oltre un terzo della larghezza (contando la velocità) si cambia giorno, subito al rilascio
+    /// (il calendario segna il giorno nuovo e vibra): i due contenuti si scambiano di ruolo nella
+    /// stessa posizione (il giorno nuovo diventa quello principale, il vecchio quello accanto) e poi
+    /// scorrono insieme fino al giorno nuovo. Altrimenti tutto torna al suo posto.
     fileprivate func swipeEnded(velocity: CGFloat) {
         let heading = swipeOffset + velocity * 0.15
         guard abs(heading) > swipeWidth * 0.3, let onSwipeDay else {
@@ -295,15 +284,10 @@ final class WeekHeaderScroll: NSObject {
             return
         }
         let direction = heading < 0 ? 1 : -1
-        pendingSwipe = direction
-        if swipeDirection != direction { swipeDirection = direction }
-        animateSwipe(to: -CGFloat(direction) * swipeWidth, velocity: velocity) { [weak self] in
-            guard let self else { return }
-            pendingSwipe = nil
-            onSwipeDay(direction)
-            swipeOffset = 0
-            swipeDirection = 0
-        }
+        onSwipeDay(direction)
+        swipeOffset += CGFloat(direction) * swipeWidth
+        swipeDirection = -direction
+        animateSwipe(to: 0, velocity: velocity) { [weak self] in self?.swipeDirection = 0 }
     }
 
     private func animateSwipe(to target: CGFloat, velocity: CGFloat, completion: (() -> Void)? = nil) {
@@ -560,6 +544,12 @@ struct CalendarHeader: View {
             }
         }
         .sensoryFeedback(.selection, trigger: selectedDay)
+        // Il giorno scelto cambia sempre con l'animazione, anche quando la pagina lo cambia senza
+        // (scorrendo di lato, dove il contenuto si scambia di colpo).
+        .transaction(value: selectedDay) { transaction in
+            transaction.disablesAnimations = false
+            if transaction.animation == nil { transaction.animation = .snappy }
+        }
     }
 }
 
