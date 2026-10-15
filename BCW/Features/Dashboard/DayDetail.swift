@@ -7,7 +7,9 @@ struct DayDetail: View {
     let day: Date
 
     /// Larghezza disponibile: su macOS, se c'è spazio, le lezioni vanno in una colonna a parte.
-    @State private var width: CGFloat = 0
+    /// Abbastanza largo per le lezioni in una colonna a parte (solo il passaggio, non la larghezza,
+    /// che ricalcolerebbe il giorno a ogni fotogramma mentre si ridimensiona la finestra).
+    @State private var fitsLessonsColumn = false
 
     /// Tutto ciò che serve per disegnare il giorno, calcolato una volta per aggiornamento
     /// (prima ogni sezione, e ogni riga, rifiltrava l'agenda).
@@ -43,7 +45,7 @@ struct DayDetail: View {
     private var isPastOrToday: Bool { day.startOfDay <= Date().startOfDay }
 
     private func splitsLessons(_ content: Content) -> Bool {
-        Platform.isMac && isPastOrToday && width >= 580 && !(day.isWeekend && content.lessons.isEmpty)
+        Platform.isMac && isPastOrToday && fitsLessonsColumn && !(day.isWeekend && content.lessons.isEmpty)
     }
 
     var body: some View {
@@ -76,7 +78,7 @@ struct DayDetail: View {
                 }
             }
         }
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onGeometryChange(for: Bool.self) { $0.size.width >= 580 } action: { fitsLessonsColumn = $0 }
         // Anche dopo ogni aggiornamento completo, che azzera le lezioni già scaricate:
         // altrimenti, aprendo l'app su un giorno passato, resterebbero "in caricamento".
         .task(id: [day.timeIntervalSince1970, model.lastUpdated?.timeIntervalSince1970 ?? 0]) {

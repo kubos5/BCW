@@ -318,8 +318,12 @@ struct Timetable: Codable, Equatable {
     var entries: [TimetableEntry] = []
     /// Modifiche dei singoli giorni, per chiave `OccurrenceInfo.key`.
     var occurrences: [String: OccurrenceInfo] = [:]
-    /// Verifiche di Classeviva nascoste dall'orario (id degli eventi dell'agenda).
+    /// Verifiche di Classeviva nascoste a mano dall'orario (id degli eventi dell'agenda).
     var hiddenTests: Set<Int> = []
+    /// Verifiche mostrate a mano anche se le regole le nasconderebbero.
+    var shownTests: Set<Int> = []
+    /// Regole per nascondere da sole le verifiche di Classeviva.
+    var testRules = TestHidingRules()
     var alignment: TimetableAlignment = .automatic
     var customColors: [Int] = []
     var customPalettes: [ColorPalette] = []
@@ -332,6 +336,8 @@ struct Timetable: Codable, Equatable {
         entries = try c.decodeIfPresent([TimetableEntry].self, forKey: .entries) ?? []
         occurrences = try c.decodeIfPresent([String: OccurrenceInfo].self, forKey: .occurrences) ?? [:]
         hiddenTests = try c.decodeIfPresent(Set<Int>.self, forKey: .hiddenTests) ?? []
+        shownTests = (try? c.decodeIfPresent(Set<Int>.self, forKey: .shownTests)) ?? []
+        testRules = (try? c.decodeIfPresent(TestHidingRules.self, forKey: .testRules)) ?? TestHidingRules()
         alignment = (try? c.decodeIfPresent(TimetableAlignment.self, forKey: .alignment)) ?? .automatic
         customColors = try c.decodeIfPresent([Int].self, forKey: .customColors) ?? []
         customPalettes = try c.decodeIfPresent([ColorPalette].self, forKey: .customPalettes) ?? []
@@ -345,6 +351,64 @@ struct Timetable: Codable, Equatable {
         var names = Set(entries.flatMap { $0.attachments.map(\.storedName) })
         for info in occurrences.values { names.formUnion(info.attachments.map(\.storedName)) }
         return names
+    }
+}
+
+/// Regole per nascondere da sole le verifiche di Classeviva dall'orario (ad esempio quelle di un
+/// docente che le segna in modo sbagliato, quelle del sabato o di un periodo di viaggio). Una
+/// verifica è nascosta se soddisfa almeno una regola; si può comunque mostrare a mano.
+nonisolated struct TestHidingRules: Codable, Equatable {
+    /// Docenti, come in `AgendaEvent.authorName`.
+    var teachers: Set<String> = []
+    /// Materie, come `TimetableEntry.normalized` del nome.
+    var subjects: Set<String> = []
+    /// Giorni della settimana (1 = lunedì).
+    var weekdays: Set<Int> = []
+    /// Periodi (estremi compresi).
+    var periods: [Period] = []
+    /// Parole che, nel testo della verifica, la nascondono.
+    var keywords: [String] = []
+    /// Verifiche di materie che non sono nell'orario quel giorno.
+    var unmatched = false
+
+    struct Period: Codable, Equatable, Identifiable {
+        var id = UUID()
+        var start: Date
+        var end: Date
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        teachers = (try? c.decodeIfPresent(Set<String>.self, forKey: .teachers)) ?? []
+        subjects = (try? c.decodeIfPresent(Set<String>.self, forKey: .subjects)) ?? []
+        weekdays = (try? c.decodeIfPresent(Set<Int>.self, forKey: .weekdays)) ?? []
+        periods = (try? c.decodeIfPresent([Period].self, forKey: .periods)) ?? []
+        keywords = (try? c.decodeIfPresent([String].self, forKey: .keywords)) ?? []
+        unmatched = (try? c.decodeIfPresent(Bool.self, forKey: .unmatched)) ?? false
+    }
+
+    var isEmpty: Bool {
+        teachers.isEmpty && subjects.isEmpty && weekdays.isEmpty && periods.isEmpty && keywords.isEmpty && !unmatched
+    }
+
+    var count: Int {
+        teachers.count + subjects.count + weekdays.count + periods.count + keywords.count + (unmatched ? 1 : 0)
+    }
+}
+
+/// Perché una verifica di Classeviva è nascosta.
+enum TestHiddenReason: Equatable {
+    case manual
+    /// Nascosta da una regola (descritta, es. "Docente: Rossi Giorgio").
+    case rule(String)
+
+    var description: String {
+        switch self {
+        case .manual: "Nascosta a mano"
+        case let .rule(rule): "Nascosta dalla regola «\(rule)»"
+        }
     }
 }
 

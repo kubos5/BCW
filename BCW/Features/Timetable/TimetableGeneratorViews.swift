@@ -17,9 +17,8 @@ struct TimetableGeneratorSheet: View {
                 Section {
                     DatePicker("Inizio della prima ora", selection: minuteBinding(\.firstHourStart),
                                displayedComponents: .hourAndMinute)
-                    Stepper(value: $settings.hourLength, in: 30...120, step: 5) {
-                        LabeledContent("Durata di un'ora", value: "\(settings.hourLength) min")
-                    }
+                    LabeledStepper("Durata di un'ora", value: "\(settings.hourLength) min",
+                                   number: $settings.hourLength, in: 30...120, step: 5)
                     Picker("Lezioni da esaminare", selection: $settings.weeks) {
                         Text("Ultime 2 settimane").tag(2)
                         Text("Ultime 4 settimane").tag(4)
@@ -36,13 +35,7 @@ struct TimetableGeneratorSheet: View {
 
                 Section {
                     ForEach($settings.breaks) { $rule in
-                        HStack {
-                            DatePicker("Alle", selection: breakStartBinding($rule), displayedComponents: .hourAndMinute)
-                            Stepper(value: $rule.duration, in: 5...60, step: 5) {
-                                Text("\(rule.duration) min").monospacedDigit()
-                            }
-                            .fixedSize()
-                        }
+                        breakRow($rule)
                     }
                     .onDelete { settings.breaks.remove(atOffsets: $0) }
                     Button("Aggiungi intervallo", systemImage: "cup.and.saucer") {
@@ -57,7 +50,8 @@ struct TimetableGeneratorSheet: View {
                 } header: {
                     Text("Intervalli")
                 } footer: {
-                    Text("Facoltativi: compaiono sopra le lezioni nei giorni in cui c'è scuola a quell'ora, senza cambiarne la durata.")
+                    Text("Facoltativi: compaiono sopra le lezioni nei giorni in cui c'è scuola a quell'ora, senza cambiarne la durata. "
+                         + (Platform.isMac ? "Per toglierne uno fai clic sul pulsante rosso accanto." : "Per toglierne uno scorri verso sinistra."))
                 }
                 .listRowBackground(Theme.surface)
 
@@ -96,6 +90,11 @@ struct TimetableGeneratorSheet: View {
                 guard !loaded else { return }
                 loaded = true
                 settings = store.draft?.settings ?? store.timetable.generation
+                #if DEBUG
+                // Per gli screenshot: `-BCWGeneratorBreaks N` aggiunge N intervalli.
+                let extra = UserDefaults.standard.integer(forKey: "BCWGeneratorBreaks")
+                for index in 0..<extra { settings.breaks.append(.init(start: 9 * 60 + 50 + index * 120, duration: 10)) }
+                #endif
             }
         }
         .sheetFrame(width: 480, height: 620)
@@ -111,6 +110,38 @@ struct TimetableGeneratorSheet: View {
 
     private func minuteBinding(_ keyPath: WritableKeyPath<GenerationSettings, Int>) -> Binding<Date> {
         Binding { TimeOfDay.date(settings[keyPath: keyPath]) } set: { settings[keyPath: keyPath] = TimeOfDay.minutes(of: $0) }
+    }
+
+    /// Un intervallo: inizio e durata a destra del titolo (in un'unica riga di controlli, che su
+    /// macOS altrimenti finirebbero uno sopra l'altro, tagliati); su Mac anche il pulsante per
+    /// toglierlo, che su iPhone è lo scorrimento verso sinistra.
+    private func breakRow(_ rule: Binding<GenerationSettings.BreakRule>) -> some View {
+        let id = rule.wrappedValue.id
+        let number = (settings.breaks.firstIndex { $0.id == id } ?? 0) + 1
+        return LabeledContent {
+            HStack(spacing: 10) {
+                DatePicker("Inizio", selection: breakStartBinding(rule), displayedComponents: .hourAndMinute)
+                    .labelsHidden()
+                Text("\(rule.wrappedValue.duration) min")
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.secondaryInk)
+                Stepper("Durata", value: rule.duration, in: 5...60, step: 5)
+                    .labelsHidden()
+                #if os(macOS)
+                Button("Rimuovi l'intervallo", systemImage: "minus.circle.fill", role: .destructive) {
+                    withAnimation(.snappy) { settings.breaks.removeAll { $0.id == id } }
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .foregroundStyle(Theme.poor)
+                .help("Rimuovi questo intervallo")
+                #endif
+            }
+            .fixedSize()
+        } label: {
+            Label("Intervallo \(number)", systemImage: "cup.and.saucer")
+                .lineLimit(1)
+        }
     }
 
     private func breakStartBinding(_ rule: Binding<GenerationSettings.BreakRule>) -> Binding<Date> {
@@ -241,9 +272,9 @@ struct TimetableSettingsSection: View {
             TimetableAlignmentPicker()
             Toggle("Mostra le verifiche nella lista", isOn: Bindable(model.preferences).timetableShowsTests)
         } header: {
-            Text("Orario")
+            Text("Vista e allineamento")
         } footer: {
-            Text("Con \"Mostra le verifiche\" la vista Lista segna le verifiche di Classeviva e quelle segnate a mano; si vedono sempre nel dettaglio dell'evento e nella vista Giorno. L'allineamento vale per tutto l'orario e per la modalità di modifica (menu dell'orario › Modifica orario). Automatico: gli eventi iniziano all'ora o alla mezz'ora e durano 30 minuti o un'ora; passando all'automatico gli eventi non allineati vengono allineati, dopo una conferma. Libero: qualsiasi orario e durata. Gli intervalli si posizionano sempre liberamente.")
+            Text("Con \"Mostra le verifiche\" la vista Lista segna le verifiche di Classeviva e quelle segnate a mano; si vedono sempre nel dettaglio dell'evento e nella vista Giorno. Quelle nascoste, e le regole per nasconderle in automatico, sono in Verifiche nascoste (menu dell'orario). L'allineamento vale per tutto l'orario e per la modalità di modifica (menu dell'orario › Modifica orario). Automatico: gli eventi iniziano all'ora o alla mezz'ora e durano 30 minuti o un'ora; passando all'automatico gli eventi non allineati vengono allineati, dopo una conferma. Libero: qualsiasi orario e durata. Gli intervalli si posizionano sempre liberamente.")
         }
         .listRowBackground(Theme.surface)
 

@@ -325,6 +325,23 @@ final class TimetableStore {
         }
     }
 
+    /// Nasconde o mostra a mano una verifica. Mostrandone una che le regole nasconderebbero, resta
+    /// mostrata finché non la si nasconde di nuovo.
+    func setTestHidden(_ hidden: Bool, test: AgendaEvent, unmatched: Bool = false) {
+        let ruled = ruleReason(for: test, unmatched: unmatched) != nil
+        mutate { table in
+            if hidden {
+                table.shownTests.remove(test.id)
+                // Se la nasconde già una regola basta togliere l'eccezione.
+                if !ruled { table.hiddenTests.insert(test.id) }
+            } else {
+                table.hiddenTests.remove(test.id)
+                if ruled { table.shownTests.insert(test.id) }
+            }
+        }
+    }
+
+    /// Nasconde a mano una verifica conoscendone solo l'id (autotest).
     func setTestHidden(_ hidden: Bool, eventID: Int) {
         mutate { table in
             if hidden { table.hiddenTests.insert(eventID) } else { table.hiddenTests.remove(eventID) }
@@ -332,6 +349,49 @@ final class TimetableStore {
     }
 
     func isTestHidden(_ eventID: Int) -> Bool { timetable.hiddenTests.contains(eventID) }
+
+    /// Perché la verifica è nascosta, o `nil` se si vede. `unmatched`: nessuna lezione dell'orario
+    /// le corrisponde quel giorno.
+    func hiddenReason(for test: AgendaEvent, unmatched: Bool) -> TestHiddenReason? {
+        if timetable.shownTests.contains(test.id) { return nil }
+        if timetable.hiddenTests.contains(test.id) { return .manual }
+        return ruleReason(for: test, unmatched: unmatched).map(TestHiddenReason.rule)
+    }
+
+    /// La prima regola che nasconde la verifica, descritta.
+    func ruleReason(for test: AgendaEvent, unmatched: Bool) -> String? {
+        let rules = timetable.testRules
+        guard !rules.isEmpty else { return nil }
+        if !test.authorName.isEmpty, rules.teachers.contains(test.authorName) {
+            return "Docente: \(test.authorName)"
+        }
+        if let subject = test.subjectName, rules.subjects.contains(TimetableEntry.normalized(subject)) {
+            return "Materia: \(subject)"
+        }
+        let weekday = test.begin.timetableWeekday
+        if rules.weekdays.contains(weekday) {
+            return "Giorno: \(Weekday.name(weekday).lowercased())"
+        }
+        let day = test.begin.startOfDay
+        if let period = rules.periods.first(where: { $0.start.startOfDay <= day && day <= $0.end.startOfDay }) {
+            return "Periodo: \(period.start.shortDay)–\(period.end.shortDay)"
+        }
+        let text = TimetableEntry.normalized(test.notes)
+        if let word = rules.keywords.first(where: { !$0.isEmpty && text.contains(TimetableEntry.normalized($0)) }) {
+            return "Contiene «\(word)»"
+        }
+        if unmatched && rules.unmatched { return "Senza lezione in orario" }
+        return nil
+    }
+
+    func setTestRules(_ rules: TestHidingRules) {
+        mutate { $0.testRules = rules }
+    }
+
+    /// Torna a far decidere le regole: toglie l'eccezione di una verifica mostrata a mano.
+    func resetTestOverride(_ eventID: Int) {
+        mutate { $0.shownTests.remove(eventID) }
+    }
 
     /// Copia un file nella cartella dell'orario e lo allega.
     func attach(fileAt url: URL, to entry: TimetableEntry, scope: Scope) throws {
@@ -510,6 +570,7 @@ final class TimetableStore {
             table.entries = []
             table.occurrences = [:]
             table.hiddenTests = []
+            table.shownTests = []
         }
         removeUnreferencedFiles()
     }

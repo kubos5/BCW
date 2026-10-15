@@ -41,9 +41,16 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (facoltativi `-BCWSettings YES`, `-appearance light`, `-BCWDaysAgo 2`, `-BCWOpenNotice YES`, `-dashboardMode calendar`,
   `-BCWHover YES` per portare il puntatore sulla barra della finestra, `-BCWSearch testo` per aprire e chiudere la ricerca,
   `-BCWOpenSubject YES` per aprire in Voti la materia con il nome più lungo, cioè una pagina aperta da un'altra;
-  `-BCWTimetableDemo YES` crea l'orario della demo dalle lezioni se è vuoto, `-BCWTimetableDraft YES` lo mostra in
+  `-BCWTimetableDemo YES` crea l'orario della demo dalle lezioni se è vuoto, `-BCWHideTests YES` aggiunge una regola
+  e una verifica nascosta, `-BCWTimetableSheet generator|hidden` apre il generatore (con `-BCWGeneratorBreaks N` intervalli)
+  o le verifiche nascoste (i fogli si salvano come `<sezione>-<larghezza>-sheet.png`), `-BCWTimetableDraft YES` lo mostra in
   anteprima, `-timetableMode list|calendar|day` sceglie la vista, `-BCWTimetableEditing YES` apre la modifica, `-BCWTimetableDay N` apre l'orario N giorni dopo oggi; i
   valori negativi non passano come argomenti, usare quelli positivi);
+  `-BCWScroll N` (con `-BCWWheel YES` come una rotella vera) scorre la pagina prima della foto,
+  `-BCWSearchClickAway YES` (con `-BCWSearch`) prova il clic su un risultato e su un'area vuota,
+  `-BCWResizeBench YES` misura il ridimensionamento della finestra (tempo per passo, passaggi lenti),
+  `-BCWResizeToggle N` passa N volte da due colonne a una (per `sample`),
+  `-BCWKeychainService nome` usa un Portachiavi vuoto (con `-demoMode NO` mostra l'accesso: `login.png`);
   le immagini finiscono in `~/Library/Containers/com.bcw-classeviva.app/Data/tmp/BCWSnapshots` (o in `-BCWSnapshotDir`
   con un build senza sandbox, `ENABLE_APP_SANDBOX=NO`) e l'app si chiude da sola. Per ogni immagine stampa anche gli
   elementi della barra della finestra con la loro posizione (`BCWToolbar …`): con lo schermo bloccato le immagini escono
@@ -176,20 +183,67 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 ## Layout su macOS
 - Barra laterale al posto delle schede; "Tu" diventa un riepilogo (profilo, statistiche, riquadri delle sezioni).
 - Orario su iPhone: solo viste Lista e Giorno (`TimetableMode.available`; la Calendario resta su Mac e nella Dashboard).
-  La settimana (`TimetableWeekHeader`) galleggia sopra gli eventi in uno `ZStack`; lo scorrimento ha
-  `safeAreaPadding(.top)` pari all'altezza della settimana intera più ciò che galleggia sotto (bozza, modifica),
-  costante quando si riduce, così la pagina non salta e il titolo grande si comporta come nelle altre schede.
-  Si riduce a una striscia di numeri seguendo la barra delle schede (`FloatingHeaderCollapse`): `UITabBar._isMinimized`
-  non si può usare ("This can only be called by an approved app", l'app si chiude), quindi si guarda quale dei due
-  `_UITabBarPlatterView` è visibile (il ridotto è il più stretto); se la struttura cambia vale una regola di riserva
-  misurata (riduce oltre 140 punti dalla cima, riapre in cima e tirando in fondo con il dito, non scorrendo in su).
-  `ScrollGeometry.containerSize` è già senza i margini (verificato). Il passaggio è una vista `Animatable`
-  (`progress` 0–1) che interpola posizioni, rettangolo → cerchio e dissolvenze; si controlla registrando il simulatore.
+- Calendario mobile su iPhone (`Components/CalendarHeader.swift`), uguale in Orario (Lista e Giorno) e Dashboard
+  (Lista = settimana, Calendario = mese): `CalendarHeader` galleggia sopra l'area che scorre in uno `ZStack` e non fa
+  parte dello scorrimento. L'area parte sotto il calendario ridotto (`safeAreaPadding` costante) e scende di `range`
+  (intero − ridotto; nel mese dipende dalle settimane) con `.offset` (`WeekHeaderScroll.Shift`, solo disegno).
+  Il passaggio non usa lo scorrimento di iOS: `CalendarHeaderPan` aggiunge allo `UIScrollView` (trovato dallo sfondo del
+  contenuto) un pan verticale, che parte sempre da intero (l'area è ferma, `scrollDisabled`; in Dashboard
+  `expandedScrolls` lascia allo scorrimento i gesti verso il basso, per aggiornare), da ridotto solo verso il basso con
+  l'area in cima e sempre durante uno scatto; e uno orizzontale per il giorno prima/dopo (`onSwipeDay`, solo da
+  fermo): il giorno accanto (`SwipeDayPages`, nel contenuto dello scorrimento, che ha `scrollClipDisabled`; le pagine hanno un'identità propria e un giorno fisso, i giorni accanto si costruiscono in anticipo da fermi e al rilascio le pagine si scambiano di ruolo senza essere ricostruite: costruire una pagina della Dashboard costa ~80 ms)
+  segue il dito già durante il gesto. Al rilascio il giorno cambia subito (vibrazione e dissolvenza nel calendario:
+  `CalendarHeader` riattiva l'animazione con `.transaction(value:)`) e i due contenuti si scambiano di ruolo nella stessa
+  posizione, senza animazioni (il nuovo diventa quello principale, il vecchio quello accanto); poi scorrono fino al
+  giorno nuovo. Un gesto durante lo scorrimento lo riprende da dov'è. "Oggi"/"Domani" nella barra
+  seguono il giorno con uno stato a parte animato (`showsToday`, `showsTomorrow`), perché lo scambio è senza animazioni.
+  La vibrazione del punto di resistenza scatta anche quando lo supera solo la velocità del rilascio. Lo scorrimento li aspetta (`shouldBeRequiredToFailBy`); misure nella finestra; la traslazione
+  riparte da zero quando il gesto è riconosciuto (altrimenti il contenuto saltava dei punti di riconoscimento).
+  Il contenuto segue il dito con una curva di resistenza (`resisted`): prima del punto (metà del tratto) resta sempre
+  più indietro, superato lo rincorre (`catchUp`) con una vibrazione ed è tirato verso l'altra posizione. Un gesto che
+  riprende uno scatto a metà segue il dito senza curva. In un gesto si arriva al massimo a ridotto. Lasciando il dito
+  decide il lato del punto (con la velocità) e una molla calcolata a ogni fotogramma (`CADisplayLink`, così un gesto
+  la riprende dal valore visibile) porta alla posizione senza superarla. Lasciare allo scorrimento un gesto durante
+  la molla lo faceva tremare (si muove con l'area): non farlo. L'avanzamento si legge solo negli host del calendario
+  e in `Shift`. Tutto è tagliato solo dal bordo della card (`scrollClipDisabled`, niente `clipped` interni); da ridotto
+  le griglie invisibili non devono prendere i tocchi (`allowsHitTesting`), altrimenti rubano i gesti all'area.
+  Il mese si riduce alla settimana del giorno scelto: le altre settimane salgono e svaniscono, i giorni dei mesi
+  accanto che la completano compaiono (`MonthMorphCell`), e riducendo si torna al mese del giorno scelto.
+  Le registrazioni del simulatore salvano fotogrammi solo quando lo schermo cambia (le pause spariscono): per misurare
+  un'animazione stampare i valori con l'ora (`CACurrentMediaTime`).
+- Impostazioni su iPhone: elenco di sottopagine (Generale, Voti, Dashboard, Orario, Notifiche, Account) con le stesse
+  sezioni delle schede della finestra Impostazioni del Mac.
+- Dashboard, "Nei prossimi giorni": ogni giorno è una card comprimibile (`UpcomingDayCard`, intestazione = comprimi).
+  Toccando il resto della card si va a quel giorno, ma i tocchi propri vincono: la casella del compito e il testo
+  tagliato di una riga (che si apre); `AgendaEventRow.onPlainTap` misura se il testo è tagliato.
+- Notifiche delle novità (`Store/NewsNotifications.swift`): dopo ogni `refreshAll` confronta voti, comunicazioni,
+  note, assenze e compiti/verifiche futuri con gli id già visti per account (`UserDefaults`), e notifica solo i tipi
+  attivi in Impostazioni › Notifiche (`Preferences.newsNotifications`); la prima volta ricorda senza notificare; più
+  di 4 novità di un tipo = una notifica riassuntiva. Su iPhone c'è l'aggiornamento in background
+  (`.backgroundTask(.appRefresh)`, `Config/Info-iOS.plist` con `BGTaskSchedulerPermittedIdentifiers` e
+  `UIBackgroundModes`, unito all'Info.plist generato). `NotificationPresenter` le mostra anche con l'app aperta (senza
+  delegato iOS le scarta). `-BCWNewsDemo YES` le prova nella demo. Sul simulatore gli interruttori dei `Form` vogliono
+  un tocco un po' lungo (`touch_path` di 120 ms): quello istantaneo non li cambia.
+- Verifiche nascoste (menu dell'orario, `TimetableHiddenTestsView`): nascoste a mano (`hiddenTests`) o da regole
+  (`Timetable.testRules`, `TestHidingRules`: docenti, materie, giorni, periodi, parole, senza lezione in orario);
+  mostrandone a mano una nascosta da una regola finisce in `shownTests` (eccezione), nascondendola di nuovo l'eccezione
+  si toglie. Il motivo viene da `TimetableStore.hiddenReason(for:unmatched:)`; la Dashboard non ne è toccata.
 - Orario, barra: niente frecce per cambiare giorno; "Oggi" compare solo se il giorno scelto non è oggi (⌘T su Mac),
   come "Domani" nella Dashboard.
 - Orario su Mac: Lista e Calendario con `SplitColumns` (settimana o mese + riepilogo della settimana | giorno); la
   vista Giorno (`MacWeekTimeline`) mostra tutta la settimana con gli eventi trascinabili anche tra i giorni.
   Fuori da uno scorrimento `WeekStrip` va con `.fixedSize(horizontal: false, vertical: true)`, altrimenti si allunga.
+- Barra della finestra: di serie macOS le dà sempre lo sfondo con la riga, anche con la pagina in cima (verificato
+  anche con un'app SwiftUI minima: le `NSScrollPocket` restano spente). `MacRootView` la tiene trasparente
+  (`toolbarBackgroundVisibility(.hidden)`) e la mostra (chiara e sfocata) solo quando uno scorrimento della pagina che
+  arriva sotto la barra non è in cima (`WindowBarScrollObserver`, che ascolta i cambi dei limiti delle `NSClipView`).
+  Nella schermata di accesso la barra c'è ma senza sfondo: toglierla del tutto cambierebbe pulsanti e angoli.
+- Ricerca su Mac: un clic su un'area vuota della pagina di ricerca toglie la selezione al campo (sfondo con
+  `onTapGesture` sotto i risultati, che lo coprono; il contenuto riempie almeno l'altezza visibile).
+- `Form` su Mac: più controlli in una riga (es. `DatePicker` + `Stepper`) finiscono uno sopra l'altro e tagliati, e un
+  `Stepper` con un `LabeledContent` come etichetta stacca il valore dalle frecce: usare `LabeledContent` con i
+  controlli in un `HStack` (`labelsHidden`) e `LabeledStepper`. Nel generatore gli intervalli si tolgono con il
+  pulsante rosso (su iPhone scorrendo).
 - Pagine a due colonne con `SplitColumns` (laterale fissa + principale, scorrimento separato; sotto ~780 pt si
   impilano): Dashboard (calendario + prossimi giorni | giorno, con lezioni in colonna a parte da 580 pt), Voti,
   dettaglio materia, Scrutini, Anni precedenti, Lezioni. Bacheca: elenco + dettaglio affiancati sopra 820 pt.
@@ -216,9 +270,18 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (il calendario di Foundation dominava i profili) e le celle del calendario lo fanno a ogni aggiornamento.
 - Nelle viste calcolare gli elenchi una volta per aggiornamento (`let` nel `body`, o una struttura come
   `DayDetail.Content` e `SearchView.Results`), mai in proprietà calcolate richiamate più volte o dentro le righe.
+- Ridimensionando la finestra: niente `@State` con la larghezza (`onGeometryChange` di un `CGFloat`), che ricalcola la
+  pagina a ogni fotogramma; misurare solo il passaggio (`Bool`, con un po' di isteresi in `SplitColumns`). Il passaggio
+  da due colonne a una ricostruisce le due strutture (50–130 ms, quasi tutto in SwiftUI); tenere la colonna principale
+  nello stesso scorrimento è risultato molto più lento (~400 ms).
 - Misure che cambiano a ogni fotogramma e servono solo in certi momenti (es. `dayDetailHeight`) vanno in
   `UnobservedValue`, non in uno `@State` osservato: altrimenti l'intera pagina si ricalcola a ogni fotogramma.
 - `.card()` mette l'ombra sulla sola forma di sfondo: un'ombra sull'intera vista va ricalcolata dal contenuto.
+- Su iPhone `-BCWSwipeBench N` / `-BCWHeaderBench N` (solo DEBUG) simulano scorrimenti laterali o riduzioni del calendario
+  e stampano i fotogrammi lenti (`BCW-BENCH`); `-BCWTab timetable` apre l'Orario. Le viste con chiusure tra i parametri
+  (righe dell'agenda, giorni successivi, giorni dell'orario) sono `Equatable` e usate con `.equatable()`: altrimenti ogni
+  aggiornamento della pagina le ricalcolava tutte. Nel mese che si riduce i giorni si spostano con `offset` invece di
+  cambiare il margine (che faceva rimisurare tutte le pagine dei mesi a ogni fotogramma).
 - Per misurare: build Release del Mac con `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG`, un aggancio temporaneo che ripete
   l'interazione e `sample <pid> 8`, poi sommare i campioni per funzione dell'app.
 

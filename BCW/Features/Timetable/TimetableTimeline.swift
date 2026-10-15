@@ -17,8 +17,10 @@ struct TimetableTimeline: View {
     /// cominciano sotto di essa e scorrendo le passano sotto. Con l'intestazione mobile le
     /// verifiche senza lezione sono mostrate da chi la disegna.
     var topInset: CGFloat = 0
-    /// Stato ridotto dell'intestazione mobile, che segue lo scorrimento (`FloatingHeaderCollapse`).
-    var headerCollapsed: Binding<Bool>? = nil
+    #if os(iOS)
+    /// Intestazione mobile (iPhone): la giornata si sposta con lei e i suoi gesti stanno qui.
+    var headerState: WeekHeaderScroll? = nil
+    #endif
     var hourHeight: CGFloat = Platform.isMac ? 52 : 60
 
     static let gutter: CGFloat = 54
@@ -38,28 +40,28 @@ struct TimetableTimeline: View {
             }
             ScrollViewReader { proxy in
                 ScrollView {
-                    ZStack(alignment: .topLeading) {
-                        HourGrid(hourHeight: hourHeight, showsNow: days.contains(where: \.isToday))
-                        HStack(spacing: 0) {
-                            ForEach(Array(contents.enumerated()), id: \.element.day) { index, content in
-                                TimelineDayColumn(content: content, dayIndex: index, days: days,
-                                                  isSelected: content.day.isSameDay(as: selectedDay),
-                                                  hourHeight: hourHeight, isEditing: isEditing, actions: actions)
-                                if index < contents.count - 1 {
-                                    Rectangle().fill(Theme.separator.opacity(0.6)).frame(width: 0.5)
-                                }
-                            }
+                    #if os(iOS)
+                    if let headerState {
+                        // Con il giorno accanto, già visibile mentre si scorre di lato (in sola lettura).
+                        SwipeDayPages(state: headerState, day: selectedDay, prepares: !isEditing) { day, isMain in
+                            grid([TimetableDayContent(day: day, model: model)], isEditing: isMain && isEditing)
                         }
-                        .padding(.leading, Self.gutter)
-                        .padding(.trailing, 6)
+                        .background { CalendarHeaderPan(state: headerState, swipeEnabled: !isEditing) }
+                    } else {
+                        grid(contents, isEditing: isEditing)
                     }
-                    .frame(height: 24 * hourHeight)
-                    .padding(.vertical, Self.verticalPadding)
-                    .padding(.bottom, Platform.isMac ? 0 : 60)
+                    #else
+                    grid(contents, isEditing: isEditing)
+                    #endif
                 }
+                #if os(iOS)
+                .scrollClipDisabled(headerState != nil)
+                #endif
                 .scrollIndicators(.hidden)
                 .safeAreaPadding(.top, topInset)
-                .modifier(FloatingHeaderCollapse(isCollapsed: headerCollapsed))
+                #if os(iOS)
+                .modifier(OptionalHeaderShift(state: headerState))
+                #endif
                 .onAppear { proxy.scrollTo(HourGrid.anchor(initialHour(contents)), anchor: .top) }
                 .onChange(of: selectedDay) { _, _ in
                     // Su iPhone, cambiando giorno, si va alla prima lezione del nuovo giorno.
@@ -69,6 +71,30 @@ struct TimetableTimeline: View {
                 }
             }
         }
+    }
+
+    /// Le ore con le colonne dei giorni.
+    private func grid(_ contents: [TimetableDayContent], isEditing: Bool) -> some View {
+        let days = contents.map(\.day)
+        return ZStack(alignment: .topLeading) {
+            HourGrid(hourHeight: hourHeight, showsNow: days.contains(where: \.isToday))
+            HStack(spacing: 0) {
+                ForEach(Array(contents.enumerated()), id: \.element.day) { index, content in
+                    TimelineDayColumn(content: content, dayIndex: index, days: days,
+                                      isSelected: content.day.isSameDay(as: selectedDay),
+                                      hourHeight: hourHeight, isEditing: isEditing, actions: actions)
+                        .equatable()
+                    if index < contents.count - 1 {
+                        Rectangle().fill(Theme.separator.opacity(0.6)).frame(width: 0.5)
+                    }
+                }
+            }
+            .padding(.leading, Self.gutter)
+            .padding(.trailing, 6)
+        }
+        .frame(height: 24 * hourHeight)
+        .padding(.vertical, Self.verticalPadding)
+        .padding(.bottom, Platform.isMac ? 0 : 60)
     }
 
     private func initialHour(_ contents: [TimetableDayContent]) -> Int {
@@ -249,6 +275,14 @@ private struct TimelineDayColumn: View {
                 .allowsHitTesting(false)
             }
         }
+    }
+}
+
+/// Come `TimetableDayList`: le azioni non si confrontano.
+extension TimelineDayColumn: Equatable {
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.content == rhs.content && lhs.dayIndex == rhs.dayIndex && lhs.days == rhs.days
+            && lhs.isSelected == rhs.isSelected && lhs.hourHeight == rhs.hourHeight && lhs.isEditing == rhs.isEditing
     }
 }
 
@@ -540,6 +574,15 @@ private struct TimelineSegment: View {
 
 #if os(iOS)
 import UIKit
+
+/// `WeekHeaderScroll.Shift` solo se c'è un'intestazione mobile.
+private struct OptionalHeaderShift: ViewModifier {
+    let state: WeekHeaderScroll?
+
+    func body(content: Content) -> some View {
+        if let state { content.modifier(WeekHeaderScroll.Shift(state: state)) } else { content }
+    }
+}
 
 /// Tieni premuto e trascina: riporta lo spostamento del dito da quando la pressione è stata
 /// riconosciuta. Mentre è attivo lo scorrimento della pagina resta fermo.

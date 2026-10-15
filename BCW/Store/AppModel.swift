@@ -419,6 +419,7 @@ final class AppModel {
         lessonsByDay = [:]
         loadedLessonDays = []
         lastUpdated = .now
+        await NewsNotifications.process(model: self)
     }
 
     private func offlineMessage(_ error: URLError) -> String {

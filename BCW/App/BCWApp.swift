@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct BCWApp: App {
@@ -9,6 +10,7 @@ struct BCWApp: App {
 
     init() {
         Theme.configureAppearance()
+        UNUserNotificationCenter.current().delegate = NotificationPresenter.shared
         #if DEBUG
         TimetableSelfTest.runIfRequested()
         #endif
@@ -44,6 +46,10 @@ struct BCWApp: App {
                 .fontDesign(.serif)
                 .tint(Theme.accent)
                 .preferredColorScheme(model.preferences.appearance.colorScheme)
+        }
+        // Aggiornamento in background per le notifiche delle novità (`NewsNotifications`).
+        .backgroundTask(.appRefresh(NewsNotifications.refreshTaskID)) {
+            await NewsNotifications.runBackgroundRefresh(model: model)
         }
         #endif
     }
@@ -104,6 +110,9 @@ struct RootView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
+            #if os(iOS)
+            if phase == .background { NewsNotifications.scheduleBackgroundRefresh(model: model) }
+            #endif
             guard model.preferences.useBiometrics, model.phase == .signedIn else { return }
             if phase == .background { lock.lock() }
             if phase == .active, lock.isLocked { Task { await lock.unlock() } }
@@ -114,7 +123,7 @@ struct RootView: View {
 #if os(iOS)
 struct MainTabView: View {
     @Environment(AppModel.self) private var model
-    @State private var selection: AppTab = .dashboard
+    @State private var selection: AppTab = MainTabView.initialTab
     @State private var searchQuery = ""
     /// Incrementato toccando la scheda Dashboard quando è già quella aperta.
     @State private var dashboardReselection = 0
@@ -122,6 +131,14 @@ struct MainTabView: View {
     @State private var switchingAccount = false
 
     enum AppTab: Hashable { case dashboard, timetable, grades, you, search }
+
+    private static var initialTab: AppTab {
+        #if DEBUG
+        // Per le prove di sviluppo: `-BCWTab timetable` apre l'Orario.
+        if UserDefaults.standard.string(forKey: "BCWTab") == "timetable" { return .timetable }
+        #endif
+        return .dashboard
+    }
 
     var body: some View {
         TabView(selection: tabSelection) {

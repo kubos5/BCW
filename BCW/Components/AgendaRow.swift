@@ -8,7 +8,13 @@ struct AgendaEventRow: View {
     @Environment(AppModel.self) private var model
     let event: AgendaEvent
     var showsDate = false
+    /// Tocco sulla riga quando non c'è testo da aprire (es. andare al giorno, in "Nei prossimi
+    /// giorni"). Senza, la riga si apre o si chiude sempre.
+    var onPlainTap: (() -> Void)? = nil
     @State private var expanded = false
+    /// Altezze del testo mostrato e di quello intero: se coincidono non c'è niente da aprire.
+    @State private var shown: CGFloat = 0
+    @State private var full: CGFloat = 0
     @State private var exportingToCalendar = false
     /// Esito dell'aggiunta al Calendario (solo macOS, dove non c'è l'editor di sistema).
     @State private var calendarResult: CalendarExport.Result?
@@ -32,13 +38,29 @@ struct AgendaEventRow: View {
                     .strikethrough(isDone, color: Theme.secondaryInk)
                     .lineLimit(expanded ? nil : 3)
                     .fixedSize(horizontal: false, vertical: true)
+                    .background(alignment: .topLeading) {
+                        if onPlainTap != nil && !expanded {
+                            Text(event.notes.isEmpty ? "Nessuna descrizione" : event.notes)
+                                .font(.body)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .hidden()
+                                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { full = $0 }
+                        }
+                    }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { shown = $0 }
                 Text(metadata)
                     .font(.caption)
                     .foregroundStyle(Theme.secondaryInk)
             }
         }
         .contentShape(.rect)
-        .onTapGesture { withAnimation(.snappy) { expanded.toggle() } }
+        .onTapGesture {
+            if let onPlainTap, !expanded, full <= shown + 1 {
+                onPlainTap()
+            } else {
+                withAnimation(.snappy) { expanded.toggle() }
+            }
+        }
         .contextMenu {
             if event.kind != .event {
                 Button(isDone ? "Segna come da fare" : "Segna come fatto",
@@ -103,6 +125,15 @@ struct AgendaEventRow: View {
     private func toggle() {
         withAnimation(.snappy) { model.preferences.toggleCompleted(event) }
         Task { await model.rescheduleReminders() }
+    }
+}
+
+/// Per `.equatable()` nelle righe con `onPlainTap`, una chiusura che cambia a ogni aggiornamento
+/// di chi la passa ma fa sempre la stessa cosa: si confronta solo se c'è. Ciò che la riga legge
+/// dal modello (es. compito fatto) la aggiorna comunque.
+extension AgendaEventRow: Equatable {
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.event == rhs.event && lhs.showsDate == rhs.showsDate && (lhs.onPlainTap == nil) == (rhs.onPlainTap == nil)
     }
 }
 

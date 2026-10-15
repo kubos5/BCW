@@ -1,19 +1,70 @@
 import SwiftUI
 
+/// Impostazioni su iOS: un elenco di sottosezioni, come le schede della finestra Impostazioni del
+/// Mac (`MacSettingsView`), con le stesse sezioni.
 struct SettingsView: View {
     var body: some View {
         Form {
-            GradeSettingsSection()
-            NotificationSettingsSection()
-            DashboardSettingsSection()
-            TimetableSettingsSection()
-            AppearanceSettingsSection()
-            DataSettingsSection()
-            AboutSettingsSection()
+            Section {
+                link("Generale", symbol: "gearshape", tint: Theme.secondaryInk) {
+                    AppearanceSettingsSection()
+                    DataSettingsSection()
+                    AboutSettingsSection()
+                }
+            }
+            .listRowBackground(Theme.surface)
+            Section {
+                link("Voti", symbol: "graduationcap", tint: Theme.subjectColor(1)) { GradeSettingsSection() }
+                link("Dashboard", symbol: "calendar.day.timeline.left", tint: Theme.accent) { DashboardSettingsSection() }
+                link("Orario", symbol: "tablecells", tint: Theme.subjectColor(3)) { TimetableSettingsSection() }
+                link("Notifiche", symbol: "bell.badge", tint: Theme.fair) { NotificationSettingsSection() }
+            }
+            .listRowBackground(Theme.surface)
+            Section {
+                NavigationLink {
+                    AccountView()
+                } label: {
+                    SettingsRowLabel(title: "Account", symbol: "person.2", tint: Theme.subjectColor(5))
+                }
+            }
+            .listRowBackground(Theme.surface)
         }
         .themedList()
         .contentMargins(.bottom, Theme.bottomInset - 24, for: .scrollContent)
         .screenTitle("Impostazioni")
+    }
+
+    private func link<Content: View>(_ title: String, symbol: String, tint: Color,
+                                      @ViewBuilder content: @escaping () -> Content) -> some View {
+        NavigationLink {
+            Form(content: content)
+                .themedList()
+                .contentMargins(.bottom, Theme.bottomInset - 24, for: .scrollContent)
+                .screenTitle(title)
+                .inlineTitleDisplay()
+        } label: {
+            SettingsRowLabel(title: title, symbol: symbol, tint: tint)
+        }
+    }
+}
+
+/// Riga di una sottosezione delle Impostazioni: icona in un quadrato colorato e titolo.
+private struct SettingsRowLabel: View {
+    let title: String
+    let symbol: String
+    let tint: Color
+
+    var body: some View {
+        Label {
+            Text(title)
+                .foregroundStyle(Theme.ink)
+        } icon: {
+            Image(systemName: symbol)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(tint.gradient, in: .rect(cornerRadius: 8, style: .continuous))
+        }
     }
 }
 
@@ -30,9 +81,8 @@ struct GradeSettingsSection: View {
                 ForEach(AverageMode.allCases) { Text($0.title).tag($0) }
             }
             Toggle("Usa i pesi dei voti", isOn: $preferences.weightedAverage)
-            Stepper(value: $preferences.targetAverage, in: 4...10, step: 0.25) {
-                LabeledContent("Media obiettivo", value: GradeFormat.short(preferences.targetAverage))
-            }
+            LabeledStepper("Media obiettivo", value: GradeFormat.short(preferences.targetAverage),
+                           number: $preferences.targetAverage, in: 4...10, step: 0.25)
         } header: {
             Text("Voti")
         } footer: {
@@ -71,11 +121,46 @@ struct NotificationSettingsSection: View {
                 .onChange(of: preferences.reminderHour) { Task { await model.rescheduleReminders() } }
             }
         } header: {
-            Text("Notifiche")
+            Text("Promemoria")
         } footer: {
             Text("Ricevi una notifica la sera prima di ogni compito o verifica. I compiti segnati come fatti vengono saltati.")
         }
         .listRowBackground(Theme.surface)
+
+        Section {
+            ForEach(NewsKind.allCases) { kind in
+                Toggle(isOn: Binding {
+                    preferences.newsNotifications.contains(kind)
+                } set: { isOn in
+                    if isOn { enableNews(kind) } else { preferences.newsNotifications.remove(kind) }
+                }) {
+                    Label(kind.title, systemImage: kind.symbol)
+                }
+            }
+        } header: {
+            Text("Novità")
+        } footer: {
+            Text(Platform.isMac
+                 ? "Una notifica per ogni novità trovata aggiornando i dati mentre BCW è aperta."
+                 : "Una notifica per ogni novità trovata aggiornando i dati, anche con BCW chiusa: iOS sceglie quando aggiornare in background, in base a quanto usi l'app, quindi le notifiche possono arrivare con un po' di ritardo.")
+        }
+        .listRowBackground(Theme.surface)
+        .onChange(of: preferences.newsNotifications) {
+            #if os(iOS)
+            NewsNotifications.scheduleBackgroundRefresh(model: model)
+            #endif
+        }
+    }
+
+    /// Attiva un tipo di novità chiedendo prima il permesso per le notifiche.
+    private func enableNews(_ kind: NewsKind) {
+        model.preferences.newsNotifications.insert(kind)
+        Task {
+            if !(await Reminders.requestAuthorization()) {
+                notificationsDenied = true
+                model.preferences.newsNotifications.remove(kind)
+            }
+        }
     }
 }
 

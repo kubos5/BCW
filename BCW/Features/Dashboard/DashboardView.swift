@@ -8,14 +8,21 @@ struct DashboardView: View {
     #if os(iOS)
     @State private var scrollPosition = ScrollPosition(edge: .top)
     @State private var isAtTop = true
+    /// Calendario mobile, intero o ridotto (`CalendarHeader`).
+    @State private var headerState = WeekHeaderScroll()
     #endif
     /// Si apre sul giorno dopo, come richiesto: è quello per cui servono i compiti.
     @State private var selectedDay = Date().adding(days: DashboardView.initialOffset).startOfDay
     /// Larghezza della barra di navigazione, per capire se il titolo esteso ci sta.
     @State private var barWidth: CGFloat = 0
+    /// "Domani" nella barra (vedi `onChange` del giorno scelto).
+    @State private var showsTomorrow = false
+    #if os(macOS)
     /// Identità dei giorni successivi: cambia (con transizione) solo quando cambia il giorno
-    /// scelto e con esso il contenuto della sezione espansa (vedi `select`).
+    /// scelto e con esso il contenuto della sezione espansa (vedi `select`). Su iPhone è il giorno
+    /// della pagina (`upcoming(after:)`).
     @State private var upcomingGeneration = 0
+    #endif
     /// Altezza del giorno scelto: i giorni successivi si spostano di altrettanto nella
     /// transizione, così si muovono come il contenuto principale (vedi `upcomingTransition`).
     /// Non è uno stato osservato: aprendo una sezione l'altezza cambia a ogni fotogramma, e
@@ -61,12 +68,21 @@ struct DashboardView: View {
     var body: some View {
         PlatformNavigationStack {
             content
+                #if os(iOS)
+                // Solo per abbreviare il titolo su iPhone: su Mac ricalcolerebbe la pagina a ogni
+                // fotogramma mentre si ridimensiona la finestra.
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { barWidth = $0 }
+                #endif
                 .refreshable { await model.refreshAll() }
                 .screenTitle(title)
                 .inlineLargeTitleDisplay()
+                .onChange(of: selectedDay, initial: true) { _, day in
+                    // Sempre con un'animazione, anche quando il giorno cambia senza (scorrendo di lato).
+                    guard showsTomorrow == day.isTomorrow else { return }
+                    withAnimation(.snappy) { showsTomorrow = !day.isTomorrow }
+                }
                 .toolbar {
-                    if !selectedDay.isTomorrow {
+                    if showsTomorrow {
                         ToolbarItem(placement: .trailingBar) {
                             Button("Domani") {
                                 select(Date().adding(days: 1).startOfDay)
@@ -109,20 +125,20 @@ struct DashboardView: View {
 
     /// Cambia il giorno scelto. Nella stessa transazione può cambiare anche l'identità dei
     /// giorni successivi, così la sezione vecchia esce con il contenuto vecchio e quella nuova
-    /// entra insieme al giorno: su iOS sempre, su macOS solo se la sezione è espansa e il suo
-    /// contenuto cambia davvero.
+    /// entra insieme al giorno: su iOS sempre (l'identità è il giorno), su macOS solo se la sezione
+    /// è espansa e il suo contenuto cambia davvero.
     private func select(_ day: Date, animated: Bool = true) {
         guard !day.isSameDay(as: selectedDay) else { return }
         #if os(macOS)
         let replacesUpcoming = !model.preferences.isCollapsed(.upcoming)
             && upcomingKey(after: selectedDay) != upcomingKey(after: day)
-        #else
-        let replacesUpcoming = true
-        #endif
         let update = {
             selectedDay = day
             if replacesUpcoming { upcomingGeneration += 1 }
         }
+        #else
+        let update = { selectedDay = day }
+        #endif
         if animated { withAnimation(.snappy, update) } else { update() }
     }
 
@@ -155,44 +171,95 @@ struct DashboardView: View {
         }
         .animation(.snappy, value: selectedDay)
         #else
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                if let error = model.lastError {
-                    StatusBanner(message: error, symbol: model.isOffline ? "wifi.slash" : "exclamationmark.triangle")
+        // Il calendario (settimana o mese) galleggia sopra il contenuto (`CalendarHeader`), come
+        // nell'Orario: il contenuto parte sotto il calendario ridotto e si sposta con lui.
+        ZStack(alignment: .top) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    if let error = model.lastError {
+                        StatusBanner(message: error, symbol: model.isOffline ? "wifi.slash" : "exclamationmark.triangle")
+                    }
+
+                    // Con il giorno accanto, già visibile mentre si scorre di lato.
+                    SwipeDayPages(state: headerState, day: selectedDay) { day, isMain in
+                        VStack(alignment: .leading, spacing: 22) {
+                            DayDetail(day: day)
+                                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                                    if isMain && $0 > 0 { dayDetailHeight.value = $0 }
+                                }
+                                .id(day)
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+
+                            if mode == .list {
+                                upcoming(after: day)
+                            }
+                        }
+                    }
                 }
+                .pagePadding()
+                .padding(.bottom, 24)
+                .animation(.snappy, value: selectedDay)
+                .background { CalendarHeaderPan(state: headerState) }
+            }
+            // Il giorno accanto sta fuori dai bordi dello scorrimento finché non entra.
+            .scrollClipDisabled()
+            .scrollPosition($scrollPosition)
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top <= 1
+            } action: { _, atTop in
+                isAtTop = atTop
+            }
+            .safeAreaPadding(.top, 4 + CalendarHeader.collapsedHeight + 12)
+            .modifier(WeekHeaderScroll.Shift(state: headerState))
 
-                calendar
-
-                DayDetail(day: selectedDay)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { if $0 > 0 { dayDetailHeight.value = $0 } }
-                    .id(selectedDay)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-
-                if mode == .list {
-                    upcoming
+            DashboardHeaderHost(selectedDay: daySelection, style: mode == .list ? .week : .month, state: headerState)
+                .padding(.horizontal)
+                .padding(.top, 4)
+        }
+        .onAppear {
+            // Da calendario intero si può tirare giù per aggiornare; scorrendo di lato si cambia giorno.
+            headerState.expandedScrolls = true
+            headerState.onSwipeDay = { direction in
+                // Il contenuto è fuori dallo schermo: si cambia senza le transizioni del giorno.
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    select(selectedDay.adding(days: direction).startOfDay, animated: false)
                 }
             }
-            .pagePadding()
-            .padding(.bottom, 24)
-            .animation(.snappy, value: selectedDay)
         }
-        .scrollPosition($scrollPosition)
-        .onScrollGeometryChange(for: Bool.self) { geometry in
-            geometry.contentOffset.y + geometry.contentInsets.top <= 1
-        } action: { _, atTop in
-            isAtTop = atTop
-        }
+        .onChange(of: mode) { headerState.reset() }
         .onChange(of: reselection) {
-            if isAtTop {
-                select(Date().adding(days: 1).startOfDay)
-            } else {
+            if !isAtTop {
                 withAnimation(.smooth) { scrollPosition.scrollTo(edge: .top) }
+            } else if headerState.isCollapsed {
+                headerState.open()
+            } else {
+                select(Date().adding(days: 1).startOfDay)
             }
         }
         .themedBackground()
         #endif
     }
 
+    #if os(iOS)
+    /// I giorni successivi di una pagina: cambiano (con la transizione) insieme al suo giorno. Su
+    /// iPhone l'identità è il giorno stesso e non `upcomingGeneration`: così, quando le pagine si
+    /// scambiano di ruolo scorrendo di lato, non vengono ricostruiti.
+    @ViewBuilder
+    private func upcoming(after day: Date) -> some View {
+        if model.preferences.showUpcomingDays {
+            UpcomingDays(after: day) { day in
+                select(day)
+            }
+            .equatable()
+            .id(day)
+            .transition(upcomingTransition)
+        }
+    }
+    #endif
+
+    #if os(macOS)
     /// I giorni successivi cambiano insieme al giorno scelto, con la stessa transizione,
     /// ma solo se il loro contenuto cambia davvero: da compressi o con gli stessi giorni ed
     /// eventi restano fermi. L'identità non dipende dallo stato compresso, altrimenti
@@ -207,6 +274,7 @@ struct DashboardView: View {
             .transition(upcomingTransition)
         }
     }
+    #endif
 
     /// Il giorno scelto usa `.move(edge:)`, che sposta una vista di tutta la sua altezza: con la
     /// stessa transizione i giorni successivi si sposterebbero troppo da aperti (settimane di card)
@@ -232,6 +300,21 @@ struct DashboardView: View {
         }
     }
 }
+
+#if os(iOS)
+/// Il calendario con l'avanzamento dello stato, letto solo qui (cambia a ogni fotogramma).
+private struct DashboardHeaderHost: View {
+    @Binding var selectedDay: Date
+    let style: CalendarHeader.Style
+    let state: WeekHeaderScroll
+
+    var body: some View {
+        CalendarHeader(selectedDay: $selectedDay, style: style, progress: state.progress, onExpand: state.open) { height in
+            state.range = height - CalendarHeader.collapsedHeight
+        }
+    }
+}
+#endif
 
 // MARK: - Striscia settimanale
 
@@ -434,25 +517,78 @@ private struct UpcomingDays: View {
     private func upcomingList(_ days: [(Date, [AgendaEvent])]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(days, id: \.0) { day, events in
-                VStack(alignment: .leading, spacing: 12) {
-                    Button { onSelect(day) } label: {
-                        HStack {
-                            Eyebrow(text: day.relativeDayName, color: Theme.accent)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(Theme.secondaryInk)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    let lastID = events.last?.id
-                    ForEach(events) { event in
-                        AgendaEventRow(event: event)
-                        if event.id != lastID { Divider().overlay(Theme.separator) }
-                    }
-                }
-                .card()
+                UpcomingDayCard(day: day, events: events) { onSelect(day) }
+                    .equatable()
             }
         }
     }
+}
+
+/// Si ricalcolano solo se cambiano i giorni (`.equatable()`): i dati letti dal modello li
+/// aggiornano comunque. La chiusura cambia a ogni aggiornamento della Dashboard ma fa sempre la
+/// stessa cosa, e confrontandola la sezione (con tutte le righe) si ricalcolava a ogni fotogramma
+/// in cui cambiava qualcosa della pagina, es. scorrendo di lato.
+extension UpcomingDays: Equatable {
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.after == rhs.after }
+}
+
+/// Un giorno in "Nei prossimi giorni". Toccando l'intestazione si comprime (come le altre
+/// sezioni); toccando un punto del contenuto che non fa già qualcosa si va a quel giorno: non la
+/// casella di un compito, né il testo di un evento tagliato (che si apre); i margini e le righe
+/// con il testo intero sì. Lo stato compresso resta
+/// finché la Dashboard è aperta.
+private struct UpcomingDayCard: View {
+    let day: Date
+    let events: [AgendaEvent]
+    let onSelect: () -> Void
+    @State private var isCollapsed = false
+
+    var body: some View {
+        let lastID = events.last?.id
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.snappy) { isCollapsed.toggle() }
+            } label: {
+                HStack {
+                    Eyebrow(text: day.relativeDayName, color: Theme.accent)
+                    Spacer()
+                    if isCollapsed {
+                        Text(events.count == 1 ? "1 elemento" : "\(events.count) elementi")
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondaryInk)
+                            .transition(.opacity)
+                    }
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.secondaryInk)
+                        .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(HeaderButtonStyle())
+            .sensoryFeedback(.selection, trigger: isCollapsed)
+            .accessibilityHint(isCollapsed ? "Mostra gli elementi" : "Nasconde gli elementi")
+
+            CollapsibleContent(isExpanded: !isCollapsed, spacing: 12) {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(events) { event in
+                        AgendaEventRow(event: event, onPlainTap: onSelect)
+                            .equatable()
+                        if event.id != lastID { Divider().overlay(Theme.separator) }
+                    }
+                }
+            }
+        }
+        .card()
+        // Intestazione e righe hanno i loro tocchi (comprimere, aprire, segnare come fatto), che
+        // hanno la precedenza: questo vale solo negli spazi vuoti, margini della card compresi.
+        .contentShape(.rect(cornerRadius: Theme.corner))
+        .onTapGesture(perform: onSelect)
+        .accessibilityAction(named: "Vai a \(day.relativeDayName)", onSelect)
+    }
+}
+
+/// Come `UpcomingDays`: si ricalcola solo se cambiano il giorno o i suoi elementi.
+extension UpcomingDayCard: Equatable {
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.day == rhs.day && lhs.events == rhs.events }
 }

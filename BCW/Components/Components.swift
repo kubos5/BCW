@@ -451,3 +451,38 @@ struct DetailRow: View {
         .font(.subheadline)
     }
 }
+
+/// Contatore con titolo e valore in una riga di un `Form`. Su macOS un `Stepper` con un
+/// `LabeledContent` come etichetta mette il valore accanto al titolo e le frecce lontane, e più
+/// controlli in una riga finiscono fuori posto: lì titolo a sinistra, valore e frecce a destra.
+struct LabeledStepper<Value: Strideable>: View {
+    let title: String
+    let value: String
+    @Binding var number: Value
+    let range: ClosedRange<Value>
+    var step: Value.Stride = 1
+
+    init(_ title: String, value: String, number: Binding<Value>, in range: ClosedRange<Value>, step: Value.Stride = 1) {
+        self.title = title
+        self.value = value
+        _number = number
+        self.range = range
+        self.step = step
+    }
+
+    var body: some View {
+        #if os(macOS)
+        LabeledContent(title) {
+            HStack(spacing: 6) {
+                Text(value).monospacedDigit()
+                Stepper(title, value: $number, in: range, step: step)
+                    .labelsHidden()
+            }
+        }
+        #else
+        Stepper(value: $number, in: range, step: step) {
+            LabeledContent(title, value: value)
+        }
+        #endif
+    }
+}

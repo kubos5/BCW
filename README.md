@@ -44,14 +44,19 @@ BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 - toccando di nuovo la scheda Dashboard si torna in cima alla pagina e, se si è già in cima, alla giornata di domani
 - riepilogo per periodo con le insufficienze
 - conto alla rovescia alle prossime vacanze
+- notifiche per nuovi voti, comunicazioni, note, assenze e compiti, da attivare in Impostazioni › Notifiche (su iPhone anche con l'app chiusa)
+- su iPhone il calendario della Dashboard (settimana o mese) si riduce a una striscia come quello dell'Orario, e scorrendo di lato si passa al giorno prima o dopo
+- in "Nei prossimi giorni" ogni giorno si comprime toccandone il titolo; toccando il resto si va a quel giorno
 
 ### Orario
 
 La scheda Orario contiene l'orario settimanale, che si compila a mano o si genera dalle lezioni registrate:
 
 - tre viste: Lista (la settimana in alto e gli eventi del giorno sotto), Calendario (il mese in alto e gli eventi del giorno sotto) e Giorno (le ore della giornata, come nell'app Calendario)
+- su iPhone la settimana (nelle viste Lista e Giorno) scatta tra intera e ridotta (una striscia di numeri) seguendo il dito, con un punto di resistenza a metà strada segnato da una vibrazione; lo scorrimento normale comincia da settimana ridotta e per riaprirla si tira giù da lì, oppure la si tocca; scorrendo di lato si passa al giorno prima o dopo
 - toccando un evento si vedono i dettagli e si aggiungono note, file e foto, per un solo giorno o per ogni settimana
 - le verifiche segnate dai docenti su Classeviva compaiono da sole sulla lezione della materia e si possono nascondere; altre verifiche si segnano a mano, per un giorno o per ogni settimana
+- Verifiche nascoste (dal menu dell'orario): l'elenco delle verifiche nascoste, con il motivo, da cui si possono mostrare di nuovo, e le regole per nasconderle in automatico (per docente, materia, giorno della settimana, periodo, parole nel testo o materie che quel giorno non sono in orario)
 - modificando un evento si può applicare la modifica a tutti quelli con lo stesso nome
 - gli eventi uguali di seguito (es. due ore di matematica) sono uniti in un gruppo, quelli contemporanei sono affiancati
 - intervalli che nella vista Giorno stanno sopra le lezioni senza cambiarne la durata e nella vista Lista sono un separatore ondulato con l'orario
@@ -74,7 +79,9 @@ BCW è anche un'app nativa per macOS (non Catalyst), con le stesse funzioni e lo
 - Bacheca con elenco e comunicazione aperta affiancati, come in Mail
 - griglie di card per note, assenze, agenda, materiale, materie e libri
 - menu Vai e Account, scorciatoie da tastiera (⌘1…⌘9 per le sezioni, ⌘F per cercare, ⌘R per aggiornare, ⇧⌘T per andare a domani nella Dashboard, ⌘T per tornare a oggi e ⌘N per un nuovo evento nell'Orario)
-- finestra Impostazioni (⌘,) a schede
+- finestra Impostazioni (⌘,) a schede, con le stesse sezioni delle Impostazioni su iPhone (Generale, Voti, Dashboard, Orario, Notifiche, Account)
+- barra della finestra trasparente finché il contenuto non le scorre sotto, poi chiara e sfocata come nelle app di Apple
+- nella ricerca un clic su un'area vuota toglie la selezione al campo
 - le pagine si adattano alla larghezza della finestra: se è stretta, le colonne si impilano
 
 ### Design

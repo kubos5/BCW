@@ -245,14 +245,14 @@ struct EntryBadges: Equatable {
 }
 
 /// Tutto ciò che serve per disegnare un giorno dell'orario, calcolato una volta per aggiornamento.
-struct TimetableDayContent {
+struct TimetableDayContent: Equatable {
     let day: Date
     let entries: [TimetableEntry]
     let layout: TimetableLayout
     let isDraft: Bool
     /// Verifiche di Classeviva collegate agli eventi (quelle non nascoste).
     let registerTests: [UUID: [AgendaEvent]]
-    /// Verifiche nascoste dall'utente, per poterle mostrare di nuovo.
+    /// Verifiche nascoste (a mano o dalle regole), per poterle mostrare di nuovo.
     let hiddenTests: [UUID: [AgendaEvent]]
     /// Verifiche del giorno che non corrispondono a nessuna materia dell'orario.
     let unmatchedTests: [AgendaEvent]
@@ -270,14 +270,14 @@ struct TimetableDayContent {
         var visible: [UUID: [AgendaEvent]] = [:]
         var hidden: [UUID: [AgendaEvent]] = [:]
         for (id, events) in match.matched {
-            let shown = events.filter { !store.isTestHidden($0.id) }
-            let concealed = events.filter { store.isTestHidden($0.id) }
+            let shown = events.filter { store.hiddenReason(for: $0, unmatched: false) == nil }
+            let concealed = events.filter { store.hiddenReason(for: $0, unmatched: false) != nil }
             if !shown.isEmpty { visible[id] = shown }
             if !concealed.isEmpty { hidden[id] = concealed }
         }
         registerTests = visible
         hiddenTests = hidden
-        unmatchedTests = match.unmatched.filter { !store.isTestHidden($0.id) }
+        unmatchedTests = match.unmatched.filter { store.hiddenReason(for: $0, unmatched: true) == nil }
 
         var badges: [UUID: EntryBadges] = [:]
         for entry in entries {
@@ -291,6 +291,13 @@ struct TimetableDayContent {
             )
         }
         self.badges = badges
+    }
+
+    /// `layout` non si confronta: deriva dagli eventi.
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.day == rhs.day && lhs.entries == rhs.entries && lhs.isDraft == rhs.isDraft
+            && lhs.registerTests == rhs.registerTests && lhs.hiddenTests == rhs.hiddenTests
+            && lhs.unmatchedTests == rhs.unmatchedTests && lhs.badges == rhs.badges
     }
 
     /// Collega le verifiche agli eventi della stessa materia: a quello in corso all'ora della
