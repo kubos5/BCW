@@ -128,6 +128,15 @@ struct AgendaEventRow: View {
     }
 }
 
+/// Per `.equatable()` nelle righe con `onPlainTap`, una chiusura che cambia a ogni aggiornamento
+/// di chi la passa ma fa sempre la stessa cosa: si confronta solo se c'è. Ciò che la riga legge
+/// dal modello (es. compito fatto) la aggiorna comunque.
+extension AgendaEventRow: Equatable {
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.event == rhs.event && lhs.showsDate == rhs.showsDate && (lhs.onPlainTap == nil) == (rhs.onPlainTap == nil)
+    }
+}
+
 extension AgendaEvent {
     /// Evento di Calendario corrispondente, con titolo, note e orari.
     func calendarEvent(in store: EKEventStore) -> EKEvent {

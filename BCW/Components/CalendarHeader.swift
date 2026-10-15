@@ -94,6 +94,7 @@ final class WeekHeaderScroll: NSObject {
         isDragging = false
         progress = 0
         isCollapsed = false
+        neighbors = [:]
     }
 
     // MARK: Curva di resistenza
@@ -204,8 +205,8 @@ final class WeekHeaderScroll: NSObject {
         lastTimestamp = 0
     }
 
-    private func makeLink(_ selector: Selector) -> CADisplayLink {
-        let link = CADisplayLink(target: self, selector: selector)
+    private func makeLink(_ selector: Selector, target: Any? = nil) -> CADisplayLink {
+        let link = CADisplayLink(target: target ?? self, selector: selector)
         link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
         link.add(to: .main, forMode: .common)
         return link
@@ -254,9 +255,45 @@ final class WeekHeaderScroll: NSObject {
 
     // MARK: Scorrimento laterale (cambio di giorno)
 
-    /// Giorno accanto mostrato durante lo scorrimento laterale (+1 il successivo, a destra; -1 il
-    /// precedente, a sinistra; 0 nessuno). Cambia solo quando cambia il verso, non a ogni fotogramma.
-    fileprivate(set) var swipeDirection = 0
+    /// Verso dello scorrimento laterale: +1 verso il giorno dopo (che sta a destra), -1 verso
+    /// quello prima, 0 fermo.
+    @ObservationIgnored private var swipeDirection = 0
+
+    /// Pagine di `SwipeDayPages`. Ognuna ha un'identità propria e il giorno per cui è stata
+    /// costruita, che non cambia: una pagina accanto diventa quella scelta (e viceversa) senza
+    /// essere ricostruita. Le pagine accanto sono quelle già pronte; finché niente si muove
+    /// restano anche quelle non più accanto (fuori dallo schermo), perché toglierle costa.
+    fileprivate(set) var mainPage = 0
+    fileprivate(set) var neighbors: [Int: Date] = [:]
+    @ObservationIgnored private var nextPage = 1
+    /// Giorno scelto mostrato da `SwipeDayPages`.
+    @ObservationIgnored fileprivate var pagesDay: Date?
+    @ObservationIgnored fileprivate weak var scrollView: UIScrollView?
+
+    /// Niente si muove: né il contenuto (di lato, in verticale o con l'intestazione) né il dito.
+    fileprivate var isIdle: Bool {
+        guard swipeLink == nil, swipeDirection == 0, swipeOffset == 0, isSettled else { return false }
+        guard let scrollView else { return true }
+        return !scrollView.isTracking && !scrollView.isDecelerating
+    }
+
+    /// Giorni dal giorno scelto (`pagesDay`) a `day`.
+    fileprivate static func distance(from start: Date, to day: Date) -> Int {
+        Int((day.timeIntervalSince(start) / 86_400).rounded())
+    }
+
+    /// Costruisce la pagina di un giorno accanto, se non c'è.
+    fileprivate func addNeighbor(_ day: Date) {
+        guard !neighbors.values.contains(where: { $0.isSameDay(as: day) }) else { return }
+        neighbors[nextPage] = day
+        nextPage += 1
+    }
+
+    /// Toglie una pagina non più accanto al giorno scelto (da fermi: costa).
+    fileprivate func removeNeighbor(_ key: Int) {
+        neighbors[key] = nil
+    }
+
     fileprivate func swipeBegan() {
         // Anche durante il cambio di giorno: si riprende il contenuto da dov'è.
         stopSwipe()
@@ -270,13 +307,24 @@ final class WeekHeaderScroll: NSObject {
 
     private func updateSwipeDirection() {
         let direction = swipeOffset < -0.5 ? 1 : (swipeOffset > 0.5 ? -1 : swipeDirection)
-        if direction != swipeDirection { swipeDirection = direction }
+        guard direction != swipeDirection else { return }
+        swipeDirection = direction
+        // Se non è già pronto, il giorno accanto si costruisce ora (e poi resta pronto).
+        guard direction != 0, let day = pagesDay else { return }
+        addNeighbor(day.adding(days: direction).startOfDay)
+        // Scorrendo tanti giorni senza fermarsi, le pagine lontane si accumulerebbero.
+        if neighbors.count > 3, let far = neighbors.max(by: {
+            abs(Self.distance(from: day, to: $0.value)) < abs(Self.distance(from: day, to: $1.value))
+        }) {
+            neighbors[far.key] = nil
+        }
     }
 
     /// Oltre un terzo della larghezza (contando la velocità) si cambia giorno, subito al rilascio
     /// (il calendario segna il giorno nuovo e vibra): i due contenuti si scambiano di ruolo nella
-    /// stessa posizione (il giorno nuovo diventa quello principale, il vecchio quello accanto) e poi
-    /// scorrono insieme fino al giorno nuovo. Altrimenti tutto torna al suo posto.
+    /// stessa posizione (il giorno nuovo diventa quello principale, il vecchio quello accanto, senza
+    /// ricostruirli: `SwipeDayPages`) e poi scorrono insieme fino al giorno nuovo. Altrimenti tutto
+    /// torna al suo posto.
     fileprivate func swipeEnded(velocity: CGFloat) {
         let heading = swipeOffset + velocity * 0.15
         guard abs(heading) > swipeWidth * 0.3, let onSwipeDay else {
@@ -287,6 +335,16 @@ final class WeekHeaderScroll: NSObject {
         onSwipeDay(direction)
         swipeOffset += CGFloat(direction) * swipeWidth
         swipeDirection = -direction
+        // La pagina del giorno nuovo diventa quella scelta, quella del vecchio una pagina accanto.
+        if let day = pagesDay {
+            let newDay = day.adding(days: direction).startOfDay
+            if let page = neighbors.first(where: { $0.value.isSameDay(as: newDay) })?.key {
+                neighbors[page] = nil
+                neighbors[mainPage] = day
+                mainPage = page
+            }
+            pagesDay = newDay
+        }
         animateSwipe(to: 0, velocity: velocity) { [weak self] in self?.swipeDirection = 0 }
     }
 
@@ -331,6 +389,103 @@ final class WeekHeaderScroll: NSObject {
         swipeSpring = nil
     }
 
+    #if DEBUG
+    @ObservationIgnored fileprivate var benchStarted = false
+
+    /// Prove di velocità (solo sviluppo): `-BCWSwipeBench N` simula N scorrimenti laterali (quattro
+    /// giorni avanti, quattro indietro), `-BCWHeaderBench N` N riduzioni e aperture del calendario,
+    /// come un dito a 60 Hz; poi stampa i fotogrammi lenti (`BCW-BENCH`), con il fotogramma del
+    /// gesto in cui capitano (lo scorrimento laterale si lascia al 15, la preparazione dei giorni
+    /// accanto avviene da fermi, verso il 50).
+    fileprivate func runBenchIfRequested() {
+        let defaults = UserDefaults.standard
+        let swipes = defaults.integer(forKey: "BCWSwipeBench")
+        let headers = defaults.integer(forKey: "BCWHeaderBench")
+        guard swipes > 0 || headers > 0, !benchStarted else { return }
+        benchStarted = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            Bench(state: self, count: max(swipes, headers), vertical: headers > 0).start()
+        }
+    }
+
+    private final class Bench: NSObject {
+        let state: WeekHeaderScroll
+        let count: Int
+        let vertical: Bool
+        var link: CADisplayLink?
+        var frame = 0
+        var round = 0
+        var last: CFTimeInterval = 0
+        var deltas: [CFTimeInterval] = []
+        var expected: CFTimeInterval = 1.0 / 60
+        var slowFrames: [Int: [Int]] = [:]
+
+        init(state: WeekHeaderScroll, count: Int, vertical: Bool) {
+            self.state = state
+            self.count = count
+            self.vertical = vertical
+        }
+
+        func start() {
+            link = state.makeLink(#selector(step(_:)), target: self)
+        }
+
+        @objc func step(_ link: CADisplayLink) {
+            if last > 0 {
+                let delta = link.timestamp - last
+                deltas.append(delta)
+                if delta > expected * 1.5 { slowFrames[frame, default: []].append(Int(delta * 1000)) }
+            }
+            last = link.timestamp
+            expected = link.duration > 0 ? link.duration : expected
+            if vertical { verticalStep() } else { swipeStep() }
+            frame += 1
+            if frame >= (vertical ? 120 : 60) {
+                frame = 0
+                round += 1
+                if round >= count { finish() }
+            }
+        }
+
+        private func swipeStep() {
+            let direction: CGFloat = (round / 4) % 2 == 0 ? 1 : -1
+            switch frame {
+            case 0: state.swipeBegan()
+            case 1...14: state.swipeChanged(-direction * state.swipeWidth * 0.45 * CGFloat(frame) / 14)
+            case 15: state.swipeEnded(velocity: -direction * 900)
+            default: break
+            }
+        }
+
+        /// Riduce (fotogrammi 0–15) e riapre (60–75).
+        private func verticalStep() {
+            let distance = state.range * 0.8
+            switch frame {
+            case 0, 60: state.began()
+            case 1...14: state.changed(distance * CGFloat(frame) / 14)
+            case 15: state.ended(velocity: 600)
+            case 61...74: state.changed(-distance * CGFloat(frame - 60) / 14)
+            case 75: state.ended(velocity: -600)
+            default: break
+            }
+        }
+
+        private func finish() {
+            link?.invalidate()
+            link = nil
+            let slow = deltas.filter { $0 > expected * 1.5 }
+            let lost = slow.reduce(0) { $0 + $1 - expected }
+            print(String(format: "BCW-BENCH %@ rounds=%d frames=%d slow=%d lost=%.0fms max=%.1fms",
+                         vertical ? "header" : "swipe", count, deltas.count, slow.count, lost * 1000,
+                         (deltas.max() ?? 0) * 1000))
+            for (frame, values) in slowFrames.sorted(by: { $0.key < $1.key }) {
+                print("BCW-BENCH frame \(frame): \(values)")
+            }
+            fflush(stdout)
+        }
+    }
+    #endif
+
     // MARK: Modificatore
 
     /// Sposta l'area con l'intestazione (e di lato durante il cambio di giorno) e, se l'area non
@@ -347,27 +502,116 @@ final class WeekHeaderScroll: NSObject {
     }
 }
 
-/// Il giorno accanto, mostrato a fianco del contenuto durante lo scorrimento laterale: va messo sul
-/// contenuto dello scorrimento (che deve avere `scrollClipDisabled`), così scorre e si sposta con
-/// lui ed è già al suo posto quando i due si scambiano.
-struct SwipeNeighbor<Neighbor: View>: ViewModifier {
+/// Il giorno scelto e i giorni accanto (a fianco, fuori dallo schermo finché non entrano). Va nel
+/// contenuto dello scorrimento (che deve avere `scrollClipDisabled`), così i giorni accanto
+/// scorrono e si spostano con lui.
+/// Costruire una pagina costa decine di millisecondi (in Dashboard soprattutto "Nei prossimi
+/// giorni"), e anche toglierla: farlo durante lo scorrimento laterale lo faceva scattare. Per questo
+/// le pagine hanno un'identità propria e un giorno che non cambia (`WeekHeaderScroll.neighbors`):
+/// - quando niente si muove si costruiscono in anticipo i giorni accanto, uno alla volta, e si
+///   tolgono le pagine non più accanto;
+/// - al rilascio la pagina del giorno nuovo diventa quella scelta e quella del vecchio una pagina
+///   accanto, senza ricostruirle; le altre restano fuori dallo schermo fino al prossimo momento fermo.
+/// Toccando un altro giorno la pagina principale si aggiorna con le sue transizioni. Le pagine
+/// accanto non contano nell'altezza del contenuto (`PagesLayout`) e non si toccano. `prepares` falso: si
+/// costruiscono solo scorrendo (es. nella modifica dell'orario).
+struct SwipeDayPages<Page: View>: View {
     let state: WeekHeaderScroll
-    @ViewBuilder let neighbor: (Int) -> Neighbor
+    let day: Date
+    var prepares = true
+    @ViewBuilder let page: (_ day: Date, _ isMain: Bool) -> Page
 
-    func body(content: Content) -> some View {
-        content.overlay(alignment: .topLeading) {
-            let direction = state.swipeDirection
-            if direction != 0 {
-                neighbor(direction)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .offset(x: CGFloat(direction) * state.swipeWidth)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-                    .transaction { $0.animation = nil }
+    private struct Slot: Identifiable {
+        let id: Int
+        let day: Date
+        /// 0 il giorno scelto, -1 o +1 il giorno accanto (a sinistra o a destra); le altre pagine
+        /// stanno più in là.
+        let side: Int
+    }
+
+    var body: some View {
+        var slots = [Slot(id: state.mainPage, day: day, side: 0)]
+        for (key, neighbor) in state.neighbors {
+            let distance = WeekHeaderScroll.distance(from: day, to: neighbor)
+            slots.append(Slot(id: key, day: neighbor, side: abs(distance) == 1 ? distance : (distance < 0 ? -3 : 3)))
+        }
+        let sorted = slots.sorted { $0.id < $1.id }
+        return PagesLayout(sides: sorted.map { $0.id == state.mainPage ? nil : $0.side }, pageDistance: state.swipeWidth) {
+            ForEach(sorted) { slot in
+                let isMain = slot.id == state.mainPage
+                page(slot.day, isMain)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .allowsHitTesting(isMain)
+                    .accessibilityHidden(!isMain)
+                    // Le pagine cambiano ruolo e posto senza animazioni (al rilascio nella stessa
+                    // posizione, toccando un giorno fuori dallo schermo).
+                    .transaction(value: [isMain ? 1 : 0, slot.side]) { $0.animation = nil }
+                    .transition(.identity)
+            }
+        }
+        .onChange(of: day, initial: true) { state.pagesDay = day }
+        // Riparte anche quando le pagine cambiano (es. tolte tutte cambiando vista).
+        .task(id: TaskKey(day: day, prepares: prepares, pages: state.neighbors.count)) {
+            guard prepares else { return }
+            await prepareNeighbors()
+        }
+    }
+
+    private struct TaskKey: Equatable {
+        let day: Date
+        let prepares: Bool
+        let pages: Int
+    }
+
+    /// Appena tutto è fermo (la pagina non si muove, quindi il tempo che serve non si vede), un
+    /// passo alla volta: toglie le pagine non più accanto e costruisce i giorni accanto che mancano.
+    private func prepareNeighbors() async {
+        while (try? await Task.sleep(for: .milliseconds(100))) != nil {
+            guard state.onSwipeDay != nil else { return }
+            guard state.isIdle else { continue }
+            if let far = state.neighbors.first(where: { abs(WeekHeaderScroll.distance(from: day, to: $0.value)) != 1 }) {
+                state.removeNeighbor(far.key)
+            } else if let missing = [1, -1].map({ day.adding(days: $0).startOfDay }).first(where: { neighbor in
+                !state.neighbors.values.contains { $0.isSameDay(as: neighbor) }
+            }) {
+                state.addNeighbor(missing)
+            } else {
+                return
             }
         }
     }
+}
+
+/// Le pagine di `SwipeDayPages`, alte quanto il loro contenuto, una accanto all'altra a distanza
+/// `pageDistance`; l'altezza è quella della pagina scelta. Al posto di uno `ZStack` con `offset`:
+/// cambiando il ruolo delle pagine (al rilascio) cambiavano i loro modificatori e SwiftUI le
+/// impaginava di nuovo tutte, testo compreso. Così cambia solo dove vengono messe.
+private struct PagesLayout: Layout {
+    /// Lato di ogni pagina, nell'ordine (`nil` la pagina scelta).
+    let sides: [Int?]
+    let pageDistance: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let index = sides.firstIndex(where: { $0 == nil }), index < subviews.count else { return .zero }
+        return subviews[index].sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (index, subview) in subviews.enumerated() {
+            let size = subview.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+            let side = index < sides.count ? sides[index] ?? 0 : 0
+            let x = bounds.minX + CGFloat(side) * pageDistance
+            subview.place(at: CGPoint(x: x, y: bounds.minY), anchor: .topLeading,
+                          proposal: ProposedViewSize(width: bounds.width, height: size.height))
+        }
+    }
+
+    /// Le pagine cominciano dal bordo: niente allineamenti da chiedere al loro contenuto.
+    func explicitAlignment(of guide: HorizontalAlignment, in bounds: CGRect, proposal: ProposedViewSize,
+                           subviews: Subviews, cache: inout ()) -> CGFloat? { nil }
+
+    func explicitAlignment(of guide: VerticalAlignment, in bounds: CGRect, proposal: ProposedViewSize,
+                           subviews: Subviews, cache: inout ()) -> CGFloat? { nil }
 }
 
 // MARK: - Gesti
@@ -405,8 +649,12 @@ struct CalendarHeaderPan: UIViewRepresentable {
             guard self.scrollView !== scrollView else { return }
             detach()
             self.scrollView = scrollView
+            state.scrollView = scrollView
             scrollView.addGestureRecognizer(vertical)
             scrollView.addGestureRecognizer(horizontal)
+            #if DEBUG
+            state.runBenchIfRequested()
+            #endif
         }
 
         func detach() {
@@ -676,7 +924,6 @@ private struct WeekMorph: View {
 /// Un giorno della settimana che si trasforma con la card: intero (iniziale, numero, pallini, in un
 /// rettangolo arrotondato se scelto) o ridotto (il solo numero, in un cerchio se scelto).
 private struct MorphingDayCell: View {
-    @Environment(AppModel.self) private var model
     let day: Date
     let isSelected: Bool
     let progress: CGFloat
@@ -687,19 +934,16 @@ private struct MorphingDayCell: View {
     var body: some View {
         let p = progress
         let fade = max(0, 1 - p * 1.8)
-        let holiday = model.calendarStatus(on: day)?.isHoliday == true
 
         Button(action: action) {
             // Posizioni rispetto al centro della cella (alta 76 punti da intera e 46 da ridotta).
+            // Testi e pallini sono viste a parte che non dipendono dall'avanzamento: cambiando a
+            // ogni fotogramma solo la loro posizione, SwiftUI non li ricalcola.
             ZStack {
-                Text(day.it("EEEEE").uppercased())
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(isSelected ? .white.opacity(0.85) : Theme.secondaryInk)
+                WeekdayInitial(day: day, isSelected: isSelected)
                     .offset(y: lerp(-21.5, -38, p))
                     .opacity(fade)
-                Text(day.it("d"))
-                    .font(.numeral(19, weight: isSelected || day.isToday ? .bold : .medium))
-                    .foregroundStyle(DayDots.numberColor(day: day, isSelected: isSelected, holiday: holiday))
+                DayNumber(day: day, isSelected: isSelected, size: 19, weight: .medium)
                     .scaleEffect(lerp(1, 0.9, p))
                     .offset(y: lerp(3, 0, p))
                 DayDots(day: day, isSelected: isSelected, size: 5)
@@ -763,6 +1007,34 @@ private struct DayDots: View {
     }
 }
 
+/// Numero del giorno (in grassetto se scelto o oggi), nei suoi colori.
+private struct DayNumber: View {
+    @Environment(AppModel.self) private var model
+    let day: Date
+    let isSelected: Bool
+    let size: CGFloat
+    let weight: Font.Weight
+
+    var body: some View {
+        let holiday = model.calendarStatus(on: day)?.isHoliday == true
+        Text(day.it("d"))
+            .font(.numeral(size, weight: isSelected || day.isToday ? .bold : weight))
+            .foregroundStyle(DayDots.numberColor(day: day, isSelected: isSelected, holiday: holiday))
+    }
+}
+
+/// Iniziale del giorno della settimana.
+private struct WeekdayInitial: View {
+    let day: Date
+    let isSelected: Bool
+
+    var body: some View {
+        Text(day.it("EEEEE").uppercased())
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(isSelected ? .white.opacity(0.85) : Theme.secondaryInk)
+    }
+}
+
 // MARK: Mese
 
 /// Il mese, che si riduce alla striscia della settimana del giorno scelto: quella settimana sale
@@ -821,9 +1093,19 @@ private struct MonthMorph: View {
         return monthSet.contains(start) ? start : (months.first { $0.isSameDay(as: start) } ?? start)
     }
 
+    /// Settimane dei mesi già calcolate: il mese si ridisegna a ogni fotogramma mentre si riduce.
+    private static var rowsCache: [Date: [[(day: Date, inMonth: Bool)]]] = [:]
+
     /// Settimane del mese, da lunedì a domenica: il giorno e se appartiene al mese.
     static func rows(of month: Date) -> [[(day: Date, inMonth: Bool)]] {
         let first = month.startOfMonth
+        if let rows = rowsCache[first] { return rows }
+        let rows = makeRows(first)
+        rowsCache[first] = rows
+        return rows
+    }
+
+    private static func makeRows(_ first: Date) -> [[(day: Date, inMonth: Bool)]] {
         let count = CVDate.calendar.range(of: .day, in: .month, for: first)?.count ?? 30
         let offset = (CVDate.calendar.component(.weekday, from: first) + 5) % 7
         let start = first.adding(days: -offset)
@@ -872,8 +1154,9 @@ private struct MonthMorph: View {
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 0) {
                     ForEach(Self.months, id: \.self) { month in
+                        // Il margine ai lati resta fisso: lo restringe `grid` spostando i giorni.
                         grid(month, progress: p, shift: shift)
-                            .padding(.horizontal, lerp(Self.padding, 8, p))
+                            .padding(.horizontal, Self.padding)
                             .containerRelativeFrame(.horizontal)
                     }
                 }
@@ -925,6 +1208,11 @@ private struct MonthMorph: View {
     private func grid(_ month: Date, progress p: CGFloat, shift: CGFloat) -> some View {
         let rows = Self.rows(of: month)
         let isSelectedMonth = month.isSameDay(as: selectedDay.startOfMonth)
+        // Riducendo il margine ai lati scende da 14 a 8 punti come nella settimana. Invece di
+        // cambiare il margine (e quindi l'impaginazione di tutte le pagine dei mesi a ogni
+        // fotogramma) i giorni si spostano dove sarebbero con il margine ridotto: in proporzione
+        // alla distanza dal centro della riga.
+        let narrowing = Self.padding - lerp(Self.padding, 8, p)
         return ZStack(alignment: .top) {
             ForEach(rows.indices, id: \.self) { index in
                 let row = rows[index]
@@ -936,6 +1224,7 @@ private struct MonthMorph: View {
                                        inSelectedWeek: inSelectedWeek, progress: p) {
                             withAnimation(.snappy) { selectedDay = row[column].day }
                         }
+                        .offset(x: narrowing * (CGFloat(2 * column + 1) / 7 - 1))
                     }
                 }
                 .offset(y: CGFloat(index) * (Self.cellHeight + Self.rowSpacing) + shift)
@@ -971,11 +1260,32 @@ private struct MonthMorph: View {
     }
 }
 
+/// Cerchio dietro un giorno del mese: pieno se scelto, il bordo di oggi (che compare riducendo),
+/// lo sfondo dei giorni di vacanza (che scompare riducendo).
+private struct MonthDayMark: View {
+    @Environment(AppModel.self) private var model
+    let day: Date
+    let inMonth: Bool
+    let isSelected: Bool
+    let progress: CGFloat
+
+    var body: some View {
+        if isSelected {
+            Circle().fill(Theme.accent.gradient)
+        } else if inMonth && day.isToday {
+            Circle().strokeBorder(Theme.accent.opacity(0.5), lineWidth: 1)
+                .opacity(progress)
+        } else if inMonth && model.calendarStatus(on: day)?.isHoliday == true {
+            Circle().fill(Theme.separator.opacity(0.45))
+                .opacity(1 - progress)
+        }
+    }
+}
+
 /// Un giorno del mese che si trasforma con la card: da intera il numero con i pallini (in un
 /// cerchio se scelto), da ridotta come nella striscia della settimana. I giorni dei mesi accanto
 /// compaiono solo nella settimana del giorno scelto, mentre la card si riduce.
 private struct MonthMorphCell: View {
-    @Environment(AppModel.self) private var model
     let day: Date
     let inMonth: Bool
     let isSelected: Bool
@@ -987,16 +1297,14 @@ private struct MonthMorphCell: View {
 
     var body: some View {
         let p = progress
-        let holiday = model.calendarStatus(on: day)?.isHoliday == true
         let diameter = lerp(Self.circle, MorphingDayCell.circle, p)
         // Fuori dal mese: invisibile da intera, compare con la riduzione (solo nella settimana scelta).
         let visibility: CGFloat = inMonth ? 1 : (inSelectedWeek ? p : 0)
 
         Button(action: action) {
+            // Come nella settimana: numero e pallini non dipendono dall'avanzamento.
             ZStack {
-                Text(day.it("d"))
-                    .font(.numeral(16, weight: day.isToday || isSelected ? .bold : .regular))
-                    .foregroundStyle(DayDots.numberColor(day: day, isSelected: isSelected, holiday: holiday))
+                DayNumber(day: day, isSelected: isSelected, size: 16, weight: .regular)
                     // Da ridotta come i numeri della settimana (19 punti ridotti al 90%).
                     .scaleEffect(lerp(1, 17.1 / 16, p))
                     .offset(y: lerp(-4, 0, p))
@@ -1009,16 +1317,8 @@ private struct MonthMorphCell: View {
             // Si può toccare tutto il cerchio del giorno, non solo il numero.
             .contentShape(CenteredCircle(diameter: Self.circle))
             .background {
-                if isSelected {
-                    Circle().fill(Theme.accent.gradient).frame(width: diameter, height: diameter)
-                } else if day.isToday && inMonth {
-                    Circle().strokeBorder(Theme.accent.opacity(0.5), lineWidth: 1)
-                        .frame(width: diameter, height: diameter)
-                        .opacity(p)
-                } else if holiday && inMonth {
-                    Circle().fill(Theme.separator.opacity(0.45)).frame(width: diameter, height: diameter)
-                        .opacity(1 - p)
-                }
+                MonthDayMark(day: day, inMonth: inMonth, isSelected: isSelected, progress: p)
+                    .frame(width: diameter, height: diameter)
             }
             .opacity(visibility)
         }

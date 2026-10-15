@@ -40,31 +40,18 @@ struct TimetableTimeline: View {
             }
             ScrollViewReader { proxy in
                 ScrollView {
-                    ZStack(alignment: .topLeading) {
-                        HourGrid(hourHeight: hourHeight, showsNow: days.contains(where: \.isToday))
-                        HStack(spacing: 0) {
-                            ForEach(Array(contents.enumerated()), id: \.element.day) { index, content in
-                                TimelineDayColumn(content: content, dayIndex: index, days: days,
-                                                  isSelected: content.day.isSameDay(as: selectedDay),
-                                                  hourHeight: hourHeight, isEditing: isEditing, actions: actions)
-                                if index < contents.count - 1 {
-                                    Rectangle().fill(Theme.separator.opacity(0.6)).frame(width: 0.5)
-                                }
-                            }
-                        }
-                        .padding(.leading, Self.gutter)
-                        .padding(.trailing, 6)
-                    }
-                    .frame(height: 24 * hourHeight)
-                    .padding(.vertical, Self.verticalPadding)
-                    .padding(.bottom, Platform.isMac ? 0 : 60)
                     #if os(iOS)
-                    .background {
-                        if let headerState { CalendarHeaderPan(state: headerState, swipeEnabled: !isEditing) }
+                    if let headerState {
+                        // Con il giorno accanto, già visibile mentre si scorre di lato (in sola lettura).
+                        SwipeDayPages(state: headerState, day: selectedDay, prepares: !isEditing) { day, isMain in
+                            grid([TimetableDayContent(day: day, model: model)], isEditing: isMain && isEditing)
+                        }
+                        .background { CalendarHeaderPan(state: headerState, swipeEnabled: !isEditing) }
+                    } else {
+                        grid(contents, isEditing: isEditing)
                     }
-                    .modifier(OptionalSwipeNeighbor(state: headerState) { direction in
-                        neighborPage(selectedDay.adding(days: direction).startOfDay)
-                    })
+                    #else
+                    grid(contents, isEditing: isEditing)
                     #endif
                 }
                 #if os(iOS)
@@ -86,21 +73,29 @@ struct TimetableTimeline: View {
         }
     }
 
-    #if os(iOS)
-    /// Il giorno accanto durante lo scorrimento laterale (iPhone): le stesse ore, in sola lettura.
-    private func neighborPage(_ day: Date) -> some View {
-        ZStack(alignment: .topLeading) {
-            HourGrid(hourHeight: hourHeight, showsNow: day.isToday)
-            TimelineDayColumn(content: TimetableDayContent(day: day, model: model), dayIndex: 0, days: [day],
-                              isSelected: true, hourHeight: hourHeight, isEditing: false, actions: actions)
-                .padding(.leading, Self.gutter)
-                .padding(.trailing, 6)
+    /// Le ore con le colonne dei giorni.
+    private func grid(_ contents: [TimetableDayContent], isEditing: Bool) -> some View {
+        let days = contents.map(\.day)
+        return ZStack(alignment: .topLeading) {
+            HourGrid(hourHeight: hourHeight, showsNow: days.contains(where: \.isToday))
+            HStack(spacing: 0) {
+                ForEach(Array(contents.enumerated()), id: \.element.day) { index, content in
+                    TimelineDayColumn(content: content, dayIndex: index, days: days,
+                                      isSelected: content.day.isSameDay(as: selectedDay),
+                                      hourHeight: hourHeight, isEditing: isEditing, actions: actions)
+                        .equatable()
+                    if index < contents.count - 1 {
+                        Rectangle().fill(Theme.separator.opacity(0.6)).frame(width: 0.5)
+                    }
+                }
+            }
+            .padding(.leading, Self.gutter)
+            .padding(.trailing, 6)
         }
         .frame(height: 24 * hourHeight)
         .padding(.vertical, Self.verticalPadding)
-        .padding(.bottom, 60)
+        .padding(.bottom, Platform.isMac ? 0 : 60)
     }
-    #endif
 
     private func initialHour(_ contents: [TimetableDayContent]) -> Int {
         let starts = contents.compactMap { $0.layout.span?.start }
@@ -280,6 +275,14 @@ private struct TimelineDayColumn: View {
                 .allowsHitTesting(false)
             }
         }
+    }
+}
+
+/// Come `TimetableDayList`: le azioni non si confrontano.
+extension TimelineDayColumn: Equatable {
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.content == rhs.content && lhs.dayIndex == rhs.dayIndex && lhs.days == rhs.days
+            && lhs.isSelected == rhs.isSelected && lhs.hourHeight == rhs.hourHeight && lhs.isEditing == rhs.isEditing
     }
 }
 
@@ -571,16 +574,6 @@ private struct TimelineSegment: View {
 
 #if os(iOS)
 import UIKit
-
-/// `SwipeNeighbor` solo se c'è un'intestazione mobile.
-private struct OptionalSwipeNeighbor<Neighbor: View>: ViewModifier {
-    let state: WeekHeaderScroll?
-    @ViewBuilder let neighbor: (Int) -> Neighbor
-
-    func body(content: Content) -> some View {
-        if let state { content.modifier(SwipeNeighbor(state: state, neighbor: neighbor)) } else { content }
-    }
-}
 
 /// `WeekHeaderScroll.Shift` solo se c'è un'intestazione mobile.
 private struct OptionalHeaderShift: ViewModifier {

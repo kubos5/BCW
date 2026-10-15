@@ -245,7 +245,7 @@ struct EntryBadges: Equatable {
 }
 
 /// Tutto ciò che serve per disegnare un giorno dell'orario, calcolato una volta per aggiornamento.
-struct TimetableDayContent {
+struct TimetableDayContent: Equatable {
     let day: Date
     let entries: [TimetableEntry]
     let layout: TimetableLayout
@@ -291,6 +291,13 @@ struct TimetableDayContent {
             )
         }
         self.badges = badges
+    }
+
+    /// `layout` non si confronta: deriva dagli eventi.
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.day == rhs.day && lhs.entries == rhs.entries && lhs.isDraft == rhs.isDraft
+            && lhs.registerTests == rhs.registerTests && lhs.hiddenTests == rhs.hiddenTests
+            && lhs.unmatchedTests == rhs.unmatchedTests && lhs.badges == rhs.badges
     }
 
     /// Collega le verifiche agli eventi della stessa materia: a quello in corso all'ora della

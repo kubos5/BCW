@@ -17,9 +17,12 @@ struct DashboardView: View {
     @State private var barWidth: CGFloat = 0
     /// "Domani" nella barra (vedi `onChange` del giorno scelto).
     @State private var showsTomorrow = false
+    #if os(macOS)
     /// Identità dei giorni successivi: cambia (con transizione) solo quando cambia il giorno
-    /// scelto e con esso il contenuto della sezione espansa (vedi `select`).
+    /// scelto e con esso il contenuto della sezione espansa (vedi `select`). Su iPhone è il giorno
+    /// della pagina (`upcoming(after:)`).
     @State private var upcomingGeneration = 0
+    #endif
     /// Altezza del giorno scelto: i giorni successivi si spostano di altrettanto nella
     /// transizione, così si muovono come il contenuto principale (vedi `upcomingTransition`).
     /// Non è uno stato osservato: aprendo una sezione l'altezza cambia a ogni fotogramma, e
@@ -122,20 +125,20 @@ struct DashboardView: View {
 
     /// Cambia il giorno scelto. Nella stessa transazione può cambiare anche l'identità dei
     /// giorni successivi, così la sezione vecchia esce con il contenuto vecchio e quella nuova
-    /// entra insieme al giorno: su iOS sempre, su macOS solo se la sezione è espansa e il suo
-    /// contenuto cambia davvero.
+    /// entra insieme al giorno: su iOS sempre (l'identità è il giorno), su macOS solo se la sezione
+    /// è espansa e il suo contenuto cambia davvero.
     private func select(_ day: Date, animated: Bool = true) {
         guard !day.isSameDay(as: selectedDay) else { return }
         #if os(macOS)
         let replacesUpcoming = !model.preferences.isCollapsed(.upcoming)
             && upcomingKey(after: selectedDay) != upcomingKey(after: day)
-        #else
-        let replacesUpcoming = true
-        #endif
         let update = {
             selectedDay = day
             if replacesUpcoming { upcomingGeneration += 1 }
         }
+        #else
+        let update = { selectedDay = day }
+        #endif
         if animated { withAnimation(.snappy, update) } else { update() }
     }
 
@@ -177,23 +180,26 @@ struct DashboardView: View {
                         StatusBanner(message: error, symbol: model.isOffline ? "wifi.slash" : "exclamationmark.triangle")
                     }
 
-                    DayDetail(day: selectedDay)
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { if $0 > 0 { dayDetailHeight.value = $0 } }
-                        .id(selectedDay)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    // Con il giorno accanto, già visibile mentre si scorre di lato.
+                    SwipeDayPages(state: headerState, day: selectedDay) { day, isMain in
+                        VStack(alignment: .leading, spacing: 22) {
+                            DayDetail(day: day)
+                                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                                    if isMain && $0 > 0 { dayDetailHeight.value = $0 }
+                                }
+                                .id(day)
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
 
-                    if mode == .list {
-                        upcoming
+                            if mode == .list {
+                                upcoming(after: day)
+                            }
+                        }
                     }
                 }
                 .pagePadding()
                 .padding(.bottom, 24)
                 .animation(.snappy, value: selectedDay)
                 .background { CalendarHeaderPan(state: headerState) }
-                // Il giorno accanto, già visibile mentre si scorre di lato.
-                .modifier(SwipeNeighbor(state: headerState) { direction in
-                    neighborPage(selectedDay.adding(days: direction).startOfDay)
-                })
             }
             // Il giorno accanto sta fuori dai bordi dello scorrimento finché non entra.
             .scrollClipDisabled()
@@ -237,19 +243,23 @@ struct DashboardView: View {
     }
 
     #if os(iOS)
-    /// Il giorno accanto durante lo scorrimento laterale: come la pagina, senza avvisi.
-    private func neighborPage(_ day: Date) -> some View {
-        VStack(alignment: .leading, spacing: 22) {
-            DayDetail(day: day)
-            if mode == .list && model.preferences.showUpcomingDays {
-                UpcomingDays(after: day) { _ in }
+    /// I giorni successivi di una pagina: cambiano (con la transizione) insieme al suo giorno. Su
+    /// iPhone l'identità è il giorno stesso e non `upcomingGeneration`: così, quando le pagine si
+    /// scambiano di ruolo scorrendo di lato, non vengono ricostruiti.
+    @ViewBuilder
+    private func upcoming(after day: Date) -> some View {
+        if model.preferences.showUpcomingDays {
+            UpcomingDays(after: day) { day in
+                select(day)
             }
+            .equatable()
+            .id(day)
+            .transition(upcomingTransition)
         }
-        .pagePadding()
-        .padding(.bottom, 24)
     }
     #endif
 
+    #if os(macOS)
     /// I giorni successivi cambiano insieme al giorno scelto, con la stessa transizione,
     /// ma solo se il loro contenuto cambia davvero: da compressi o con gli stessi giorni ed
     /// eventi restano fermi. L'identità non dipende dallo stato compresso, altrimenti
@@ -264,6 +274,7 @@ struct DashboardView: View {
             .transition(upcomingTransition)
         }
     }
+    #endif
 
     /// Il giorno scelto usa `.move(edge:)`, che sposta una vista di tutta la sua altezza: con la
     /// stessa transizione i giorni successivi si sposterebbero troppo da aperti (settimane di card)
@@ -507,9 +518,18 @@ private struct UpcomingDays: View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(days, id: \.0) { day, events in
                 UpcomingDayCard(day: day, events: events) { onSelect(day) }
+                    .equatable()
             }
         }
     }
+}
+
+/// Si ricalcolano solo se cambiano i giorni (`.equatable()`): i dati letti dal modello li
+/// aggiornano comunque. La chiusura cambia a ogni aggiornamento della Dashboard ma fa sempre la
+/// stessa cosa, e confrontandola la sezione (con tutte le righe) si ricalcolava a ogni fotogramma
+/// in cui cambiava qualcosa della pagina, es. scorrendo di lato.
+extension UpcomingDays: Equatable {
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.after == rhs.after }
 }
 
 /// Un giorno in "Nei prossimi giorni". Toccando l'intestazione si comprime (come le altre
@@ -553,6 +573,7 @@ private struct UpcomingDayCard: View {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(events) { event in
                         AgendaEventRow(event: event, onPlainTap: onSelect)
+                            .equatable()
                         if event.id != lastID { Divider().overlay(Theme.separator) }
                     }
                 }
@@ -565,4 +586,9 @@ private struct UpcomingDayCard: View {
         .onTapGesture(perform: onSelect)
         .accessibilityAction(named: "Vai a \(day.relativeDayName)", onSelect)
     }
+}
+
+/// Come `UpcomingDays`: si ricalcola solo se cambiano il giorno o i suoi elementi.
+extension UpcomingDayCard: Equatable {
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.day == rhs.day && lhs.events == rhs.events }
 }

@@ -123,7 +123,7 @@ struct RootView: View {
 #if os(iOS)
 struct MainTabView: View {
     @Environment(AppModel.self) private var model
-    @State private var selection: AppTab = .dashboard
+    @State private var selection: AppTab = MainTabView.initialTab
     @State private var searchQuery = ""
     /// Incrementato toccando la scheda Dashboard quando è già quella aperta.
     @State private var dashboardReselection = 0
@@ -131,6 +131,14 @@ struct MainTabView: View {
     @State private var switchingAccount = false
 
     enum AppTab: Hashable { case dashboard, timetable, grades, you, search }
+
+    private static var initialTab: AppTab {
+        #if DEBUG
+        // Per le prove di sviluppo: `-BCWTab timetable` apre l'Orario.
+        if UserDefaults.standard.string(forKey: "BCWTab") == "timetable" { return .timetable }
+        #endif
+        return .dashboard
+    }
 
     var body: some View {
         TabView(selection: tabSelection) {

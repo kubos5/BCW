@@ -145,6 +145,13 @@ struct TimetableDayList: View {
     }
 }
 
+/// Per `.equatable()`: le azioni sono chiusure che cambiano a ogni aggiornamento dell'orario ma
+/// fanno sempre la stessa cosa. Confrontandole, ogni cambiamento della pagina (es. il giorno
+/// accanto scorrendo di lato) ricalcolava tutte le righe di tutti i giorni mostrati.
+extension TimetableDayList: Equatable {
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.content == rhs.content }
+}
+
 /// Uno o più eventi uguali accostati: una card unica, divisa in righe.
 struct EntryBlockCard: View {
     @Environment(AppModel.self) private var model

@@ -191,7 +191,7 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   contenuto) un pan verticale, che parte sempre da intero (l'area è ferma, `scrollDisabled`; in Dashboard
   `expandedScrolls` lascia allo scorrimento i gesti verso il basso, per aggiornare), da ridotto solo verso il basso con
   l'area in cima e sempre durante uno scatto; e uno orizzontale per il giorno prima/dopo (`onSwipeDay`, solo da
-  fermo): il giorno accanto (`SwipeNeighbor`, sovrapposto al contenuto dello scorrimento, che ha `scrollClipDisabled`)
+  fermo): il giorno accanto (`SwipeDayPages`, nel contenuto dello scorrimento, che ha `scrollClipDisabled`; le pagine hanno un'identità propria e un giorno fisso, i giorni accanto si costruiscono in anticipo da fermi e al rilascio le pagine si scambiano di ruolo senza essere ricostruite: costruire una pagina della Dashboard costa ~80 ms)
   segue il dito già durante il gesto. Al rilascio il giorno cambia subito (vibrazione e dissolvenza nel calendario:
   `CalendarHeader` riattiva l'animazione con `.transaction(value:)`) e i due contenuti si scambiano di ruolo nella stessa
   posizione, senza animazioni (il nuovo diventa quello principale, il vecchio quello accanto); poi scorrono fino al
@@ -277,6 +277,11 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Misure che cambiano a ogni fotogramma e servono solo in certi momenti (es. `dayDetailHeight`) vanno in
   `UnobservedValue`, non in uno `@State` osservato: altrimenti l'intera pagina si ricalcola a ogni fotogramma.
 - `.card()` mette l'ombra sulla sola forma di sfondo: un'ombra sull'intera vista va ricalcolata dal contenuto.
+- Su iPhone `-BCWSwipeBench N` / `-BCWHeaderBench N` (solo DEBUG) simulano scorrimenti laterali o riduzioni del calendario
+  e stampano i fotogrammi lenti (`BCW-BENCH`); `-BCWTab timetable` apre l'Orario. Le viste con chiusure tra i parametri
+  (righe dell'agenda, giorni successivi, giorni dell'orario) sono `Equatable` e usate con `.equatable()`: altrimenti ogni
+  aggiornamento della pagina le ricalcolava tutte. Nel mese che si riduce i giorni si spostano con `offset` invece di
+  cambiare il margine (che faceva rimisurare tutte le pagine dei mesi a ogni fotogramma).
 - Per misurare: build Release del Mac con `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG`, un aggancio temporaneo che ripete
   l'interazione e `sample <pid> 8`, poi sommare i campioni per funzione dell'app.
 

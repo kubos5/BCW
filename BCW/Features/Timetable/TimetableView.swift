@@ -284,19 +284,16 @@ struct TimetableView: View {
             switch mode {
             case .list, .calendar:
                 ScrollView {
-                    TimetableDayList(content: TimetableDayContent(day: selectedDay, model: model), actions: actions)
-                        .id(selectedDay)
-                        .transition(.opacity)
-                        .pagePadding()
-                        .padding(.bottom, Theme.bottomInset)
-                        .background { CalendarHeaderPan(state: weekScroll) }
-                        // Il giorno accanto, già visibile mentre si scorre di lato.
-                        .modifier(SwipeNeighbor(state: weekScroll) { direction in
-                            TimetableDayList(content: TimetableDayContent(day: selectedDay.adding(days: direction).startOfDay, model: model),
-                                             actions: actions)
-                                .pagePadding()
-                                .padding(.bottom, Theme.bottomInset)
-                        })
+                    // Con il giorno accanto, già visibile mentre si scorre di lato.
+                    SwipeDayPages(state: weekScroll, day: selectedDay) { day, _ in
+                        TimetableDayList(content: TimetableDayContent(day: day, model: model), actions: actions)
+                            .equatable()
+                            .id(day)
+                            .transition(.opacity)
+                            .pagePadding()
+                            .padding(.bottom, Theme.bottomInset)
+                    }
+                    .background { CalendarHeaderPan(state: weekScroll) }
                 }
                 .scrollClipDisabled()
                 .scrollDismissesKeyboard(.immediately)
