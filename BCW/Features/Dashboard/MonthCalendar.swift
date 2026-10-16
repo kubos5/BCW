@@ -10,7 +10,7 @@ struct MonthCalendar: View {
     @State private var rowCount: Int
 
     private static let cellHeight: CGFloat = 44
-    private static let rowSpacing: CGFloat = 4
+    private static let rowSpacing: CGFloat = 2
     private static let weekdaySymbols = ["L", "M", "M", "G", "V", "S", "D"]
 
     /// Mesi disponibili: due anni prima e dopo il mese corrente.
@@ -55,40 +55,25 @@ struct MonthCalendar: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            VStack(spacing: 12) {
-                HStack {
-                    Text(currentMonth.monthYear)
-                        .font(.headline)
-                        .foregroundStyle(Theme.ink)
-                        .contentTransition(.numericText())
-                        .animation(.snappy, value: visibleMonth)
-                    Spacer()
-                    HStack(spacing: 4) {
-                        Button { shift(-1) } label: { Image(systemName: "chevron.left") }
-                        Button { shift(1) } label: { Image(systemName: "chevron.right") }
-                    }
-                    .glassButton()
-                    .buttonBorderShape(.circle)
-                    .controlSize(.small)
-                }
+        VStack(spacing: 0) {
+            CalendarCardHead(title: currentMonth.monthYear, previousLabel: "Mese precedente",
+                             nextLabel: "Mese successivo") { shift(-1) } next: { shift(1) }
+                .animation(Motion.spatial, value: visibleMonth)
 
-                HStack(spacing: 2) {
-                    ForEach(Self.weekdaySymbols.indices, id: \.self) { index in
-                        Text(Self.weekdaySymbols[index])
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(Theme.secondaryInk)
-                            .frame(maxWidth: .infinity)
-                    }
+            HStack(spacing: 0) {
+                ForEach(Self.weekdaySymbols.indices, id: \.self) { index in
+                    Text(Self.weekdaySymbols[index])
+                        .font(.m3(12, weight: 600))
+                        .foregroundStyle(Theme.secondaryInk)
+                        .frame(maxWidth: .infinity)
                 }
             }
-            .padding(.horizontal, 14)
+            .frame(height: 20)
 
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 0) {
                     ForEach(Self.months, id: \.self) { month in
                         monthGrid(month)
-                            .padding(.horizontal, 14)
                             .containerRelativeFrame(.horizontal)
                     }
                 }
@@ -100,18 +85,20 @@ struct MonthCalendar: View {
             .frame(height: gridHeight, alignment: .top)
 
             legend
-                .padding(.horizontal, 14)
+                .padding(.top, 8)
         }
-        .padding(.vertical, 14)
-        .card(padding: 0)
+        .padding(.horizontal, 8)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+        .background(Theme.surfaceContainer, in: .rect(cornerRadius: Theme.radii.xl, style: .continuous))
         .onChange(of: visibleMonth) { _, month in
             let count = Self.rows(of: month ?? currentMonth).count
-            if count != rowCount { withAnimation(.snappy) { rowCount = count } }
+            if count != rowCount { withAnimation(Motion.spatial) { rowCount = count } }
         }
         .onChange(of: selectedDay) { _, day in
             let month = Self.month(containing: day)
             if !currentMonth.isSameDay(as: month) {
-                withAnimation(.snappy) { visibleMonth = month }
+                withAnimation(Motion.spatial) { visibleMonth = month }
             }
         }
         .sensoryFeedback(.selection, trigger: selectedDay)
@@ -124,7 +111,7 @@ struct MonthCalendar: View {
                     ForEach(row.indices, id: \.self) { index in
                         if let day = row[index] {
                             MonthDayCell(day: day, isSelected: day.isSameDay(as: selectedDay)) {
-                                withAnimation(.snappy) { selectedDay = day }
+                                withAnimation(Motion.spatial) { selectedDay = day }
                             }
                         } else {
                             Color.clear.frame(maxWidth: .infinity).frame(height: Self.cellHeight)
@@ -139,24 +126,24 @@ struct MonthCalendar: View {
     private var legend: some View {
         HStack(spacing: 14) {
             legendItem(Theme.neutral, "Compiti")
-            legendItem(Theme.accent, "Verifiche")
+            legendItem(Theme.primary, "Verifiche")
             legendItem(Theme.fair, "Eventi")
             legendItem(Theme.poor, "Assenze")
         }
-        .font(.caption2)
+        .font(.m3(12))
         .foregroundStyle(Theme.secondaryInk)
     }
 
     private func legendItem(_ color: Color, _ title: String) -> some View {
-        HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 6, height: 6)
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 7, height: 7)
             Text(title)
         }
     }
 
     private func shift(_ months: Int) {
         guard let target = CVDate.calendar.date(byAdding: .month, value: months, to: currentMonth) else { return }
-        withAnimation(.snappy) { visibleMonth = Self.month(containing: target) }
+        withAnimation(Motion.spatial) { visibleMonth = Self.month(containing: target) }
     }
 }
 
@@ -174,7 +161,7 @@ private struct MonthDayCell: View {
         Button(action: action) {
             VStack(spacing: 3) {
                 Text(day.it("d"))
-                    .font(.numeral(16, weight: day.isToday || isSelected ? .bold : .regular))
+                    .font(.numeral(15, weight: day.isToday || isSelected ? 700 : 550))
                     .foregroundStyle(numberColor(holiday: holiday))
                 HStack(spacing: 2) {
                     ForEach(colors.indices, id: \.self) { i in
@@ -186,12 +173,14 @@ private struct MonthDayCell: View {
             .frame(maxWidth: .infinity)
             .frame(height: 44)
             // Si può fare clic su tutto il cerchio del giorno, non solo sul numero.
-            .contentShape(CenteredCircle(diameter: 42))
+            .contentShape(CenteredCircle(diameter: 40))
             .background {
                 if isSelected {
-                    Circle().fill(Theme.accent.gradient).frame(width: 42, height: 42)
+                    Circle().fill(Theme.primary).frame(width: 40, height: 40)
+                } else if day.isToday {
+                    Circle().strokeBorder(Theme.primary, lineWidth: 1.5).frame(width: 40, height: 40)
                 } else if holiday {
-                    Circle().fill(Theme.separator.opacity(0.45)).frame(width: 42, height: 42)
+                    Circle().fill(Theme.secondaryContainer.opacity(0.7)).frame(width: 40, height: 40)
                 }
             }
         }
@@ -200,8 +189,8 @@ private struct MonthDayCell: View {
     }
 
     private func numberColor(holiday: Bool) -> Color {
-        if isSelected { return .white }
-        if day.isToday { return Theme.accent }
+        if isSelected { return Theme.onPrimary }
+        if day.isToday { return Theme.primary }
         if day.isWeekend || holiday { return Theme.secondaryInk }
         return Theme.ink
     }
@@ -209,7 +198,7 @@ private struct MonthDayCell: View {
     private func dotColors(events: [AgendaEvent]) -> [Color] {
         var colors: [Color] = []
         if events.contains(where: { $0.kind == .homework }) { colors.append(Theme.neutral) }
-        if events.contains(where: { $0.kind == .test }) { colors.append(isSelected ? Color.white : Theme.accent) }
+        if events.contains(where: { $0.kind == .test }) { colors.append(isSelected ? Theme.onPrimary : Theme.primary) }
         if events.contains(where: { $0.kind == .event }) { colors.append(Theme.fair) }
         if !model.absences(on: day).isEmpty { colors.append(Theme.poor) }
         return colors

@@ -78,10 +78,8 @@ struct EntryFill: ViewModifier {
 
     func body(content: Content) -> some View {
         content.background {
-            ZStack {
-                Theme.surface
-                tint.opacity((colorScheme == .dark ? 0.3 : 0.2) * (isDraft ? 0.5 : 1))
-            }
+            // Come `.tt-block` della versione web: la tinta al 18% (9% in bozza) sul contenitore basso.
+            tint.mix(Theme.surfaceContainerLow, isDraft ? 0.09 : 0.18)
         }
     }
 }

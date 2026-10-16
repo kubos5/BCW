@@ -61,32 +61,21 @@ struct GradeBookView: View {
 
     var body: some View {
         content
-            .screenTitle("Voti")
-            .inlineLargeTitleDisplay()
             .refreshable {
                 if allowsRefresh { await model.loadGrades() }
             }
-            .toolbar {
-                ToolbarItem(placement: .trailingBar) {
-                    Menu {
-                        Picker("Periodo", selection: $period) {
-                            Text("Tutto l'anno").tag(Int?.none)
-                            ForEach(book.activePeriods) { Text($0.name).tag(Optional($0.position)) }
+            .pageChrome("Voti") {
+                BarMenu(icon: period != nil || subjectFilter != nil ? "filterFill" : "filter", label: "Filtri") {
+                    MenuPicker(title: "Periodo", selection: $period,
+                               options: [(Int?.none, "Tutto l'anno", nil)] + book.activePeriods.map { (Optional($0.position), $0.name, nil) })
+                    MenuPicker(title: "Materia", selection: $subjectFilter,
+                               options: [(Int?.none, "Tutte le materie", nil)] + allSubjects.map { (Optional($0.id), $0.name, nil) })
+                    if period != nil || subjectFilter != nil {
+                        MenuDivider()
+                        MenuItem("Rimuovi filtri", icon: "xCircle", role: .destructive) {
+                            period = nil
+                            subjectFilter = nil
                         }
-                        Picker("Materia", selection: $subjectFilter) {
-                            Text("Tutte le materie").tag(Int?.none)
-                            ForEach(allSubjects, id: \.id) { Text($0.name).tag(Optional($0.id)) }
-                        }
-                        .pickerStyle(.menu)
-                        if period != nil || subjectFilter != nil {
-                            Button("Rimuovi filtri", systemImage: "xmark.circle", role: .destructive) {
-                                period = nil
-                                subjectFilter = nil
-                            }
-                        }
-                    } label: {
-                        Image(systemName: period != nil || subjectFilter != nil
-                              ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                     }
                 }
             }
@@ -95,22 +84,18 @@ struct GradeBookView: View {
     @ViewBuilder
     private var banner: some View {
         if allowsRefresh, let error = model.lastError {
-            StatusBanner(message: error, symbol: model.isOffline ? "wifi.slash" : "exclamationmark.triangle")
+            StatusBanner(message: error, icon: model.isOffline ? "wifiOff" : "alertTriangle")
         }
     }
 
     private var emptyBook: some View {
-        ContentUnavailableView("Nessun voto", systemImage: "graduationcap",
-                               description: Text("I voti appariranno qui non appena verranno registrati."))
-            .frame(maxWidth: .infinity)
-            .padding(.top, 60)
+        EmptyState("Nessun voto", icon: "graduationCap",
+                   description: "I voti appariranno qui non appena verranno registrati.")
     }
 
     private var sectionPicker: some View {
-        Picker("Sezione", selection: $section) {
-            ForEach(Section.allCases) { Text($0.title).tag($0) }
-        }
-        .pickerStyle(.segmented)
+        SegmentedButtons(selection: $section, options: Section.allCases.map { ($0, $0.title, nil) },
+                         compact: Platform.isMac)
     }
 
     @ViewBuilder
@@ -124,6 +109,7 @@ struct GradeBookView: View {
                 }
                 .pagePadding()
             }
+            .tracksPageScroll()
             .themedBackground()
         } else {
             // Medie e andamento restano a sinistra; a destra l'elenco, a griglia se c'è spazio.
@@ -133,21 +119,21 @@ struct GradeBookView: View {
             } main: {
                 banner
                 sectionPicker
-                    .labelsHidden()
-                    .fixedSize()
                 filters
                 switch section {
                 case .recent: recentList
                 case .subjects: subjectList
                 }
             }
-            .animation(.snappy, value: period)
-            .animation(.snappy, value: subjectFilter)
-            .animation(.snappy, value: section)
+            .animation(Motion.spatial, value: period)
+            .animation(Motion.spatial, value: subjectFilter)
+            .animation(Motion.spatial, value: section)
         }
         #else
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                PageLargeTitle()
+                    .padding(.bottom, -8)
                 banner
 
                 if book.grades.isEmpty {
@@ -167,11 +153,13 @@ struct GradeBookView: View {
                 }
             }
             .pagePadding()
-            .padding(.bottom, 24)
-            .animation(.snappy, value: period)
-            .animation(.snappy, value: subjectFilter)
-            .animation(.snappy, value: section)
+            .padding(.bottom, 32)
+            .animation(Motion.spatial, value: period)
+            .animation(Motion.spatial, value: subjectFilter)
+            .animation(Motion.spatial, value: section)
         }
+        .tracksPageScroll()
+        .scrollsToTopOnReselect()
         .themedBackground()
         #endif
     }
@@ -187,26 +175,27 @@ struct GradeBookView: View {
                 }
             }
             ChipDivider()
-            Menu {
-                Button("Tutte le materie") { subjectFilter = nil }
+            AppMenu(alignment: .leading) {
+                MenuItem("Tutte le materie", checked: subjectFilter == nil) { subjectFilter = nil }
                 ForEach(allSubjects, id: \.id) { s in
-                    Button(s.name) { subjectFilter = s.id }
+                    MenuItem(s.name, checked: subjectFilter == s.id) { subjectFilter = s.id }
                 }
             } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "books.vertical").imageScale(.small)
+                HStack(spacing: 8) {
+                    Icon("library", size: 18)
                     Text(allSubjects.first { $0.id == subjectFilter }?.name ?? "Materia")
                         .lineLimit(1)
-                    Image(systemName: "chevron.down").imageScale(.small)
+                    Icon("chevronDown", size: 18)
                 }
-                .font(.subheadline.weight(subjectFilter == nil ? .regular : .semibold))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .foregroundStyle(subjectFilter == nil ? Theme.ink : .white)
-                .background(subjectFilter == nil ? AnyShapeStyle(Theme.surface) : AnyShapeStyle(Theme.accent), in: .capsule)
-                .overlay { Capsule().strokeBorder(Theme.separator, lineWidth: subjectFilter == nil ? 0.5 : 0) }
+                .font(.m3(14, weight: 550))
+                .padding(.leading, 8)
+                .padding(.trailing, 8)
+                .frame(height: 32)
             }
-            .plainMenuOnMac()
+            .buttonStyle(ChipStyle(selected: subjectFilter != nil))
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
+            .fixedSize()
         }
     }
 
@@ -214,14 +203,12 @@ struct GradeBookView: View {
     private var recentList: some View {
         let filteredGrades = filteredGrades
         if filteredGrades.isEmpty {
-            ContentUnavailableView("Nessun voto", systemImage: "line.3.horizontal.decrease.circle",
-                                   description: Text("Nessun voto corrisponde ai filtri selezionati."))
-                .frame(maxWidth: .infinity)
+            EmptyState("Nessun voto", icon: "filter", description: "Nessun voto corrisponde ai filtri selezionati.")
         } else {
-            CardGrid(minWidth: 340) {
+            CardGrid(minWidth: 340, spacing: 12) {
                 ForEach(filteredGrades) { grade in
                     GradeCard(grade: grade, book: book, isExpanded: expanded.contains(grade.id)) {
-                        withAnimation(.snappy) {
+                        withAnimation(Motion.spatial) {
                             if expanded.contains(grade.id) { expanded.remove(grade.id) } else { expanded.insert(grade.id) }
                         }
                     }
@@ -231,12 +218,12 @@ struct GradeBookView: View {
     }
 
     private var subjectList: some View {
-        CardGrid(minWidth: 300) {
+        CardGrid(minWidth: 300, spacing: 12) {
             ForEach(book.subjects(in: period).filter { subjectFilter == nil || $0.subjectId == subjectFilter }) { summary in
                 NavigationLink(value: summary) {
                     SubjectRow(summary: summary, target: model.preferences.targetAverage)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
             }
         }
     }
@@ -249,49 +236,64 @@ private struct AverageHero: View {
     @Binding var selectedPeriod: Int?
 
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 16) {
             HStack(spacing: 20) {
-                AverageRing(value: book.average(period: selectedPeriod), size: 118, lineWidth: 11)
-                VStack(alignment: .leading, spacing: 6) {
+                AverageRing(value: book.average(period: selectedPeriod), size: 118, lineWidth: 9)
+                VStack(alignment: .leading, spacing: 2) {
                     Eyebrow(text: selectedPeriod == nil ? "Media generale" : "Media del periodo")
                     Text(selectedPeriod.flatMap { p in book.activePeriods.first { $0.position == p }?.name } ?? "Tutto l'anno")
-                        .font(.title3.weight(.semibold))
+                        .font(.m3(24, weight: 500, rounded: true))
                         .foregroundStyle(Theme.ink)
+                        .contentTransition(.opacity)
                     let count = book.grades(in: selectedPeriod).filter(\.countsTowardAverage).count
                     Text("\(count) voti che fanno media")
-                        .font(.footnote)
+                        .font(.m3(14))
                         .foregroundStyle(Theme.secondaryInk)
                     let insufficient = book.subjects(in: selectedPeriod).filter { ($0.average ?? 10) < 6 }.count
-                    if insufficient > 0 {
-                        Label(insufficient == 1 ? "1 insufficienza" : "\(insufficient) insufficienze", systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(Theme.poor)
-                    } else {
-                        Label("Nessuna insufficienza", systemImage: "checkmark.seal.fill")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(Theme.good)
-                    }
+                    StatusLine(text: insufficient == 0 ? "Nessuna insufficienza"
+                               : (insufficient == 1 ? "1 insufficienza" : "\(insufficient) insufficienze"),
+                               icon: insufficient == 0 ? "checkSealFill" : "alertTriangleFill",
+                               color: insufficient == 0 ? Theme.good : Theme.poor)
+                        .padding(.top, 6)
                 }
                 Spacer(minLength: 0)
             }
 
-            if book.activePeriods.count > 0 {
-                HStack(spacing: 10) {
+            if !book.activePeriods.isEmpty {
+                HStack(spacing: 8) {
                     ForEach(book.activePeriods) { period in
                         Button {
-                            withAnimation(.snappy) {
+                            Haptics.selection()
+                            withAnimation(Motion.spatial) {
                                 selectedPeriod = selectedPeriod == period.position ? nil : period.position
                             }
                         } label: {
                             PeriodTile(name: period.name, average: book.average(period: period.position),
                                        isSelected: selectedPeriod == period.position)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PeriodTileStyle(selected: selectedPeriod == period.position))
                     }
                 }
             }
         }
         .card(padding: 18)
+    }
+}
+
+/// Riga di stato con icona (es. "Nessuna insufficienza").
+struct StatusLine: View {
+    let text: String
+    let icon: String
+    var color: Color = Theme.primary
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Icon(icon, size: 20)
+            Text(text)
+                .font(.m3(14, weight: 600))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(color)
     }
 }
 
@@ -303,26 +305,35 @@ private struct PeriodTile: View {
     var body: some View {
         HStack(spacing: 10) {
             AverageRing(value: average, size: 30, lineWidth: 4, showsLabel: false)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text(name)
-                    .font(.caption)
-                    .foregroundStyle(Theme.secondaryInk)
+                    .font(.m3(12))
+                    .foregroundStyle(isSelected ? Theme.onSecondaryContainer : Theme.secondaryInk)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Text(GradeFormat.average(average))
-                    .font(.numeral(19, weight: .bold))
-                    .foregroundStyle(Theme.ink)
+                    .font(.numeral(18))
+                    .foregroundStyle(isSelected ? Theme.onSecondaryContainer : Theme.ink)
             }
             Spacer(minLength: 0)
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity)
-        .background(isSelected ? Theme.accentSoft : Theme.background.opacity(0.6),
-                    in: .rect(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(isSelected ? Theme.accent : Theme.separator, lineWidth: isSelected ? 1.5 : 0.5)
-        }
+    }
+}
+
+private struct PeriodTileStyle: ButtonStyle {
+    let selected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let radius = configuration.isPressed ? Theme.radii.s : (selected ? Theme.radii.xl : Theme.radii.l)
+        configuration.label
+            .background(selected ? Theme.secondaryContainer : Theme.surfaceContainerHigh,
+                        in: .rect(cornerRadius: radius, style: .continuous))
+            .contentShape(.rect(cornerRadius: radius, style: .continuous))
+            .animation(Motion.spatialFast, value: configuration.isPressed)
+            .animation(Motion.spatial, value: selected)
     }
 }
 
@@ -336,43 +347,46 @@ private struct TrendCard: View {
     var body: some View {
         let points = book.runningAverage(for: subjectId, period: period)
         if points.count >= 2 {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Eyebrow(text: "Andamento della media")
                     Spacer()
                     if let first = points.first?.value, let last = points.last?.value {
                         let delta = last - first
-                        Label(GradeFormat.average(abs(delta)), systemImage: delta >= 0 ? "arrow.up.right" : "arrow.down.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(delta >= 0 ? Theme.good : Theme.poor)
+                        HStack(spacing: 2) {
+                            Icon(delta >= 0 ? "arrowUpRight" : "arrowDownRight", size: 18)
+                            Text(GradeFormat.average(abs(delta)))
+                                .font(.numeral(15, weight: 700))
+                        }
+                        .foregroundStyle(delta >= 0 ? Theme.good : Theme.poor)
                     }
                 }
                 Chart {
                     RuleMark(y: .value("Sufficienza", 6))
-                        .foregroundStyle(Theme.secondaryInk.opacity(0.4))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                        .foregroundStyle(Theme.poor.opacity(0.7))
+                        .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [3, 4]))
                     ForEach(points.indices, id: \.self) { i in
                         AreaMark(x: .value("Data", points[i].date), yStart: .value("Base", 3),
                                  yEnd: .value("Media", points[i].value))
-                            .foregroundStyle(LinearGradient(colors: [Theme.accent.opacity(0.25), Theme.accent.opacity(0)],
+                            .foregroundStyle(LinearGradient(colors: [Theme.primary.opacity(0.25), Theme.primary.opacity(0)],
                                                             startPoint: .top, endPoint: .bottom))
                             .interpolationMethod(.monotone)
                         LineMark(x: .value("Data", points[i].date), y: .value("Media", points[i].value))
-                            .foregroundStyle(Theme.accent)
-                            .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                            .foregroundStyle(Theme.primary)
+                            .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                             .interpolationMethod(.monotone)
                     }
                 }
                 .chartYScale(domain: 3...10)
                 .chartYAxis {
-                    AxisMarks(values: [4, 6, 8, 10]) { _ in
-                        AxisGridLine().foregroundStyle(Theme.separator)
-                        AxisValueLabel().font(.caption2)
+                    AxisMarks(position: .trailing, values: [4, 6, 8, 10]) { _ in
+                        AxisGridLine().foregroundStyle(Theme.outlineVariant)
+                        AxisValueLabel().font(.m3(11)).foregroundStyle(Theme.secondaryInk)
                     }
                 }
                 .chartXAxis {
                     AxisMarks(values: .stride(by: .month)) { _ in
-                        AxisValueLabel(format: .dateTime.month(.abbreviated)).font(.caption2)
+                        AxisValueLabel(format: .dateTime.month(.abbreviated)).font(.m3(11)).foregroundStyle(Theme.secondaryInk)
                     }
                 }
                 .frame(height: Platform.isMac ? 190 : 150)
@@ -392,36 +406,39 @@ struct GradeCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 14) {
-                GradeBadge(grade: grade, size: 50)
-                VStack(alignment: .leading, spacing: 3) {
-                    SubjectTag(name: grade.subjectName, id: grade.subjectId)
-                    Text("\(grade.kind) · \(grade.date.shortDay)")
-                        .font(.footnote)
-                        .foregroundStyle(Theme.secondaryInk)
-                    if let notes = grade.notes, !isExpanded {
-                        Text(notes)
-                            .font(.footnote)
-                            .foregroundStyle(Theme.ink.opacity(0.8))
-                            .lineLimit(1)
+            Button(action: onTap) {
+                HStack(spacing: 14) {
+                    GradeBadge(grade: grade, size: 50)
+                    VStack(alignment: .leading, spacing: 2) {
+                        SubjectTag(name: grade.subjectName, id: grade.subjectId)
+                        Text("\(grade.kind) · \(grade.date.shortDay)")
+                            .font(.m3(14))
+                            .foregroundStyle(Theme.secondaryInk)
+                        if let notes = grade.notes, !isExpanded {
+                            Text(notes)
+                                .font(.m3(13))
+                                .foregroundStyle(Theme.secondaryInk)
+                                .lineLimit(1)
+                        }
                     }
+                    Spacer(minLength: 4)
+                    Chevron(collapsed: !isExpanded, rotateUp: true)
                 }
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Theme.secondaryInk)
-                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                .contentShape(.rect)
             }
+            .buttonStyle(HeaderButtonStyle())
+            .accessibilityHint(isExpanded ? "Nasconde i dettagli" : "Mostra i dettagli")
 
             CollapsibleContent(isExpanded: isExpanded, spacing: 14) {
                 VStack(alignment: .leading, spacing: 10) {
                     if let notes = grade.notes {
                         Text(notes)
-                            .font(.callout)
+                            .font(.m3(14))
                             .foregroundStyle(Theme.ink)
-                            .padding(12)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Theme.background.opacity(0.7), in: .rect(cornerRadius: 12, style: .continuous))
+                            .background(Theme.surfaceContainerHigh, in: .rect(cornerRadius: Theme.radii.l, style: .continuous))
                     }
                     DetailRow(label: "Data", value: grade.date.longDay)
                     DetailRow(label: "Tipo", value: grade.kind)
@@ -432,26 +449,28 @@ struct GradeCard: View {
                     }
                     if let value = grade.value { DetailRow(label: "Valore", value: GradeFormat.average(value)) }
                     if !grade.countsTowardAverage {
-                        Label(grade.canceled ? "Voto annullato" : "Non fa media", systemImage: "info.circle")
-                            .font(.footnote.weight(.medium))
-                            .foregroundStyle(Theme.neutral)
+                        StatusLine(text: grade.canceled ? "Voto annullato" : "Non fa media", icon: "info", color: Theme.neutral)
                     } else if let impact {
                         HStack {
                             Text("Effetto sulla media di materia")
                                 .foregroundStyle(Theme.secondaryInk)
                             Spacer()
-                            Label(GradeFormat.average(abs(impact)), systemImage: impact >= 0 ? "arrow.up" : "arrow.down")
-                                .foregroundStyle(impact >= 0 ? Theme.good : Theme.poor)
-                                .fontWeight(.semibold)
+                            HStack(spacing: 2) {
+                                Icon(impact >= 0 ? "arrowUp" : "arrowDown", size: 18)
+                                Text(GradeFormat.average(abs(impact)))
+                                    .font(.numeral(15, weight: 700))
+                            }
+                            .foregroundStyle(impact >= 0 ? Theme.good : Theme.poor)
                         }
-                        .font(.subheadline)
+                        .font(.m3(14))
                     }
                 }
             }
         }
-        .card(padding: 14)
-        .contentShape(.rect)
-        .onTapGesture(perform: onTap)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.card, in: .rect(cornerRadius: Theme.radii.li, style: .continuous))
     }
 
     /// Di quanto questo voto ha spostato la media della materia.
@@ -471,27 +490,26 @@ struct SubjectRow: View {
     var body: some View {
         HStack(spacing: 14) {
             AverageRing(value: summary.average, size: 52, lineWidth: 5)
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(summary.name)
-                    .font(.headline)
+                    .font(.m3(16, weight: 600))
                     .foregroundStyle(Theme.ink)
                     .multilineTextAlignment(.leading)
-                HStack(spacing: 4) {
+                FlowLayout(spacing: 4) {
                     ForEach(summary.grades.prefix(6)) { g in
                         Text(g.displayValue)
-                            .font(.caption.weight(.bold))
+                            .font(.m3(12, weight: 700))
                             .lineLimit(1)
                             .fixedSize()
                             .foregroundStyle(Theme.gradeColor(g))
                             .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Theme.gradeColor(g).opacity(0.12), in: .capsule)
+                            .frame(minWidth: 30, minHeight: 24)
+                            .background(Theme.gradeColor(g).opacity(0.15), in: .rect(cornerRadius: Theme.radii.s, style: .continuous))
                     }
                 }
             }
             Spacer(minLength: 4)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
+            Icon("chevronRight", size: 22)
                 .foregroundStyle(Theme.secondaryInk)
         }
         .card(padding: 14)

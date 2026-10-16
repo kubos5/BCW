@@ -26,27 +26,22 @@ struct SubjectDetailView: View {
 
     var body: some View {
         content
-            .screenTitle(name)
-            .inlineTitleDisplay()
+            .pageChrome(name, style: .inline)
     }
 
     @ViewBuilder
     private var periodPicker: some View {
         if book.activePeriods.count > 1 {
-            Picker("Periodo", selection: $period) {
-                Text("Anno").tag(Int?.none)
-                ForEach(book.activePeriods) { Text($0.name).tag(Optional($0.position)) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            SegmentedButtons(selection: $period,
+                             options: [(Int?.none, "Anno", nil)] + book.activePeriods.map { (Optional($0.position), $0.name, nil) })
         }
     }
 
     private var gradeList: some View {
-        CardGrid(minWidth: 340) {
+        CardGrid(minWidth: 340, spacing: 12) {
             ForEach(grades) { grade in
                 GradeCard(grade: grade, book: book, isExpanded: expanded.contains(grade.id)) {
-                    withAnimation(.snappy) {
+                    withAnimation(Motion.spatial) {
                         if expanded.contains(grade.id) { expanded.remove(grade.id) } else { expanded.insert(grade.id) }
                     }
                 }
@@ -66,7 +61,7 @@ struct SubjectDetailView: View {
             SectionHeader("Voti", subtitle: "\(grades.count) valutazioni")
             gradeList
         }
-        .animation(.snappy, value: period)
+        .animation(Motion.spatial, value: period)
         #else
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -79,35 +74,43 @@ struct SubjectDetailView: View {
                 gradeList
             }
             .pagePadding()
-            .padding(.bottom, 24)
-            .animation(.snappy, value: period)
+            .padding(.bottom, 32)
+            .animation(Motion.spatial, value: period)
         }
+        .tracksPageScroll()
         .themedBackground()
         #endif
     }
 
     private var header: some View {
-        HStack(spacing: 18) {
-            AverageRing(value: GradeBook.average(of: grades, weighted: book.weighted), size: 96, lineWidth: 9)
-            VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: 20) {
+            AverageRing(value: GradeBook.average(of: grades, weighted: book.weighted), size: 96, lineWidth: 8)
+            VStack(alignment: .leading, spacing: 2) {
                 Eyebrow(text: "Media di materia", color: Theme.subjectColor(subjectId))
                 Text(name)
-                    .font(.title3.weight(.semibold))
+                    .font(.m3(24, weight: 500, rounded: true))
                     .foregroundStyle(Theme.ink)
                 if !teachers.isEmpty {
                     Text(teachers.joined(separator: ", "))
-                        .font(.footnote)
+                        .font(.m3(14))
                         .foregroundStyle(Theme.secondaryInk)
                 }
                 let values = grades.filter(\.countsTowardAverage).compactMap(\.value)
                 if let best = values.max(), let worst = values.min() {
                     HStack(spacing: 12) {
-                        Label(GradeFormat.short(best), systemImage: "arrow.up")
-                            .foregroundStyle(Theme.good)
-                        Label(GradeFormat.short(worst), systemImage: "arrow.down")
-                            .foregroundStyle(Theme.poor)
+                        HStack(spacing: 2) {
+                            Icon("arrowUp", size: 18)
+                            Text(GradeFormat.short(best))
+                        }
+                        .foregroundStyle(Theme.good)
+                        HStack(spacing: 2) {
+                            Icon("arrowDown", size: 18)
+                            Text(GradeFormat.short(worst))
+                        }
+                        .foregroundStyle(Theme.poor)
                     }
-                    .font(.footnote.weight(.semibold))
+                    .font(.numeral(15, weight: 700))
+                    .padding(.top, 6)
                 }
             }
             Spacer(minLength: 0)
@@ -124,8 +127,8 @@ struct SubjectDetailView: View {
                 Eyebrow(text: "Voti e media")
                 Chart {
                     RuleMark(y: .value("Sufficienza", 6))
-                        .foregroundStyle(Theme.secondaryInk.opacity(0.4))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                        .foregroundStyle(Theme.poor.opacity(0.7))
+                        .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [3, 4]))
                     ForEach(running.indices, id: \.self) { i in
                         LineMark(x: .value("Data", running[i].date), y: .value("Media", running[i].value))
                             .foregroundStyle(Theme.subjectColor(subjectId))
@@ -135,14 +138,14 @@ struct SubjectDetailView: View {
                     ForEach(sorted) { grade in
                         PointMark(x: .value("Data", grade.date.startOfDay), y: .value("Voto", grade.value ?? 0))
                             .foregroundStyle(Theme.gradeColor(grade))
-                            .symbolSize(60)
+                            .symbolSize(78)
                     }
                 }
                 .chartYScale(domain: 2...10)
                 .chartYAxis {
-                    AxisMarks(values: [2, 4, 6, 8, 10]) { _ in
-                        AxisGridLine().foregroundStyle(Theme.separator)
-                        AxisValueLabel().font(.caption2)
+                    AxisMarks(position: .trailing, values: [2, 4, 6, 8, 10]) { _ in
+                        AxisGridLine().foregroundStyle(Theme.outlineVariant)
+                        AxisValueLabel().font(.m3(11)).foregroundStyle(Theme.secondaryInk)
                     }
                 }
                 .frame(height: 170)
@@ -168,59 +171,49 @@ struct GoalCalculator: View {
             HStack {
                 Eyebrow(text: "Obiettivo")
                 Spacer()
-                Image(systemName: "target")
-                    .foregroundStyle(Theme.accent)
+                Icon("target")
+                    .foregroundStyle(Theme.primary)
             }
 
-            Stepper(value: $preferences.targetAverage, in: 4...10, step: 0.25) {
-                HStack {
-                    Text("Media desiderata")
-                    Spacer()
-                    Text(GradeFormat.short(preferences.targetAverage))
-                        .font(.numeral(20, weight: .bold))
-                        .contentTransition(.numericText())
-                }
+            HStack {
+                Text("Media desiderata")
+                Spacer()
+                M3Stepper(value: $preferences.targetAverage, range: 4...10, step: 0.25) { GradeFormat.short($0) }
             }
+            .frame(minHeight: 40)
 
-            Stepper(value: $upcoming, in: 1...5) {
-                HStack {
-                    Text("Prossime prove")
-                    Spacer()
-                    Text("\(upcoming)")
-                        .font(.numeral(20, weight: .bold))
-                        .contentTransition(.numericText())
-                }
+            HStack {
+                Text("Prossime prove")
+                Spacer()
+                M3Stepper(value: $upcoming, range: 1...5, step: 1) { "\($0)" }
             }
+            .frame(minHeight: 40)
 
-            Divider().overlay(Theme.separator)
+            M3Divider()
 
-            Group {
-                if let needed {
-                    if needed <= 1 {
-                        Label("Hai già raggiunto l'obiettivo, qualunque voto prenderai.", systemImage: "checkmark.seal.fill")
-                            .foregroundStyle(Theme.good)
-                    } else if needed > 10 {
-                        Label("Obiettivo non raggiungibile con \(upcoming == 1 ? "una prova" : "\(upcoming) prove").",
-                              systemImage: "xmark.octagon.fill")
-                            .foregroundStyle(Theme.poor)
-                    } else {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(upcoming == 1 ? "Ti serve almeno" : "Ti serve in media almeno")
-                                .foregroundStyle(Theme.secondaryInk)
-                            Spacer()
-                            Text(GradeFormat.average(needed))
-                                .font(.numeral(28, weight: .bold))
-                                .foregroundStyle(Theme.gradeColor(value: needed))
-                                .contentTransition(.numericText())
-                        }
+            if let needed {
+                if needed <= 1 {
+                    StatusLine(text: "Hai già raggiunto l'obiettivo, qualunque voto prenderai.", icon: "checkSealFill", color: Theme.good)
+                } else if needed > 10 {
+                    StatusLine(text: "Obiettivo non raggiungibile con \(upcoming == 1 ? "una prova" : "\(upcoming) prove").",
+                               icon: "octagonX", color: Theme.poor)
+                } else {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(upcoming == 1 ? "Ti serve almeno" : "Ti serve in media almeno")
+                            .foregroundStyle(Theme.secondaryInk)
+                        Spacer()
+                        Text(GradeFormat.average(needed))
+                            .font(.numeral(32))
+                            .foregroundStyle(Theme.gradeColor(value: needed))
+                            .contentTransition(.numericText())
                     }
                 }
             }
-            .font(.subheadline.weight(.medium))
         }
-        .font(.subheadline)
+        .font(.m3(16))
+        .foregroundStyle(Theme.ink)
         .card()
-        .animation(.snappy, value: preferences.targetAverage)
-        .animation(.snappy, value: upcoming)
+        .animation(Motion.spatial, value: preferences.targetAverage)
+        .animation(Motion.spatial, value: upcoming)
     }
 }

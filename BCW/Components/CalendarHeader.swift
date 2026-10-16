@@ -758,14 +758,14 @@ struct CalendarHeader: View {
     /// Altezza da intera (cambia nel mese con il numero di settimane).
     var onExpandedHeight: (CGFloat) -> Void = { _ in }
 
-    static let weekExpandedHeight: CGFloat = 144
+    static let weekExpandedHeight: CGFloat = 140
     static let collapsedHeight: CGFloat = 46
 
     private var isCollapsed: Bool { progress >= 1 }
 
     var body: some View {
         let p = min(max(progress, 0), 1)
-        let shape = RoundedRectangle(cornerRadius: lerp(Theme.corner, Self.collapsedHeight / 2, p), style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: lerp(Theme.radii.xl, Self.collapsedHeight / 2, p), style: .continuous)
 
         Group {
             switch style {
@@ -778,7 +778,11 @@ struct CalendarHeader: View {
         }
         .frame(maxWidth: .infinity)
         .clipShape(shape)
-        .glassEffect(.regular, in: shape)
+        // Card di Material 3 che, ridotta, si stacca dal contenuto con un'ombra leggera.
+        .background {
+            shape.fill(Theme.surfaceContainerHigh)
+                .shadow(color: Theme.shadow.opacity(0.16 * p), radius: 7 * p, y: 4 * p)
+        }
         .overlay {
             if isCollapsed {
                 // Ridotta, la striscia si tocca solo per riaprirla.
@@ -796,7 +800,7 @@ struct CalendarHeader: View {
         // (scorrendo di lato, dove il contenuto si scambia di colpo).
         .transaction(value: selectedDay) { transaction in
             transaction.disablesAnimations = false
-            if transaction.animation == nil { transaction.animation = .snappy }
+            if transaction.animation == nil { transaction.animation = Motion.spatial }
         }
     }
 }
@@ -810,19 +814,15 @@ private struct MonthTitleRow: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.headline)
+                .font(.m3(16, weight: 650))
                 .foregroundStyle(Theme.ink)
                 .contentTransition(.numericText())
             Spacer()
             HStack(spacing: 4) {
-                Button(action: back) { Image(systemName: "chevron.left") }
-                    .accessibilityLabel("Indietro")
-                Button(action: forward) { Image(systemName: "chevron.right") }
-                    .accessibilityLabel("Avanti")
+                IconButton("chevronLeft", label: "Indietro", size: 32, action: back)
+                IconButton("chevronRight", label: "Avanti", size: 32, action: forward)
             }
-            .glassButton()
-            .buttonBorderShape(.circle)
-            .controlSize(.small)
+            .padding(.trailing, -8)
         }
     }
 }
@@ -835,9 +835,8 @@ private struct WeekMorph: View {
     /// Settimana mostrata (inizio settimana): segue lo scorrimento orizzontale a pagine.
     @State private var visibleWeek: Date?
 
-    private static let monthRowHeight: CGFloat = 40
+    private static let monthRowHeight: CGFloat = 44
     private static let expandedCellHeight: CGFloat = 76
-    private static let verticalPadding: CGFloat = 14
 
     init(selectedDay: Binding<Date>, progress: CGFloat) {
         _selectedDay = selectedDay
@@ -862,9 +861,9 @@ private struct WeekMorph: View {
         let p = progress
         VStack(spacing: 0) {
             MonthTitleRow(title: selectedDay.monthYear, back: { shift(-7) }, forward: { shift(7) })
-                .frame(height: Self.monthRowHeight - 12)
-                .padding(.bottom, 12)
-                .padding(.horizontal, 14)
+                .frame(height: Self.monthRowHeight)
+                .padding(.leading, 20)
+                .padding(.trailing, 12)
                 // La riga sale ed esce dalla card (tagliata solo dal suo bordo).
                 .padding(.top, -p * Self.monthRowHeight)
                 .opacity(max(0, 1 - p * 1.8))
@@ -872,19 +871,20 @@ private struct WeekMorph: View {
             pager(progress: p)
                 .frame(height: lerp(Self.expandedCellHeight, CalendarHeader.collapsedHeight, p))
         }
-        .padding(.vertical, lerp(Self.verticalPadding, 0, p))
+        .padding(.top, lerp(8, 0, p))
+        .padding(.bottom, lerp(12, 0, p))
         .frame(height: lerp(CalendarHeader.weekExpandedHeight, CalendarHeader.collapsedHeight, p), alignment: .top)
         .onChange(of: visibleWeek) { _, week in
             // Scorrendo si passa alla settimana accanto mantenendo lo stesso giorno della settimana,
             // con l'animazione come toccando un giorno (anche "Oggi" nella barra compare animato).
             guard let week, !week.isSameDay(as: selectedDay.startOfWeek) else { return }
             let weekday = CVDate.calendar.dateComponents([.day], from: selectedDay.startOfWeek, to: selectedDay.startOfDay).day ?? 0
-            withAnimation(.snappy) { selectedDay = week.adding(days: weekday) }
+            withAnimation(Motion.spatial) { selectedDay = week.adding(days: weekday) }
         }
         .onChange(of: selectedDay) { _, day in
             let week = Self.week(containing: day)
             if visibleWeek.map({ !$0.isSameDay(as: week) }) ?? true {
-                withAnimation(.snappy) { visibleWeek = week }
+                withAnimation(Motion.spatial) { visibleWeek = week }
             }
         }
     }
@@ -893,15 +893,15 @@ private struct WeekMorph: View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
                 ForEach(Self.weeks, id: \.self) { week in
-                    HStack(spacing: 4) {
+                    HStack(spacing: 2) {
                         ForEach(0..<7, id: \.self) { offset in
                             let day = week.adding(days: offset)
                             MorphingDayCell(day: day, isSelected: day.isSameDay(as: selectedDay), progress: p) {
-                                withAnimation(.snappy) { selectedDay = day }
+                                withAnimation(Motion.spatial) { selectedDay = day }
                             }
                         }
                     }
-                    .padding(.horizontal, lerp(14, 8, p))
+                    .padding(.horizontal, lerp(8, 6, p))
                     .containerRelativeFrame(.horizontal)
                 }
             }
@@ -917,7 +917,7 @@ private struct WeekMorph: View {
     }
 
     private func shift(_ days: Int) {
-        withAnimation(.snappy) { selectedDay = selectedDay.adding(days: days) }
+        withAnimation(Motion.spatial) { selectedDay = selectedDay.adding(days: days) }
     }
 }
 
@@ -943,7 +943,7 @@ private struct MorphingDayCell: View {
                 WeekdayInitial(day: day, isSelected: isSelected)
                     .offset(y: lerp(-21.5, -38, p))
                     .opacity(fade)
-                DayNumber(day: day, isSelected: isSelected, size: 19, weight: .medium)
+                DayNumber(day: day, isSelected: isSelected, size: 18, weight: 550)
                     .scaleEffect(lerp(1, 0.9, p))
                     .offset(y: lerp(3, 0, p))
                 DayDots(day: day, isSelected: isSelected, size: 5)
@@ -951,19 +951,19 @@ private struct MorphingDayCell: View {
                     .opacity(fade)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(.rect(cornerRadius: 16))
+            .contentShape(.rect(cornerRadius: Theme.radii.li))
             .background {
                 // Il rettangolo del giorno scelto diventa un cerchio: larghezza e altezza scendono
                 // fino al diametro e il raggio degli angoli arriva a metà del diametro.
                 GeometryReader { geometry in
                     let width = lerp(geometry.size.width, Self.circle, p)
                     let height = lerp(geometry.size.height, Self.circle, p)
-                    let shape = RoundedRectangle(cornerRadius: lerp(16, Self.circle / 2, p), style: .continuous)
+                    let shape = RoundedRectangle(cornerRadius: lerp(Theme.radii.li, Self.circle / 2, p), style: .continuous)
                     Group {
                         if isSelected {
-                            shape.fill(Theme.accent.gradient)
+                            shape.fill(Theme.primary)
                         } else if day.isToday {
-                            shape.strokeBorder(Theme.accent.opacity(0.5), lineWidth: 1)
+                            shape.strokeBorder(Theme.primary, lineWidth: 1.5)
                         }
                     }
                     .frame(width: width, height: height)
@@ -988,7 +988,7 @@ private struct DayDots: View {
         let events = model.events(on: day)
         HStack(spacing: size * 0.6) {
             if events.contains(where: { $0.kind == .homework }) { dot(Theme.neutral) }
-            if events.contains(where: { $0.kind == .test }) { dot(isSelected ? .white : Theme.accent) }
+            if events.contains(where: { $0.kind == .test }) { dot(isSelected ? Theme.onPrimary : Theme.primary) }
             if events.contains(where: { $0.kind == .event }) { dot(Theme.fair) }
             if !model.absences(on: day).isEmpty { dot(Theme.poor) }
         }
@@ -1000,8 +1000,8 @@ private struct DayDots: View {
     }
 
     static func numberColor(day: Date, isSelected: Bool, holiday: Bool) -> Color {
-        if isSelected { return .white }
-        if day.isToday { return Theme.accent }
+        if isSelected { return Theme.onPrimary }
+        if day.isToday { return Theme.primary }
         if day.isWeekend || holiday { return Theme.secondaryInk }
         return Theme.ink
     }
@@ -1013,12 +1013,12 @@ private struct DayNumber: View {
     let day: Date
     let isSelected: Bool
     let size: CGFloat
-    let weight: Font.Weight
+    let weight: CGFloat
 
     var body: some View {
         let holiday = model.calendarStatus(on: day)?.isHoliday == true
         Text(day.it("d"))
-            .font(.numeral(size, weight: isSelected || day.isToday ? .bold : weight))
+            .font(.numeral(size, weight: isSelected || day.isToday ? 700 : weight))
             .foregroundStyle(DayDots.numberColor(day: day, isSelected: isSelected, holiday: holiday))
     }
 }
@@ -1030,8 +1030,8 @@ private struct WeekdayInitial: View {
 
     var body: some View {
         Text(day.it("EEEEE").uppercased())
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(isSelected ? .white.opacity(0.85) : Theme.secondaryInk)
+            .font(.m3(12, weight: isSelected || day.isToday ? 700 : 600))
+            .foregroundStyle(isSelected ? Theme.onPrimary : (day.isToday ? Theme.primary : Theme.secondaryInk))
     }
 }
 
@@ -1050,13 +1050,13 @@ private struct MonthMorph: View {
     /// Settimane del mese mostrato, cambiate con un'animazione (la card si allunga o si accorcia).
     @State private var rowCount: Int
 
-    private static let padding: CGFloat = 14
-    private static let titleHeight: CGFloat = 28
-    private static let titleGap: CGFloat = 12
-    private static let weekdayHeight: CGFloat = 16
-    private static let weekdayGap: CGFloat = 6
+    private static let padding: CGFloat = 12
+    private static let titleHeight: CGFloat = 32
+    private static let titleGap: CGFloat = 8
+    private static let weekdayHeight: CGFloat = 20
+    private static let weekdayGap: CGFloat = 2
     static let cellHeight: CGFloat = 44
-    private static let rowSpacing: CGFloat = 4
+    private static let rowSpacing: CGFloat = 2
     private static let legendGap: CGFloat = 12
     private static let legendHeight: CGFloat = 14
     private static let weekdaySymbols = ["L", "M", "M", "G", "V", "S", "D"]
@@ -1141,7 +1141,7 @@ private struct MonthMorph: View {
             HStack(spacing: 2) {
                 ForEach(Self.weekdaySymbols.indices, id: \.self) { index in
                     Text(Self.weekdaySymbols[index])
-                        .font(.caption2.weight(.semibold))
+                        .font(.m3(12, weight: 600))
                         .foregroundStyle(Theme.secondaryInk)
                         .frame(maxWidth: .infinity)
                 }
@@ -1183,16 +1183,16 @@ private struct MonthMorph: View {
         .frame(height: lerp(expanded, CalendarHeader.collapsedHeight, p), alignment: .top)
         .onAppear { onExpandedHeight(expanded) }
         .onChange(of: expanded) { _, height in
-            withAnimation(.snappy) { onExpandedHeight(height) }
+            withAnimation(Motion.spatial) { onExpandedHeight(height) }
         }
         .onChange(of: visibleMonth) { _, month in
             let count = Self.rows(of: month ?? currentMonth).count
-            if count != rowCount { withAnimation(.snappy) { rowCount = count } }
+            if count != rowCount { withAnimation(Motion.spatial) { rowCount = count } }
         }
         .onChange(of: selectedDay) { _, day in
             let month = Self.month(containing: day)
             if !currentMonth.isSameDay(as: month) {
-                withAnimation(.snappy) { visibleMonth = month }
+                withAnimation(Motion.spatial) { visibleMonth = month }
             }
         }
         .onChange(of: p > 0) { _, collapsing in
@@ -1222,7 +1222,7 @@ private struct MonthMorph: View {
                         MonthMorphCell(day: row[column].day, inMonth: row[column].inMonth,
                                        isSelected: row[column].inMonth && row[column].day.isSameDay(as: selectedDay),
                                        inSelectedWeek: inSelectedWeek, progress: p) {
-                            withAnimation(.snappy) { selectedDay = row[column].day }
+                            withAnimation(Motion.spatial) { selectedDay = row[column].day }
                         }
                         .offset(x: narrowing * (CGFloat(2 * column + 1) / 7 - 1))
                     }
@@ -1239,24 +1239,24 @@ private struct MonthMorph: View {
     private var legend: some View {
         HStack(spacing: 14) {
             legendItem(Theme.neutral, "Compiti")
-            legendItem(Theme.accent, "Verifiche")
+            legendItem(Theme.primary, "Verifiche")
             legendItem(Theme.fair, "Eventi")
             legendItem(Theme.poor, "Assenze")
         }
-        .font(.caption2)
+        .font(.m3(12))
         .foregroundStyle(Theme.secondaryInk)
     }
 
     private func legendItem(_ color: Color, _ title: String) -> some View {
-        HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 6, height: 6)
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 7, height: 7)
             Text(title)
         }
     }
 
     private func shiftMonth(_ months: Int) {
         guard let target = CVDate.calendar.date(byAdding: .month, value: months, to: currentMonth) else { return }
-        withAnimation(.snappy) { visibleMonth = Self.month(containing: target) }
+        withAnimation(Motion.spatial) { visibleMonth = Self.month(containing: target) }
     }
 }
 
@@ -1271,12 +1271,11 @@ private struct MonthDayMark: View {
 
     var body: some View {
         if isSelected {
-            Circle().fill(Theme.accent.gradient)
+            Circle().fill(Theme.primary)
         } else if inMonth && day.isToday {
-            Circle().strokeBorder(Theme.accent.opacity(0.5), lineWidth: 1)
-                .opacity(progress)
+            Circle().strokeBorder(Theme.primary, lineWidth: 1.5)
         } else if inMonth && model.calendarStatus(on: day)?.isHoliday == true {
-            Circle().fill(Theme.separator.opacity(0.45))
+            Circle().fill(Theme.secondaryContainer.opacity(0.7))
                 .opacity(1 - progress)
         }
     }
@@ -1293,7 +1292,7 @@ private struct MonthMorphCell: View {
     let progress: CGFloat
     let action: () -> Void
 
-    private static let circle: CGFloat = 42
+    private static let circle: CGFloat = 38
 
     var body: some View {
         let p = progress
@@ -1304,9 +1303,9 @@ private struct MonthMorphCell: View {
         Button(action: action) {
             // Come nella settimana: numero e pallini non dipendono dall'avanzamento.
             ZStack {
-                DayNumber(day: day, isSelected: isSelected, size: 16, weight: .regular)
-                    // Da ridotta come i numeri della settimana (19 punti ridotti al 90%).
-                    .scaleEffect(lerp(1, 17.1 / 16, p))
+                DayNumber(day: day, isSelected: isSelected, size: 15, weight: 550)
+                    // Da ridotta come i numeri della settimana (18 punti ridotti al 90%).
+                    .scaleEffect(lerp(1, 16.2 / 15, p))
                     .offset(y: lerp(-4, 0, p))
                 DayDots(day: day, isSelected: isSelected, size: 4)
                     .offset(y: lerp(12, 8, p))

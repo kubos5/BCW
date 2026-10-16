@@ -55,12 +55,15 @@ struct DashboardView: View {
     private func titleFits(_ text: String) -> Bool {
         // Su macOS il titolo sta nella barra della finestra, dove c'è sempre spazio.
         guard !Platform.isMac, barWidth > 0 else { return true }
-        let titleWidth = (text as NSString).size(withAttributes: [.font: PlatformFont.newYork(size: 34, weight: .bold)]).width
+        let glass = ThemeStore.shared.liquidGlass
+        let titleFont = glass ? Typography.platformFont(size: 34, weight: 500, rounded: true)
+            : Typography.platformFont(size: 22, weight: 500, rounded: true)
+        let titleWidth = (text as NSString).size(withAttributes: [.font: titleFont]).width
         // Margini laterali, pulsante del menu e spazio dal titolo.
-        var reserved: CGFloat = 16 + 16 + 44 + 16
+        var reserved: CGFloat = glass ? 16 + 16 + 44 + 16 : 16 + 48 + 8
         if !selectedDay.isTomorrow {
-            let buttonText = ("Domani" as NSString).size(withAttributes: [.font: PlatformFont.newYork(size: 17, weight: .regular)]).width
-            reserved += buttonText + 32 + 12
+            let buttonText = ("Domani" as NSString).size(withAttributes: [.font: Typography.platformFont(size: 14, weight: 600)]).width
+            reserved += buttonText + (glass ? 32 + 12 : 24 + 8)
         }
         return titleWidth <= barWidth - reserved
     }
@@ -74,52 +77,42 @@ struct DashboardView: View {
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { barWidth = $0 }
                 #endif
                 .refreshable { await model.refreshAll() }
-                .screenTitle(title)
-                .inlineLargeTitleDisplay()
                 .onChange(of: selectedDay, initial: true) { _, day in
                     // Sempre con un'animazione, anche quando il giorno cambia senza (scorrendo di lato).
                     guard showsTomorrow == day.isTomorrow else { return }
-                    withAnimation(.snappy) { showsTomorrow = !day.isTomorrow }
+                    withAnimation(Motion.spatial) { showsTomorrow = !day.isTomorrow }
                 }
-                .toolbar {
+                .pageChrome(title, style: .inline) {
                     if showsTomorrow {
-                        ToolbarItem(placement: .trailingBar) {
-                            Button("Domani") {
-                                select(Date().adding(days: 1).startOfDay)
-                            }
-                            #if os(macOS)
-                            .keyboardShortcut("t", modifiers: [.command, .shift])
-                            .help("Vai a domani (⇧⌘T)")
-                            #endif
+                        BarTextButton(title: "Domani") {
+                            select(Date().adding(days: 1).startOfDay)
                         }
-                        ToolbarSpacer(.fixed, placement: .trailingBar)
+                        .keyboardShortcut("t", modifiers: [.command, .shift])
+                        .help("Vai a domani (⇧⌘T)")
+                        .transition(.scale(scale: 0.6).combined(with: .opacity))
                     }
-                    ToolbarItem(placement: .trailingBar) {
-                        viewMenu
-                    }
+                    viewMenu
                 }
         }
     }
 
     /// Vista (lista o calendario) e filtri.
     private var viewMenu: some View {
-        Menu {
-            Picker("Vista", selection: Bindable(model.preferences).dashboardMode) {
-                ForEach(DashboardMode.allCases) { mode in
-                    Label(mode.title, systemImage: mode.symbol).tag(mode)
-                }
-            }
-            Button("Vai a oggi", systemImage: "sun.max") {
+        BarMenu(icon: mode.icon, label: "Vista e filtri") {
+            MenuPicker(title: "Vista", selection: Bindable(model.preferences).dashboardMode,
+                       options: DashboardMode.allCases.map { ($0, $0.title, $0.icon) })
+            MenuDivider()
+            MenuItem("Vai a oggi", icon: "sun") {
                 select(Date().startOfDay)
             }
-            Toggle("Nascondi compiti fatti", systemImage: "checkmark.circle",
-                   isOn: Bindable(model.preferences).hideCompletedHomework)
-            if mode == .list || Platform.isMac {
-                Toggle("Mostra i prossimi giorni", systemImage: "calendar.day.timeline.right",
-                       isOn: Bindable(model.preferences).showUpcomingDays)
+            MenuItem("Nascondi compiti fatti", icon: "checkCircle", checked: model.preferences.hideCompletedHomework) {
+                model.preferences.hideCompletedHomework.toggle()
             }
-        } label: {
-            Image(systemName: mode.symbol)
+            if mode == .list || Platform.isMac {
+                MenuItem("Mostra i prossimi giorni", icon: "timeline", checked: model.preferences.showUpcomingDays) {
+                    model.preferences.showUpcomingDays.toggle()
+                }
+            }
         }
     }
 
@@ -139,7 +132,7 @@ struct DashboardView: View {
         #else
         let update = { selectedDay = day }
         #endif
-        if animated { withAnimation(.snappy, update) } else { update() }
+        if animated { withAnimation(Motion.spatial, update) } else { update() }
     }
 
     /// Per le viste del calendario, che animano da sé la selezione.
@@ -159,7 +152,7 @@ struct DashboardView: View {
             }
         } main: {
             if let error = model.lastError {
-                StatusBanner(message: error, symbol: model.isOffline ? "wifi.slash" : "exclamationmark.triangle")
+                StatusBanner(message: error, icon: model.isOffline ? "wifiOff" : "alertTriangle")
             }
             DayDetail(day: selectedDay)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { if $0 > 0 { dayDetailHeight.value = $0 } }
@@ -169,20 +162,20 @@ struct DashboardView: View {
                 if stacked { upcoming }
             }
         }
-        .animation(.snappy, value: selectedDay)
+        .animation(Motion.spatial, value: selectedDay)
         #else
         // Il calendario (settimana o mese) galleggia sopra il contenuto (`CalendarHeader`), come
         // nell'Orario: il contenuto parte sotto il calendario ridotto e si sposta con lui.
         ZStack(alignment: .top) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 16) {
                     if let error = model.lastError {
-                        StatusBanner(message: error, symbol: model.isOffline ? "wifi.slash" : "exclamationmark.triangle")
+                        StatusBanner(message: error, icon: model.isOffline ? "wifiOff" : "alertTriangle")
                     }
 
                     // Con il giorno accanto, già visibile mentre si scorre di lato.
                     SwipeDayPages(state: headerState, day: selectedDay) { day, isMain in
-                        VStack(alignment: .leading, spacing: 22) {
+                        VStack(alignment: .leading, spacing: 16) {
                             DayDetail(day: day)
                                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
                                     if isMain && $0 > 0 { dayDetailHeight.value = $0 }
@@ -197,10 +190,11 @@ struct DashboardView: View {
                     }
                 }
                 .pagePadding()
-                .padding(.bottom, 24)
-                .animation(.snappy, value: selectedDay)
+                .padding(.bottom, 32)
+                .animation(Motion.spatial, value: selectedDay)
                 .background { CalendarHeaderPan(state: headerState) }
             }
+            .tracksPageScroll()
             // Il giorno accanto sta fuori dai bordi dello scorrimento finché non entra.
             .scrollClipDisabled()
             .scrollPosition($scrollPosition)
@@ -209,7 +203,7 @@ struct DashboardView: View {
             } action: { _, atTop in
                 isAtTop = atTop
             }
-            .safeAreaPadding(.top, 4 + CalendarHeader.collapsedHeight + 12)
+            .safeAreaPadding(.top, 4 + CalendarHeader.collapsedHeight + 16)
             .modifier(WeekHeaderScroll.Shift(state: headerState))
 
             DashboardHeaderHost(selectedDay: daySelection, style: mode == .list ? .week : .month, state: headerState)
@@ -231,7 +225,7 @@ struct DashboardView: View {
         .onChange(of: mode) { headerState.reset() }
         .onChange(of: reselection) {
             if !isAtTop {
-                withAnimation(.smooth) { scrollPosition.scrollTo(edge: .top) }
+                withAnimation(Motion.spatialSlow) { scrollPosition.scrollTo(edge: .top) }
             } else if headerState.isCollapsed {
                 headerState.open()
             } else {
@@ -345,27 +339,14 @@ struct WeekStrip: View {
     private static let weekSet = Set(weeks)
 
     var body: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Text(selectedDay.monthYear)
-                    .font(.headline)
-                    .foregroundStyle(Theme.ink)
-                    .contentTransition(.numericText())
-                Spacer()
-                HStack(spacing: 4) {
-                    Button { shift(-7) } label: { Image(systemName: "chevron.left") }
-                    Button { shift(7) } label: { Image(systemName: "chevron.right") }
-                }
-                .glassButton()
-                .buttonBorderShape(.circle)
-                .controlSize(.small)
-            }
-            .padding(.horizontal, 14)
+        VStack(spacing: 0) {
+            CalendarCardHead(title: selectedDay.monthYear, previousLabel: "Settimana precedente",
+                             nextLabel: "Settimana successiva") { shift(-7) } next: { shift(7) }
 
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 0) {
                     ForEach(Self.weeks, id: \.self) { week in
-                        HStack(spacing: 4) {
+                        HStack(spacing: 2) {
                             ForEach(0..<7, id: \.self) { offset in
                                 let day = week.adding(days: offset)
                                 DayCell(day: day, isSelected: day.isSameDay(as: selectedDay)) {
@@ -373,7 +354,6 @@ struct WeekStrip: View {
                                 }
                             }
                         }
-                        .padding(.horizontal, 14)
                         .containerRelativeFrame(.horizontal)
                     }
                 }
@@ -383,8 +363,10 @@ struct WeekStrip: View {
             .scrollPosition(id: $visibleWeek)
             .scrollIndicators(.hidden)
         }
-        .padding(.vertical, 14)
-        .card(padding: 0)
+        .padding(.horizontal, 8)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+        .background(Theme.surfaceContainer, in: .rect(cornerRadius: Theme.radii.xl, style: .continuous))
         .onChange(of: visibleWeek) { _, week in
             // Scorrendo si passa alla settimana accanto mantenendo lo stesso giorno della settimana.
             guard let week, !week.isSameDay(as: selectedDay.startOfWeek) else { return }
@@ -394,18 +376,40 @@ struct WeekStrip: View {
         .onChange(of: selectedDay) { _, day in
             let week = Self.week(containing: day)
             if visibleWeek.map({ !$0.isSameDay(as: week) }) ?? true {
-                withAnimation(.snappy) { visibleWeek = week }
+                withAnimation(Motion.spatial) { visibleWeek = week }
             }
         }
         .sensoryFeedback(.selection, trigger: selectedDay)
     }
 
-    private func jump(to day: Date) {
-        withAnimation(.snappy) { selectedDay = day.startOfDay }
-    }
-
     private func shift(_ days: Int) {
-        withAnimation(.snappy) { selectedDay = selectedDay.adding(days: days) }
+        withAnimation(Motion.spatial) { selectedDay = selectedDay.adding(days: days) }
+    }
+}
+
+/// Intestazione delle card del calendario: mese e anno, frecce per spostarsi.
+struct CalendarCardHead: View {
+    let title: String
+    var previousLabel = "Precedente"
+    var nextLabel = "Successivo"
+    let previous: () -> Void
+    let next: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.m3(16, weight: 650))
+                .foregroundStyle(Theme.ink)
+                .contentTransition(.numericText())
+            Spacer()
+            HStack(spacing: 4) {
+                IconButton("chevronLeft", label: previousLabel, size: 32, action: previous)
+                IconButton("chevronRight", label: nextLabel, size: 32, action: next)
+            }
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, 4)
+        .frame(height: 44)
     }
 }
 
@@ -422,44 +426,47 @@ private struct DayCell: View {
         let hasOther = events.contains { $0.kind == .event }
         let hasAbsence = !model.absences(on: day).isEmpty
         let holiday = model.calendarStatus(on: day)?.isHoliday == true
+        let emphasized = isSelected || day.isToday
 
         Button(action: action) {
-            VStack(spacing: 6) {
+            VStack(spacing: 2) {
                 Text(day.it("EEEEE").uppercased())
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(isSelected ? .white.opacity(0.85) : Theme.secondaryInk)
+                    .font(.m3(12, weight: emphasized ? 700 : 600))
+                    .foregroundStyle(isSelected ? Theme.onPrimary : (day.isToday ? Theme.primary : Theme.secondaryInk))
                 Text(day.it("d"))
-                    .font(.numeral(19, weight: isSelected || day.isToday ? .bold : .medium))
+                    .font(.numeral(18, weight: emphasized ? 700 : 550))
                     .foregroundStyle(numberColor(holiday: holiday))
+                    .frame(width: 40, height: 40)
                 HStack(spacing: 3) {
                     if hasHomework { dot(Theme.neutral) }
-                    if hasTest { dot(isSelected ? .white : Theme.accent) }
+                    if hasTest { dot(isSelected ? Theme.onPrimary : Theme.primary) }
                     if hasOther { dot(Theme.fair) }
                     if hasAbsence { dot(Theme.poor) }
                 }
-                .frame(height: 5)
+                .frame(height: 6)
             }
+            .padding(.top, 4)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            .frame(height: 76, alignment: .top)
             // Si può fare clic su tutto il riquadro, non solo sul testo.
-            .contentShape(.rect(cornerRadius: 16))
+            .contentShape(.rect(cornerRadius: Theme.radii.li))
             .background {
+                let shape = RoundedRectangle(cornerRadius: Theme.radii.li, style: .continuous)
                 if isSelected {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Theme.accent.gradient)
+                    shape.fill(Theme.primary)
                 } else if day.isToday {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(Theme.accent.opacity(0.5), lineWidth: 1)
+                    shape.strokeBorder(Theme.primary, lineWidth: 1.5)
                 }
             }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(day.longDay)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func numberColor(holiday: Bool) -> Color {
-        if isSelected { return .white }
-        if day.isToday { return Theme.accent }
+        if isSelected { return Theme.onPrimary }
+        if day.isToday { return Theme.primary }
         if day.isWeekend || holiday { return Theme.secondaryInk }
         return Theme.ink
     }
@@ -494,13 +501,10 @@ private struct UpcomingDays: View {
         if !days.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 Button {
-                    withAnimation(.snappy) { model.preferences.toggleCollapsed(.upcoming) }
+                    withAnimation(Motion.spatial) { model.preferences.toggleCollapsed(.upcoming) }
                 } label: {
                     SectionHeader(title: "Nei prossimi giorni") {
-                        Image(systemName: "chevron.down")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Theme.secondaryInk)
-                            .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                        Chevron(collapsed: isCollapsed)
                     }
                     .contentShape(.rect)
                 }
@@ -547,22 +551,20 @@ private struct UpcomingDayCard: View {
         let lastID = events.last?.id
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.snappy) { isCollapsed.toggle() }
+                withAnimation(Motion.spatial) { isCollapsed.toggle() }
             } label: {
-                HStack {
-                    Eyebrow(text: day.relativeDayName, color: Theme.accent)
+                HStack(spacing: 8) {
+                    Eyebrow(text: day.relativeDayName, color: Theme.primary)
                     Spacer()
                     if isCollapsed {
                         Text(events.count == 1 ? "1 elemento" : "\(events.count) elementi")
-                            .font(.caption)
+                            .font(.m3(12))
                             .foregroundStyle(Theme.secondaryInk)
                             .transition(.opacity)
                     }
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Theme.secondaryInk)
-                        .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                    Chevron(collapsed: isCollapsed)
                 }
+                .frame(minHeight: 36)
                 .contentShape(.rect)
             }
             .buttonStyle(HeaderButtonStyle())
@@ -574,11 +576,12 @@ private struct UpcomingDayCard: View {
                     ForEach(events) { event in
                         AgendaEventRow(event: event, onPlainTap: onSelect)
                             .equatable()
-                        if event.id != lastID { Divider().overlay(Theme.separator) }
+                        if event.id != lastID { M3Divider() }
                     }
                 }
             }
         }
+        .padding(.top, -4)
         .card()
         // Intestazione e righe hanno i loro tocchi (comprimere, aprire, segnare come fatto), che
         // hanno la precedenza: questo vale solo negli spazi vuoti, margini della card compresi.

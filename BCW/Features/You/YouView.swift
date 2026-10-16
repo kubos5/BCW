@@ -16,6 +16,8 @@ struct YouView: View {
         PlatformNavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
+                    PageLargeTitle()
+                        .padding(.bottom, -10)
                     // Profilo e statistiche formano un blocco: stessa distanza che c'è tra le statistiche.
                     VStack(alignment: .leading, spacing: 10) {
                         NavigationLink {
@@ -23,62 +25,62 @@ struct YouView: View {
                         } label: {
                             ProfileCard()
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressable(radius: Theme.radii.xl, pressed: Theme.radii.l))
                         stats
                     }
 
-                    menuSection("Comunicazioni") {
-                        MenuRow(title: "Bacheca", subtitle: noticeSubtitle, symbol: "megaphone",
-                                tint: Theme.accent, badge: model.unreadNoticesCount) { NoticeboardView() }
+                    ListGroup("Comunicazioni") {
+                        MenuRow(title: "Bacheca", subtitle: noticeSubtitle, icon: "megaphone",
+                                tint: Theme.primary, badge: model.unreadNoticesCount) { NoticeboardView() }
                         MenuRow(title: "Note e annotazioni", subtitle: notesSubtitle,
-                                symbol: "exclamationmark.bubble", tint: Theme.poor,
+                                icon: "messageAlert", tint: Theme.poor,
                                 badge: model.notes.filter { !$0.isRead }.count) { NotesView() }
                     }
 
-                    menuSection("Valutazioni") {
+                    ListGroup("Valutazioni") {
                         MenuRow(title: "Scrutini e pagelle", subtitle: "Documenti di valutazione",
-                                symbol: "doc.text.magnifyingglass", tint: Theme.neutral) { ReportsView() }
+                                icon: "fileSearch", tint: Theme.neutral) { ReportsView() }
                         MenuRow(title: "Anni precedenti", subtitle: "Pagelle e archivio degli anni passati",
-                                symbol: "clock.arrow.circlepath", tint: Theme.secondaryInk) { PreviousYearView() }
+                                icon: "history", tint: Theme.secondaryInk) { PreviousYearView() }
                     }
 
-                    menuSection("Frequenza") {
+                    ListGroup("Frequenza") {
                         MenuRow(title: "Assenze e ritardi", subtitle: absenceSubtitle,
-                                symbol: "person.badge.clock", tint: Theme.fair,
+                                icon: "userClock", tint: Theme.fair,
                                 badge: model.unjustifiedAbsences.count) { AbsencesView() }
                     }
 
-                    menuSection("Didattica") {
+                    ListGroup("Didattica") {
                         MenuRow(title: "Materiale didattico", subtitle: "File condivisi dai docenti",
-                                symbol: "folder", tint: Theme.subjectColor(3)) { DidacticsView() }
+                                icon: "folder", tint: Theme.subject(3)) { DidacticsView() }
                         MenuRow(title: "Registro delle lezioni", subtitle: "Argomenti svolti in classe",
-                                symbol: "text.book.closed", tint: Theme.subjectColor(1)) { LessonsView() }
+                                icon: "bookText", tint: Theme.subject(1)) { LessonsView() }
                         MenuRow(title: "Agenda completa", subtitle: "Tutti i compiti e le verifiche",
-                                symbol: "checklist", tint: Theme.subjectColor(5)) { AgendaListView() }
+                                icon: "checklist", tint: Theme.subject(5)) { AgendaListView() }
                         MenuRow(title: "Materie e docenti", subtitle: "\(model.subjects.count) materie",
-                                symbol: "person.2", tint: Theme.subjectColor(2)) { SubjectsView() }
+                                icon: "users", tint: Theme.subject(2)) { SubjectsView() }
                         MenuRow(title: "Libri di testo", subtitle: "Adozioni dell'anno in corso",
-                                symbol: "books.vertical", tint: Theme.subjectColor(4)) { SchoolbooksView() }
+                                icon: "library", tint: Theme.subject(4)) { SchoolbooksView() }
                         MenuRow(title: "Calendario scolastico", subtitle: "Vacanze e giorni di lezione",
-                                symbol: "calendar.badge.clock", tint: Theme.subjectColor(7)) { SchoolCalendarView() }
+                                icon: "calendarClock", tint: Theme.subject(7)) { SchoolCalendarView() }
                     }
 
-                    menuSection("App") {
+                    ListGroup("App") {
                         MenuRow(title: "Impostazioni", subtitle: "Medie, orario, promemoria, backup",
-                                symbol: "gearshape", tint: Theme.secondaryInk) { SettingsView() }
+                                icon: "gear", tint: Theme.secondaryInk) { SettingsView() }
                     }
 
-                    footer
+                    YouFooter()
                 }
                 .pagePadding()
                 .padding(.bottom, Theme.bottomInset)
             }
+            .tracksPageScroll()
+            .scrollsToTopOnReselect()
             .themedBackground()
-            .screenTitle("Tu")
-            .inlineLargeTitleDisplay()
             .refreshable { await model.refreshAll() }
-            .toolbar {
-                ToolbarItem(placement: .trailingBar) { accountSwitcher }
+            .pageChrome("Tu") {
+                accountSwitcher
             }
             #if os(iOS)
             .sheet(isPresented: $switchingAccount) {
@@ -91,12 +93,10 @@ struct YouView: View {
     /// Cambio rapido dell'account attivo: apre lo stesso popup della scheda Tu tenuta premuta.
     /// L'icona conta solo gli account veri: la demo non è un account.
     private var accountSwitcher: some View {
-        Button {
+        BarButton(model.accounts.count > 1 ? "Cambia account" : "Aggiungi account",
+                  icon: model.accounts.count > 1 ? "users" : "userPlus") {
             switchingAccount = true
-        } label: {
-            Image(systemName: model.accounts.count > 1 ? "person.2.circle" : "person.crop.circle.badge.plus")
         }
-        .accessibilityLabel(model.accounts.count > 1 ? "Cambia account" : "Aggiungi account")
     }
 
     var stats: some View {
@@ -106,12 +106,12 @@ struct YouView: View {
         return Grid(horizontalSpacing: 10, verticalSpacing: 10) {
             GridRow {
                 StatTile(title: "Media", value: GradeFormat.average(model.gradeBook.average()),
-                         symbol: "graduationcap", tint: Theme.gradeColor(value: model.gradeBook.average()))
-                StatTile(title: "Assenze", value: "\(absences)", symbol: "person.crop.circle.badge.xmark", tint: Theme.poor)
+                         icon: "graduationCap", tint: Theme.gradeColor(value: model.gradeBook.average()), shape: .cookie9Sided)
+                StatTile(title: "Assenze", value: "\(absences)", icon: "userX", tint: Theme.poor, shape: .clover4Leaf)
             }
             GridRow {
-                StatTile(title: "Ritardi", value: "\(lates)", symbol: "clock", tint: Theme.fair)
-                StatTile(title: "Uscite", value: "\(exits)", symbol: "figure.walk.departure", tint: Theme.neutral)
+                StatTile(title: "Ritardi", value: "\(lates)", icon: "clock", tint: Theme.fair, shape: .sunny)
+                StatTile(title: "Uscite", value: "\(exits)", icon: "doorOpen", tint: Theme.neutral, shape: .cookie6Sided)
             }
         }
     }
@@ -129,11 +129,18 @@ struct YouView: View {
         let pending = model.unjustifiedAbsences.count
         return pending == 0 ? "Tutto giustificato" : "\(pending) da giustificare"
     }
+}
 
-    private var footer: some View {
+/// Piè di pagina di "Tu": logo, aggiornamento, demo.
+struct YouFooter: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
         VStack(spacing: 4) {
-            Text("BCW · Better ClasseViVa")
-                .font(.footnote.weight(.semibold))
+            BCWLogo(size: 15)
+                .padding(.bottom, 2)
+            Text("Better ClasseViVa")
+                .font(.m3(13, weight: 600))
             if let updated = model.lastUpdated {
                 Text("Aggiornato alle \(updated.time)")
             }
@@ -141,32 +148,18 @@ struct YouView: View {
                 Text("Modalità demo: i dati sono di esempio.")
             }
         }
-        .font(.footnote)
+        .font(.m3(12))
         .foregroundStyle(Theme.secondaryInk)
+        .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
-        .padding(.top, 6)
-    }
-
-    private func menuSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Eyebrow(text: title)
-                .padding(.leading, 6)
-            VStack(spacing: 0) {
-                content()
-            }
-            .background(Theme.surface, in: .rect(cornerRadius: Theme.corner, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
-                    .strokeBorder(Theme.separator.opacity(0.7), lineWidth: 0.5)
-            }
-        }
+        .padding(.top, 8)
     }
 }
 
 private struct MenuRow<Destination: View>: View {
     let title: String
     var subtitle: String?
-    let symbol: String
+    let icon: String
     var tint: Color = Theme.accent
     var badge: Int = 0
     @ViewBuilder let destination: () -> Destination
@@ -175,32 +168,9 @@ private struct MenuRow<Destination: View>: View {
         NavigationLink {
             destination()
         } label: {
-            HStack(spacing: 14) {
-                IconBadge(symbol: symbol, tint: tint)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(Theme.ink)
-                    if let subtitle {
-                        Text(subtitle)
-                            .font(.footnote)
-                            .foregroundStyle(Theme.secondaryInk)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer()
-                if badge > 0 {
-                    Pill(text: "\(badge)", filled: true, font: .caption.weight(.bold).monospacedDigit())
-                }
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Theme.secondaryInk.opacity(0.7))
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .contentShape(.rect)
+            NavigationRow(title, subtitle: subtitle, icon: icon, tint: tint, badge: badge)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.listRow)
     }
 }
 
@@ -208,36 +178,31 @@ struct ProfileCard: View {
     @Environment(AppModel.self) private var model
     /// Riempie l'altezza disponibile (su macOS, accanto alle statistiche).
     var fillsHeight = false
+    @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 16) {
-            Text(model.card?.initials ?? String(model.displayName.prefix(1)))
-                .font(.numeral(26, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 66, height: 66)
-                .background(
-                    LinearGradient(colors: [Theme.accent, Theme.accent.opacity(0.7)],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing),
-                    in: .circle
-                )
+            Avatar(initials: model.card?.initials ?? String(model.displayName.prefix(1)), size: 72,
+                   shape: .cookie12Sided, rotation: .degrees(hovering ? 30 : 0))
+                .scaleEffect(hovering ? 1.04 : 1)
             // Solo nome e scuola: la classe è nella pagina Account.
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(model.displayName)
-                    .font(.title2.weight(.semibold))
+                    .font(.m3(22, weight: 500, rounded: true))
                     .foregroundStyle(Theme.ink)
                 if let school = model.card?.schoolDescription {
                     Text([school, model.card?.schoolCity?.nameCased].compactMap { $0 }.joined(separator: " · "))
-                        .font(.footnote)
+                        .font(.m3(14))
                         .foregroundStyle(Theme.secondaryInk)
                 }
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.secondaryInk.opacity(0.7))
+            Icon("chevronRight", size: 22)
+                .foregroundStyle(Theme.secondaryInk)
         }
         .frame(maxHeight: fillsHeight ? .infinity : nil)
-        .card(padding: 18)
+        .card(radius: Theme.radii.xl)
+        .onHover { hovering in withAnimation(Motion.spatial) { self.hovering = hovering } }
     }
 }
 
@@ -272,9 +237,9 @@ private struct MacYouView: View {
                     let group = MacSection.groups[index]
                     VStack(alignment: .leading, spacing: 10) {
                         Eyebrow(text: group.title ?? "")
-                            .padding(.leading, 6)
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 270), spacing: 12, alignment: .top)],
-                                  alignment: .leading, spacing: 12) {
+                            .padding(.leading, 4)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 10, alignment: .top)],
+                                  alignment: .leading, spacing: 10) {
                             ForEach(group.sections) { section in
                                 SectionTile(section: section, subtitle: subtitle(for: section),
                                             badge: badge(for: section)) {
@@ -285,13 +250,14 @@ private struct MacYouView: View {
                     }
                 }
 
-                footer
+                YouFooter()
             }
             .pagePadding()
             .padding(.bottom, Theme.bottomInset)
         }
+        .tracksPageScroll()
         .themedBackground()
-        .screenTitle("Tu")
+        .pageChrome("Tu")
     }
 
     private func profile(fillsHeight: Bool) -> some View {
@@ -300,7 +266,7 @@ private struct MacYouView: View {
         } label: {
             ProfileCard(fillsHeight: fillsHeight)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable(radius: Theme.radii.xl, pressed: Theme.radii.l))
     }
 
     private func stats(fillsHeight: Bool) -> some View {
@@ -309,11 +275,11 @@ private struct MacYouView: View {
         let exits = model.absences.filter { $0.kind == .earlyExit }.count
         return HStack(spacing: 10) {
             StatTile(title: "Media", value: GradeFormat.average(model.gradeBook.average()),
-                     symbol: "graduationcap", tint: Theme.gradeColor(value: model.gradeBook.average()),
-                     fillsHeight: fillsHeight)
-            StatTile(title: "Assenze", value: "\(absences)", symbol: "person.crop.circle.badge.xmark", tint: Theme.poor, fillsHeight: fillsHeight)
-            StatTile(title: "Ritardi", value: "\(lates)", symbol: "clock", tint: Theme.fair, fillsHeight: fillsHeight)
-            StatTile(title: "Uscite", value: "\(exits)", symbol: "figure.walk.departure", tint: Theme.neutral, fillsHeight: fillsHeight)
+                     icon: "graduationCap", tint: Theme.gradeColor(value: model.gradeBook.average()),
+                     shape: .cookie9Sided, fillsHeight: fillsHeight)
+            StatTile(title: "Assenze", value: "\(absences)", icon: "userX", tint: Theme.poor, shape: .clover4Leaf, fillsHeight: fillsHeight)
+            StatTile(title: "Ritardi", value: "\(lates)", icon: "clock", tint: Theme.fair, shape: .sunny, fillsHeight: fillsHeight)
+            StatTile(title: "Uscite", value: "\(exits)", icon: "doorOpen", tint: Theme.neutral, shape: .cookie6Sided, fillsHeight: fillsHeight)
         }
     }
 
@@ -346,22 +312,6 @@ private struct MacYouView: View {
         default: 0
         }
     }
-
-    private var footer: some View {
-        VStack(spacing: 4) {
-            Text("BCW · Better ClasseViVa")
-                .font(.footnote.weight(.semibold))
-            if let updated = model.lastUpdated {
-                Text("Aggiornato alle \(updated.time)")
-            }
-            if model.isDemo {
-                Text("Modalità demo: i dati sono di esempio.")
-            }
-        }
-        .font(.footnote)
-        .foregroundStyle(Theme.secondaryInk)
-        .frame(maxWidth: .infinity)
-    }
 }
 
 /// Riquadro di una sezione nella pagina "Tu" su macOS.
@@ -370,39 +320,33 @@ private struct SectionTile: View {
     let subtitle: String
     let badge: Int
     let action: () -> Void
-    @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                IconBadge(symbol: section.symbol, tint: section.tint, size: 40)
-                VStack(alignment: .leading, spacing: 2) {
+                IconBadge(icon: section.icon, tint: section.tint, size: 44)
+                VStack(alignment: .leading, spacing: 0) {
                     Text(section.title)
-                        .font(.body.weight(.semibold))
+                        .font(.m3(16, weight: 600))
                         .foregroundStyle(Theme.ink)
                     Text(subtitle)
-                        .font(.footnote)
+                        .font(.m3(13))
                         .foregroundStyle(Theme.secondaryInk)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)
                 if badge > 0 {
-                    Pill(text: "\(badge)", filled: true, font: .caption.weight(.bold).monospacedDigit())
+                    Pill(text: "\(badge)", color: Theme.error, filled: true)
                 }
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Theme.secondaryInk.opacity(hovering ? 1 : 0.6))
+                Icon("chevronRight", size: 22)
+                    .foregroundStyle(Theme.secondaryInk)
             }
-            .card(padding: 14)
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
-                    .strokeBorder(section.tint.opacity(hovering ? 0.5 : 0), lineWidth: 1)
-            }
-            .contentShape(.rect(cornerRadius: Theme.corner))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.card)
         }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .animation(.snappy(duration: 0.2), value: hovering)
+        .buttonStyle(.pressable)
     }
 }
 #endif

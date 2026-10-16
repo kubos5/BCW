@@ -49,33 +49,37 @@ final class BiometricLock {
 
 struct LockView: View {
     let lock: BiometricLock
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 40) {
             Spacer()
-            Image(systemName: "lock.fill")
-                .font(.system(size: 40, weight: .semibold))
-                .foregroundStyle(Theme.accent)
-            Text("BCW è bloccata")
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(Theme.ink)
+            VStack(spacing: 16) {
+                // La forma ruota lentamente, il lucchetto al centro nel verso opposto.
+                TimelineView(.animation(paused: reduceMotion || ThemeStore.shared.motion == .reduced)) { timeline in
+                    let angle = timeline.date.timeIntervalSinceReferenceDate / 18 * 360
+                    Shaped(shape: .cookie12Sided, fill: Theme.primaryContainer, size: 112, rotation: .degrees(angle)) {
+                        Icon("lock", size: 44)
+                            .foregroundStyle(Theme.onPrimaryContainer)
+                    }
+                }
+                Text("BCW è bloccata")
+                    .font(.m3(28, weight: 500, rounded: true))
+                    .foregroundStyle(Theme.ink)
+            }
             Spacer()
             Button {
                 Task { await lock.unlock() }
             } label: {
-                Label("Sblocca con \(BiometricLock.biometryName)", systemImage: BiometricLock.biometrySymbol)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
+                Label { Text("Sblocca con \(BiometricLock.biometryName)") } icon: { Icon("lockOpen") }
             }
-            .buttonStyle(.glassProminent)
-            .controlSize(.large)
-            .frame(maxWidth: 420)
+            .buttonStyle(.m3(.filled, size: .m, wide: true))
+            .frame(maxWidth: 320)
             .padding(.horizontal, 32)
             .padding(.bottom, 40)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.ultraThinMaterial)
-        .background(Theme.background)
+        .background(Theme.surface)
         .ignoresSafeArea()
     }
 }

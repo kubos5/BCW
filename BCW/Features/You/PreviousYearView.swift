@@ -33,13 +33,18 @@ struct PreviousYearView: View {
                     documentsSection
                 }
                 .pagePadding()
-                .padding(.bottom, 24)
+                .padding(.bottom, 32)
             }
+            .tracksPageScroll()
             .themedBackground()
             #endif
         }
-        .screenTitle("Anno \(archive.title)")
-        .inlineTitleDisplay()
+        .pageChrome("Anno \(archive.title)", style: .inline) {
+            BarMenu(icon: "calendarClock", label: "Scegli l'anno") {
+                MenuPicker(title: "Anno scolastico", selection: $startYear,
+                           options: ArchiveModel.availableStartYears.map { ($0, ArchiveModel.title(startYear: $0), nil) })
+            }
+        }
         .quickLookPreview($previewURL)
         #if os(iOS)
         .sheet(isPresented: $showingWeb) {
@@ -47,20 +52,6 @@ struct PreviousYearView: View {
                 .ignoresSafeArea()
         }
         #endif
-        .toolbar {
-            ToolbarItem(placement: .trailingBar) {
-                Menu {
-                    Picker("Anno scolastico", selection: $startYear) {
-                        ForEach(ArchiveModel.availableStartYears, id: \.self) { year in
-                            Text(ArchiveModel.title(startYear: year)).tag(year)
-                        }
-                    }
-                } label: {
-                    Image(systemName: "calendar.badge.clock")
-                }
-                .accessibilityLabel("Scegli l'anno")
-            }
-        }
         .task(id: "\(model.sessionID)-\(startYear)") {
             error = nil
             await load()
@@ -72,19 +63,19 @@ struct PreviousYearView: View {
     private var webArchiveCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
-                IconBadge(symbol: "safari", tint: Theme.neutral)
-                VStack(alignment: .leading, spacing: 2) {
+                IconBadge(icon: "compass", tint: Theme.neutral)
+                VStack(alignment: .leading, spacing: 0) {
                     Text("Voti, assenze e note")
-                        .font(.headline)
+                        .font(.m3(16, weight: 550))
                         .foregroundStyle(Theme.ink)
                     Text("Disponibili sul sito di Classeviva")
-                        .font(.footnote)
+                        .font(.m3(12))
                         .foregroundStyle(Theme.secondaryInk)
                 }
             }
             Text("Classeviva non rende disponibili all'app i dati degli anni passati. Accedi al sito\(Platform.isMac ? ", che si apre nel browser," : "") e, dal menu principale, scegli \"Vai all'a.s. \(archive.title)\".")
-                .font(.subheadline)
-                .foregroundStyle(Theme.ink.opacity(0.85))
+                .font(.m3(14))
+                .foregroundStyle(Theme.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
             Button {
                 // Su macOS il sito si apre nel browser predefinito, con le sue password salvate.
@@ -94,11 +85,9 @@ struct PreviousYearView: View {
                 showingWeb = true
                 #endif
             } label: {
-                Label("Apri l'archivio di Classeviva", systemImage: "arrow.up.forward.app")
-                    .frame(maxWidth: .infinity)
+                Label { Text("Apri l'archivio di Classeviva") } icon: { Icon("externalLink") }
             }
-            .buttonStyle(.glassProminent)
-            .controlSize(.large)
+            .buttonStyle(.m3(.filled, size: .m, wide: true))
         }
         .card()
     }
@@ -110,7 +99,7 @@ struct PreviousYearView: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader("Pagelle e documenti", subtitle: "Anno scolastico \(archive.title)")
 
-            if let error { StatusBanner(message: error, symbol: "exclamationmark.triangle") }
+            if let error { StatusBanner(message: error, icon: "alertTriangle") }
 
             switch archive.state {
             case .idle, .loading:
@@ -122,7 +111,7 @@ struct PreviousYearView: View {
                     unavailable(archive.documentsError.map { "Classeviva ha risposto: \($0)" }
                                 ?? "La scuola non ha pubblicato documenti per questo anno.")
                 } else {
-                    CardGrid(minWidth: 320) {
+                    CardGrid(minWidth: 320, spacing: 12) {
                         ForEach(archive.documents) { doc in
                             DocumentButton(title: doc.title, isLoading: downloading == doc.id) {
                                 Task { await open(doc) }
@@ -135,18 +124,13 @@ struct PreviousYearView: View {
     }
 
     private func unavailable(_ message: String) -> some View {
-        ContentUnavailableView {
-            Label("Nessun documento", systemImage: "doc.text")
-        } description: {
-            Text(message)
-        } actions: {
+        EmptyState("Nessun documento", icon: "fileText", description: message) {
             Button("Riprova") {
                 _ = model.reloadArchive(for: startYear)
                 Task { await load() }
             }
-            .glassButton()
+            .buttonStyle(.m3(.tonal))
         }
-        .frame(maxWidth: .infinity)
         .card()
     }
 
@@ -173,7 +157,7 @@ struct SafariView: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> SFSafariViewController {
         let controller = SFSafariViewController(url: url)
-        controller.preferredControlTintColor = UIColor(Theme.accent)
+        controller.preferredControlTintColor = UIColor(Theme.primary)
         controller.dismissButtonStyle = .close
         return controller
     }

@@ -31,7 +31,7 @@ struct TimetableTimeline: View {
         VStack(spacing: 0) {
             if days.count > 1 {
                 header
-                Divider().overlay(Theme.separator)
+                M3Divider()
             }
             if topInset == 0,
                let unmatched = contents.first(where: { $0.day.isSameDay(as: selectedDay) })?.unmatchedTests,
@@ -109,18 +109,18 @@ struct TimetableTimeline: View {
             ForEach(days, id: \.self) { day in
                 let selected = day.isSameDay(as: selectedDay)
                 Button { onSelectDay(day) } label: {
-                    HStack(spacing: 6) {
+                    VStack(spacing: 2) {
                         Text(day.it("EEE").capitalizedFirst)
-                            .font(.subheadline)
-                            .foregroundStyle(selected ? Theme.accent : Theme.secondaryInk)
+                            .font(.m3(13))
+                            .foregroundStyle(selected ? Theme.primary : Theme.secondaryInk)
                         Text(day.it("d"))
-                            .font(.numeral(15, weight: .bold))
-                            .foregroundStyle(selected ? Color.white : (day.isToday ? Theme.accent : Theme.ink))
-                            .frame(width: 28, height: 28)
-                            .background { if selected { Circle().fill(Theme.accent.gradient) } }
+                            .font(.numeral(15))
+                            .foregroundStyle(selected ? Theme.onPrimary : (day.isToday ? Theme.primary : Theme.ink))
+                            .frame(width: 30, height: 30)
+                            .background { if selected { Circle().fill(Theme.primary) } }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 4)
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
@@ -132,15 +132,17 @@ struct TimetableTimeline: View {
     }
 
     private func unmatchedBanner(_ tests: [AgendaEvent]) -> some View {
-        Label(tests.count == 1 ? "1 verifica senza lezione in orario: \(tests[0].title)"
-              : "\(tests.count) verifiche senza lezione in orario",
-              systemImage: "exclamationmark.triangle")
-            .font(.footnote.weight(.medium))
-            .foregroundStyle(Theme.ink)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.accentSoft.opacity(0.6))
+        HStack(spacing: 12) {
+            Icon("alertTriangle", size: 20)
+            Text(tests.count == 1 ? "1 verifica senza lezione in orario: \(tests[0].title)"
+                 : "\(tests.count) verifiche senza lezione in orario")
+                .font(.m3(14))
+        }
+        .foregroundStyle(Theme.onFairContainer)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.fairContainer)
     }
 }
 
@@ -157,15 +159,15 @@ private struct HourGrid: View {
                 ForEach(0..<24, id: \.self) { hour in
                     HStack(alignment: .top, spacing: 6) {
                         Text(TimeOfDay.string(hour * 60))
-                            .font(.caption2.monospacedDigit())
+                            .font(.m3(11).monospacedDigit())
                             .foregroundStyle(Theme.secondaryInk)
                             .frame(width: TimetableTimeline.gutter - 10, alignment: .trailing)
-                            .offset(y: -7)
+                            .offset(y: -8)
                         VStack(spacing: 0) {
-                            Rectangle().fill(Theme.separator).frame(height: 0.5)
+                            Rectangle().fill(Theme.outlineVariant).frame(height: 1)
                             Spacer(minLength: 0)
                             // Mezz'ora, più leggera.
-                            Rectangle().fill(Theme.separator.opacity(0.35)).frame(height: 0.5)
+                            Rectangle().fill(Theme.outlineVariant.opacity(0.45)).frame(height: 1)
                             Spacer(minLength: 0)
                         }
                     }
@@ -177,11 +179,11 @@ private struct HourGrid: View {
                 TimelineView(.everyMinute) { context in
                     let minutes = TimeOfDay.minutes(of: context.date)
                     Text(TimeOfDay.string(minutes))
-                        .font(.caption2.weight(.bold).monospacedDigit())
-                        .foregroundStyle(.white)
+                        .font(.m3(11, weight: 700).monospacedDigit())
+                        .foregroundStyle(Theme.onPoor)
                         .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Theme.poor, in: .capsule)
+                        .padding(.vertical, 1)
+                        .background(Theme.poor, in: .rect(cornerRadius: 8, style: .continuous))
                         .frame(width: TimetableTimeline.gutter - 4, alignment: .trailing)
                         .offset(y: CGFloat(minutes) / 60 * hourHeight - 8)
                 }
@@ -208,7 +210,7 @@ private struct TimelineDayColumn: View {
             ZStack(alignment: .topLeading) {
                 // Sfondo: doppio tocco per creare un evento a quell'ora.
                 Rectangle()
-                    .fill(days.count > 1 && isSelected ? Theme.accent.opacity(0.04) : Color.clear)
+                    .fill(days.count > 1 && isSelected ? Theme.primary.opacity(0.05) : Color.clear)
                     .contentShape(.rect)
                     .onTapGesture(count: 2, coordinateSpace: .local) { location in
                         guard isEditing, !content.isDraft else { return }
@@ -244,7 +246,7 @@ private struct TimelineDayColumn: View {
                     TimelineView(.everyMinute) { context in
                         let y = CGFloat(TimeOfDay.minutes(of: context.date)) / 60 * hourHeight
                         ZStack(alignment: .leading) {
-                            Rectangle().fill(Theme.poor).frame(height: 1.5)
+                            Rectangle().fill(Theme.poor).frame(height: 2)
                             Circle().fill(Theme.poor).frame(width: 8, height: 8).offset(x: -4)
                         }
                         .offset(y: y - 0.75)
@@ -256,20 +258,21 @@ private struct TimelineDayColumn: View {
         }
         .overlay {
             if content.entries.isEmpty && days.count == 1 {
-                VStack(spacing: 6) {
+                VStack(spacing: 4) {
                     Text("Nessuna lezione il \(Weekday.name(content.day.timetableWeekday).lowercased())")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.m3(14, weight: 600))
                         .foregroundStyle(Theme.ink)
                     Text(isEditing
                          ? (Platform.isMac ? "Fai doppio clic su un'ora per aggiungere un evento."
                             : "Tocca due volte un'ora per aggiungere un evento.")
                          : "Aggiungi eventi con + o da Modifica orario.")
-                        .font(.caption)
+                        .font(.m3(12))
                         .foregroundStyle(Theme.secondaryInk)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Theme.surface.opacity(0.95), in: .rect(cornerRadius: 14, style: .continuous))
+                .multilineTextAlignment(.center)
+                .padding(14)
+                .background(Theme.surfaceContainerHigh.opacity(0.95), in: .rect(cornerRadius: 14, style: .continuous))
+                .padding(.horizontal, 12)
                 .frame(maxHeight: .infinity, alignment: .top)
                 .padding(.top, 8 * hourHeight)
                 .allowsHitTesting(false)
@@ -312,7 +315,7 @@ private struct TimelineSegment: View {
     @State private var resize: CGFloat = 0
     @State private var isLifted = false
 
-    private static let radius: CGFloat = 7
+    private static let radius: CGFloat = 8
 
     private var step: Int { entry.isBreak ? 5 : model.timetable.alignment.dragStep }
     private var isAutomatic: Bool { !entry.isBreak && model.timetable.alignment == .automatic }
@@ -353,18 +356,19 @@ private struct TimelineSegment: View {
                 if canEdit { resizeHandle }
             }
             .scaleEffect(isLifted ? 1.02 : 1)
-            .shadow(color: .black.opacity(dragging ? 0.18 : (entry.isBreak ? 0.12 : 0)), radius: dragging ? 8 : 3, y: dragging ? 4 : 1)
+            .shadow(color: Theme.shadow.opacity(dragging ? 0.22 : (entry.isBreak ? 0.12 : 0)), radius: dragging ? 8 : 2, y: dragging ? 4 : 1)
             .overlay(alignment: .topLeading) {
                 if dragging {
                     Text("\(TimeOfDay.string(preview.start))–\(TimeOfDay.string(preview.end))"
                          + (preview.dayShift != 0 ? " · \(days[dayIndex + preview.dayShift].it("EEE"))" : ""))
-                        .font(.caption2.weight(.bold).monospacedDigit())
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 6)
+                        .font(.m3(11, weight: 700).monospacedDigit())
+                        .foregroundStyle(Theme.onPrimary)
+                        .padding(.horizontal, 10)
                         .padding(.vertical, 2)
-                        .background(Theme.accent, in: .capsule)
+                        .background(Theme.primary, in: .capsule)
+                        .shadow(color: Theme.shadow.opacity(0.2), radius: 4, y: 2)
                         .fixedSize()
-                        .offset(y: -20)
+                        .offset(x: 4, y: -24)
                 }
             }
             // Tocchi e gesti vanno prima di `offset`: dopo, varrebbero per la posizione di partenza
@@ -384,8 +388,8 @@ private struct TimelineSegment: View {
             .zIndex(dragging ? 10 : 0)
             .sensoryFeedback(.selection, trigger: preview.start)
             .sensoryFeedback(.impact(weight: .medium), trigger: isLifted) { _, lifted in lifted }
-            .animation(.snappy(duration: 0.2), value: preview.start)
-            .animation(.snappy(duration: 0.2), value: preview.end)
+            .animation(Motion.spatialFast, value: preview.start)
+            .animation(Motion.spatialFast, value: preview.end)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(entry.displayTitle), \(entry.timeRange)")
             .accessibilityAddTraits(.isButton)
@@ -400,19 +404,18 @@ private struct TimelineSegment: View {
                                            style: .continuous)
         ZStack(alignment: .topLeading) {
             if entry.isBreak {
-                shape.fill(Theme.surfaceRaised)
-                shape.fill(tint.opacity(isDraft ? 0.15 : 0.32))
-                DiagonalStripes().stroke(tint.opacity(0.25), lineWidth: 3).clipShape(shape)
+                // Come `.tt-seg.break` della versione web: righe diagonali sulla tinta.
+                shape.fill(tint.mix(Theme.surfaceContainerLowest, isDraft ? 0.16 : 0.32))
+                DiagonalStripes(spacing: 10).stroke(tint.opacity(0.25), lineWidth: 3).clipShape(shape)
             } else {
-                shape.fill(Theme.surface)
-                shape.fill(tint.opacity((colorScheme == .dark ? 0.32 : 0.22) * (isDraft ? 0.5 : 1)))
+                shape.fill(tint.mix(Theme.surface, isDraft ? 0.12 : 0.24))
             }
             HStack(alignment: .top, spacing: 0) {
                 if !entry.isBreak {
                     Rectangle().fill(tint.opacity(isDraft ? 0.6 : 1)).frame(width: 3)
                 }
                 label(start: start, end: end, height: height, tint: tint)
-                    .padding(.leading, 6)
+                    .padding(.leading, entry.isBreak ? 8 : 6)
                     .padding(.trailing, 4)
                     .padding(.top, height >= 26 ? 4 : 1)
                 Spacer(minLength: 0)
@@ -443,38 +446,38 @@ private struct TimelineSegment: View {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(entry.displayTitle)
-                        .font(.caption.weight(.semibold))
+                        .font(.m3(12, weight: 650))
                         .foregroundStyle(Theme.ink)
                         .lineLimit(height >= 70 ? 2 : 1)
                     Spacer(minLength: 0)
                     icons
                 }
                 Text([time, entry.room].filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.caption2.monospacedDigit())
+                    .font(.m3(11).monospacedDigit())
                     .foregroundStyle(Theme.secondaryInk)
                     .lineLimit(1)
                 if badges.isTest && height >= 52 {
                     Text("Verifica")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(Theme.accent)
+                        .font(.m3(11, weight: 750))
+                        .foregroundStyle(Theme.primary)
                 }
             }
         } else {
             // Eventi brevi: una riga sola; se non c'è posto per l'orario resta il nome.
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     Text(entry.displayTitle)
-                        .font(.caption2.weight(.semibold))
+                        .font(.m3(12, weight: 650))
                         .foregroundStyle(Theme.ink)
                     Text(time)
-                        .font(.caption2.monospacedDigit())
+                        .font(.m3(11).monospacedDigit())
                         .foregroundStyle(Theme.secondaryInk)
                     Spacer(minLength: 0)
                     icons
                 }
                 .fixedSize()
                 Text(entry.displayTitle)
-                    .font(.caption2.weight(.semibold))
+                    .font(.m3(12, weight: 650))
                     .foregroundStyle(Theme.ink)
             }
             .lineLimit(1)
@@ -484,16 +487,15 @@ private struct TimelineSegment: View {
     private var icons: some View {
         HStack(spacing: 3) {
             if badges.isTest {
-                Image(systemName: "pencil.and.list.clipboard")
-                    .foregroundStyle(Theme.accent)
+                Icon("test", size: 14)
+                    .foregroundStyle(Theme.primary)
             }
             // Nelle colonne strette (eventi affiancati, settimana su Mac) il nome ha la precedenza.
             if width >= 100 {
-                if badges.hasNote { Image(systemName: "note.text") }
-                if badges.attachmentCount > 0 { Image(systemName: "paperclip") }
+                if badges.hasNote { Icon("note", size: 14) }
+                if badges.attachmentCount > 0 { Icon("paperclip", size: 14) }
             }
         }
-        .font(.caption2.weight(.semibold))
         .foregroundStyle(Theme.secondaryInk)
     }
 
@@ -505,7 +507,7 @@ private struct TimelineSegment: View {
             .frame(height: 12)
             .overlay(alignment: .bottom) {
                 Capsule()
-                    .fill(Theme.ink.opacity(0.35))
+                    .fill(Theme.onSurface.opacity(0.35))
                     .frame(width: 22, height: 3)
                     .padding(.bottom, 3)
             }

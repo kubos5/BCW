@@ -6,6 +6,8 @@ enum DashboardMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String { self == .list ? "Lista" : "Calendario" }
     var symbol: String { self == .list ? "list.bullet" : "calendar" }
+    /// Icona di Material Symbols.
+    var icon: String { self == .list ? "list" : "calendar" }
 }
 
 /// Vista della scheda Orario.
@@ -18,6 +20,15 @@ enum TimetableMode: String, CaseIterable, Identifiable {
         case .list: "Lista"
         case .calendar: "Calendario"
         case .day: "Giorno"
+        }
+    }
+
+    /// Icona di Material Symbols.
+    var icon: String {
+        switch self {
+        case .list: "list"
+        case .calendar: "calendar"
+        case .day: "dayView"
         }
     }
 

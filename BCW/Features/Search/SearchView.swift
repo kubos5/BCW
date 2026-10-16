@@ -13,6 +13,8 @@ struct SearchView: View {
     #if os(macOS)
     /// Altezza visibile: il contenuto la riempie, così un clic sotto i risultati cade sullo sfondo.
     @State private var viewportHeight: CGFloat = 0
+    #else
+    @FocusState private var fieldFocused: Bool
     #endif
 
     /// Risultati della ricerca, calcolati una volta per aggiornamento (a ogni lettera digitata):
@@ -50,24 +52,31 @@ struct SearchView: View {
     var body: some View {
         PlatformNavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 16) {
+                    #if os(iOS)
+                    if !ThemeStore.shared.liquidGlass {
+                        PageLargeTitle()
+                            .padding(.bottom, -4)
+                        M3SearchBar(text: $query, prompt: Self.prompt, focus: $fieldFocused)
+                            .padding(.bottom, 4)
+                    }
+                    #endif
                     if trimmed.isEmpty {
                         suggestions
                     } else {
                         let results = Results(model: model, query: trimmed)
                         if results.isEmpty {
-                            ContentUnavailableView.search(text: trimmed)
-                                .frame(maxWidth: .infinity)
-                                .padding(.top, 40)
+                            EmptyState("Nessun risultato per \"\(trimmed)\"", icon: "search",
+                                       description: "Controlla l'ortografia o prova con un'altra ricerca.")
                         } else {
-                            CardGrid(minWidth: 400, spacing: 20) {
+                            CardGrid(minWidth: 400, spacing: 12) {
                                 resultCards(results)
                             }
                         }
                     }
                 }
                 .pagePadding()
-                .padding(.bottom, 24)
+                .padding(.bottom, 32)
                 #if os(macOS)
                 // Un clic su un'area vuota (non sui risultati o sui suggerimenti, che stanno
                 // davanti e lo coprono) toglie la selezione al campo di ricerca della barra.
@@ -84,12 +93,12 @@ struct SearchView: View {
                 viewportHeight = height
             }
             #endif
+            .tracksPageScroll()
+            .scrollDismissesKeyboard(.immediately)
             .themedBackground()
-            .screenTitle("Cerca")
+            .pageChrome("Cerca")
             #if os(iOS)
-            .searchable(text: $query, prompt: Self.prompt)
-            // Con la tastiera aperta il titolo "Cerca" resta visibile.
-            .searchPresentationToolbarBehavior(.avoidHidingContent)
+            .modifier(SystemSearch(query: $query))
             #endif
             .task { if model.didactics.isEmpty { await model.loadDidactics() } }
         }
@@ -100,6 +109,9 @@ struct SearchView: View {
             SectionHeader("Suggerimenti")
             FlowChips(items: ["Verifica", "Interrogazione"] + Array(Set(model.grades.map(\.subjectName))).sorted().prefix(8)) {
                 query = $0
+                #if os(iOS)
+                fieldFocused = true
+                #endif
             }
         }
     }
@@ -117,7 +129,7 @@ struct SearchView: View {
             group("Agenda", count: agenda.count) {
                 ForEach(shown) { event in
                     AgendaEventRow(event: event, showsDate: true)
-                    if event.id != lastID { Divider().overlay(Theme.separator) }
+                    if event.id != lastID { M3Divider() }
                 }
             }
         }
@@ -129,7 +141,7 @@ struct SearchView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             SubjectTag(name: grade.subjectName, id: grade.subjectId)
                             Text("\(grade.kind) · \(grade.date.shortDay)\(grade.notes.map { " · \($0)" } ?? "")")
-                                .font(.caption)
+                                .font(.m3(12))
                                 .foregroundStyle(Theme.secondaryInk)
                                 .lineLimit(2)
                         }
@@ -142,19 +154,24 @@ struct SearchView: View {
                 ForEach(notices.prefix(10)) { notice in
                     NavigationLink {
                         NoticeDetailView(notice: notice)
-                            .pushedPageTitle("Comunicazione")
+                            .pageChrome(Platform.isMac ? "Comunicazione" : "", style: .inline)
                     } label: {
-                        HStack {
+                        HStack(spacing: 12) {
                             Text(notice.title)
+                                .font(.m3(15))
                                 .foregroundStyle(Theme.ink)
                                 .multilineTextAlignment(.leading)
                             Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
+                            Icon("chevronRight", size: 22)
                                 .foregroundStyle(Theme.secondaryInk)
                         }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .frame(minHeight: 44)
+                        .contentShape(.rect)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable(radius: Theme.radii.m, pressed: Theme.radii.m))
+                    .padding(.horizontal, -8)
                 }
             }
         }
@@ -164,26 +181,31 @@ struct SearchView: View {
                     NavigationLink {
                         DidacticsView()
                     } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: content.symbol).foregroundStyle(Theme.accent).frame(width: 24)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(content.name).foregroundStyle(Theme.ink)
-                                Text(teacher.name).font(.caption).foregroundStyle(Theme.secondaryInk)
+                        HStack(spacing: 12) {
+                            Icon(content.icon).foregroundStyle(Theme.primary)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(content.name).font(.m3(15)).foregroundStyle(Theme.ink)
+                                Text(teacher.name).font(.m3(12)).foregroundStyle(Theme.secondaryInk)
                             }
                             Spacer()
                         }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .frame(minHeight: 44)
+                        .contentShape(.rect)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable(radius: Theme.radii.m, pressed: Theme.radii.m))
+                    .padding(.horizontal, -8)
                 }
             }
         }
         if !notes.isEmpty {
             group("Note", count: notes.count) {
                 ForEach(notes.prefix(10)) { note in
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(note.text).foregroundStyle(Theme.ink)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(note.text).font(.m3(15)).foregroundStyle(Theme.ink)
                         Text("\(note.category.singular) · \(note.date.shortDay)")
-                            .font(.caption)
+                            .font(.m3(12))
                             .foregroundStyle(Theme.secondaryInk)
                     }
                 }
@@ -194,10 +216,10 @@ struct SearchView: View {
     private func group<Content: View>(_ title: String, count: Int, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Eyebrow(text: title, color: Theme.accent)
+                Eyebrow(text: title, color: Theme.primary)
                 Spacer()
                 Text("\(count)")
-                    .font(.caption.monospacedDigit())
+                    .font(.m3(12).monospacedDigit())
                     .foregroundStyle(Theme.secondaryInk)
             }
             content()
@@ -205,6 +227,25 @@ struct SearchView: View {
         .card()
     }
 }
+
+#if os(iOS)
+/// Con Liquid Glass il campo di ricerca è quello di sistema (nella barra delle schede);
+/// altrimenti è la barra di ricerca di Material 3 nel contenuto.
+private struct SystemSearch: ViewModifier {
+    @Binding var query: String
+
+    func body(content: Content) -> some View {
+        if ThemeStore.shared.liquidGlass {
+            content
+                .searchable(text: $query, prompt: SearchView.prompt)
+                // Con la tastiera aperta il titolo "Cerca" resta visibile.
+                .searchPresentationToolbarBehavior(.avoidHidingContent)
+        } else {
+            content
+        }
+    }
+}
+#endif
 
 /// Chip che vanno a capo automaticamente.
 struct FlowChips: View {

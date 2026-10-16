@@ -25,9 +25,11 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   conferma, poi vengono allineati (quelli più lunghi di un'ora divisi in eventi uguali di seguito).
 - **Tu**: overview account + tutte le altre funzioni: bacheca, scrutini, assenze e ritardi, note disciplinari e
   annotazioni, file docenti (cartelle, filtrabili per docente), anno precedente, funzioni minori.
-- **UI**: componenti nativi per elementi base (pulsanti, nav bar **Liquid Glass** nativa); font **New York**
-  (serif di Apple) ovunque; sfondo scuro = **grigio scuro, non nero**; sfondo chiaro = **bianco crema, non bianco**;
-  il resto curato e coerente. L'utente gradisce funzioni extra utili.
+- **UI**: stile **Material 3 Expressive** come la versione web (https://kubos5.github.io/BCW-web, stesso layout,
+  stessi colori e font Google Sans Flex, stessa pagina Aspetto), ma sempre SwiftUI nativo; forme con **supercerchi**
+  (angoli continui); feedback aptico su iOS. In Impostazioni › Aspetto c'è "Liquid Glass: sì/no": con "no" tutto è
+  come sul web; con "sì" barra di navigazione, barra delle schede e pulsanti dei menu sono quelli di sistema in vetro.
+  L'utente gradisce funzioni extra utili.
 
 ## Stato attuale
 - Il progetto compila e gira sul simulatore. `xcode-select` punta ai Command Line Tools, quindi per compilare da
@@ -103,10 +105,10 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   della ricerca generale: campo `.searchable` sulla split view; selezionarlo o scrivere apre `SearchView` nel dettaglio,
   `nav.show(_:)` torna a una sezione chiudendo la ricerca, ⌘F la attiva), finestra `Window` singola + scena `Settings`
   (`MacSettingsView` a schede, con le stesse sezioni di `SettingsView`).
-- Barra della finestra su macOS, costruita in modo standard (niente colori, misure o allineamenti personalizzati):
-  titolo in New York a sinistra, pulsanti della pagina a destra, poi Aggiorna e infine la ricerca (che diventa
+- Barra della finestra su macOS con Liquid Glass (con Material 3 la barra è nascosta, vedi "Sistema di design"), costruita in modo standard (niente colori, misure o allineamenti personalizzati):
+  titolo a sinistra, pulsanti della pagina a destra, poi Aggiorna e infine la ricerca (che diventa
   un'icona da sola quando manca spazio). Come è fatta:
-  - `screenTitle` mette il titolo (etichetta in New York in `.navigation`, il titolo di sistema è tolto) e Aggiorna.
+  - `screenTitle` mette il titolo (etichetta in `.navigation`, il titolo di sistema è tolto) e Aggiorna.
     Ogni pagina della finestra principale ce l'ha, comprese quelle aperte da un'altra (per quelle che su iOS non hanno
     titolo c'è `pushedPageTitle`).
   - La barra mette prima gli elementi dei modificatori più esterni (verificato): `screenTitle` va applicato prima
@@ -152,8 +154,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   su iPhone il trascinamento usa `LongPressDragRecognizer` (UIKit): quelli di SwiftUI perdevano contro lo scorrimento.
   `fileImporter` chiude il selettore (e il suo `isPresented`) prima di consegnare i file: lo stato che serve dopo va
   tenuto a parte. Su macOS i file scelti dall'utente richiedono `ENABLE_USER_SELECTED_FILES = readwrite`.
-- `Theme/Theme.swift`: palette (crema `#F7F2E8` / grafite `#1E1D1C`, accento `#A23E2F`), font New York anche
-  nella UINavigationBar, modificatore `.card()`.
+- `Theme/Theme.swift`: ruoli di colore Material letti da `ThemeStore` (alias `background`/`card`/`ink`…), toni fissi
+  dei voti, colori delle materie (`subjectColor`), modificatore `.card()`.
 - `Features/`: Dashboard, Timetable, Grades, You (sottosezioni), Search, Settings, Login.
 
 ## API Classeviva
@@ -284,6 +286,29 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   cambiare il margine (che faceva rimisurare tutte le pagine dei mesi a ogni fotogramma).
 - Per misurare: build Release del Mac con `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG`, un aggancio temporaneo che ripete
   l'interazione e `sample <pid> 8`, poi sommare i campioni per funzione dell'app.
+
+## Sistema di design (Material 3 Expressive, `BCW/Design/`)
+- `ThemeStore.shared` (`@Observable`): preferenze di Aspetto (accento, stile dei colori, contrasto, angoli, movimento,
+  testo arrotondato, `liquidGlass`) e ruoli di colore. Le viste che leggono `Theme.x` si aggiornano da sole.
+  I colori si generano come sul web: JavaScriptCore esegue `Resources/Scripts/material-color-utilities.js` e
+  `bcw-theme.js` (`BCWTheme.build`/`swatch`), risultato in cache in UserDefaults (`themeCache`). In `init` non
+  configurare le barre di sistema (ricorsione su `ThemeStore.shared` → crash all'avvio).
+- Font: `Resources/Fonts/GoogleSansFlex.ttf` (assi wght, opsz, ROND via CoreText), `Font.m3(size, weight:)`,
+  `Font.m3(role)`, `Font.numeral`. Icone: Material Symbols Rounded come SVG template `m.<nome>` in
+  `Assets.xcassets/Material` (`Icon`, `Image.m`, `Label(_:icon:)`). Forme: `MaterialShape`/`Shaped`, `LoadingIndicator`.
+- Componenti: `Controls.swift` (`.m3(...)` pulsanti, `IconButton`, `FAB`, `SegmentedButtons`, `FilterChip`, `Pill`,
+  `M3ToggleStyle`, `M3Stepper`, `M3SearchBar`), `Lists.swift` (`ListGroup` con angoli per cella, `ListRow`,
+  `ToggleRow`, `SelectRow`, `NavigationRow`…), `Overlays.swift` (`.overlayHost()`: menu `AppMenu`/`MenuItem`,
+  `.m3Dialog`, toast; con Liquid Glass i menu sono `Menu` di sistema), `Page.swift`.
+- Pagine: `pageChrome(title, …) { azioni }`. Con Liquid Glass usa titolo e barra di sistema (`.inlineLarge` per le
+  pagine principali, `isRootPage`); con Material nasconde la barra e mette `TopAppBar` + titolo grande nel contenuto.
+  Fogli: `sheetChrome` + `.m3Sheet()`. `MainTabView`: con Material la `M3NavigationBar` è sovrapposta (TabView e
+  NavigationStack non propagano `safeAreaInset`), lo spazio in fondo arriva con `bottomBarInset`.
+- Mac con Material: `MacMaterialRootView` (barra laterale `MaterialRail` comprimibile, pannello con angoli, ricerca
+  `M3SearchBar` in alto a destra, barra della finestra nascosta); con Liquid Glass `MacGlassRootView`.
+- Argomenti di prova: `-BCWLiquidGlass YES|NO`, `-BCWAccent #RRGGBB`. Per le foto del Mac senza sandbox servono
+  anche `-BCWKeychainService <nome>` (altrimenti il Portachiavi chiede l'accesso e l'app resta ferma).
+- Sul simulatore i tocchi istantanei spesso non premono i pulsanti SwiftUI: usare `touch_path` da 120–150 ms.
 
 ## Convenzioni
 - Testi UI e commenti in italiano. Stile: card, `Eyebrow`, `FilterChip`, `StatTile`, `GradeBadge`, `AverageRing`,

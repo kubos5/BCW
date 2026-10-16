@@ -33,6 +33,38 @@ enum MacSection: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Icona di Material Symbols (come la barra laterale della versione web).
+    var icon: String {
+        switch self {
+        case .dashboard: "dashboard"
+        case .timetable: "timetable"
+        case .grades: "grades"
+        case .you: "you"
+        case .noticeboard: "megaphone"
+        case .notes: "messageAlert"
+        case .reports: "fileSearch"
+        case .previousYears: "history"
+        case .absences: "userClock"
+        case .didactics: "folder"
+        case .lessons: "bookText"
+        case .agenda: "checklist"
+        case .subjects: "users"
+        case .schoolbooks: "library"
+        case .schoolCalendar: "calendarClock"
+        }
+    }
+
+    /// Icona piena della sezione scelta (solo per le schede principali).
+    var selectedIcon: String {
+        switch self {
+        case .dashboard: "dashboardFill"
+        case .timetable: "timetableFill"
+        case .grades: "gradesFill"
+        case .you: "youFill"
+        default: icon
+        }
+    }
+
     var symbol: String {
         switch self {
         case .dashboard: "calendar.day.timeline.left"
@@ -56,17 +88,17 @@ enum MacSection: String, CaseIterable, Identifiable {
     /// Stessi colori delle righe di "Tu" su iOS.
     var tint: Color {
         switch self {
-        case .dashboard, .timetable, .grades, .you, .noticeboard: Theme.accent
+        case .dashboard, .timetable, .grades, .you, .noticeboard: Theme.primary
         case .notes: Theme.poor
         case .reports: Theme.neutral
         case .previousYears: Theme.secondaryInk
         case .absences: Theme.fair
-        case .didactics: Theme.subjectColor(3)
-        case .lessons: Theme.subjectColor(1)
-        case .agenda: Theme.subjectColor(5)
-        case .subjects: Theme.subjectColor(2)
-        case .schoolbooks: Theme.subjectColor(4)
-        case .schoolCalendar: Theme.subjectColor(7)
+        case .didactics: Theme.subject(3)
+        case .lessons: Theme.subject(1)
+        case .agenda: Theme.subject(5)
+        case .subjects: Theme.subject(2)
+        case .schoolbooks: Theme.subject(4)
+        case .schoolCalendar: Theme.subject(7)
         }
     }
 
@@ -128,6 +160,19 @@ final class MacNavigation {
 // MARK: - Finestra principale
 
 struct MacRootView: View {
+    var body: some View {
+        // Con Liquid Glass la finestra di sistema (barra laterale, barra della finestra con la
+        // ricerca); altrimenti la finestra di Material 3, come la versione web su schermi larghi.
+        if ThemeStore.shared.liquidGlass {
+            MacGlassRootView()
+        } else {
+            MacMaterialRootView()
+        }
+    }
+}
+
+/// Finestra con Liquid Glass: `NavigationSplitView` con la barra laterale e la barra della finestra.
+private struct MacGlassRootView: View {
     @Environment(AppModel.self) private var model
     @Environment(MacNavigation.self) private var nav
     #if DEBUG
@@ -146,6 +191,7 @@ struct MacRootView: View {
         } detail: {
             NavigationStack {
                 MacDetailView(section: nav.section, isSearching: nav.isSearching)
+                    .environment(\.isRootPage, true)
             }
             // Separa il titolo, a sinistra, dai pulsanti a destra. Sta sulla pila, così vale
             // anche per le pagine aperte da un'altra.
@@ -167,44 +213,327 @@ struct MacRootView: View {
         // la pagina di ricerca; si chiude uscendo dal campo vuoto o scegliendo una sezione.
         .searchable(text: $nav.searchQuery, placement: .toolbar, prompt: SearchView.prompt)
         .searchFocused($searchFocused)
-        .onChange(of: searchFocused) { _, focused in
-            if focused {
-                nav.isSearching = true
-            } else if nav.searchQuery.isEmpty {
-                nav.isSearching = false
-            }
-        }
-        .onChange(of: nav.searchEndRequest) {
-            nav.searchQuery = ""
-            searchFocused = false
-            nav.isSearching = false
-        }
-        .onChange(of: nav.searchQuery) { _, query in
-            if !query.isEmpty {
-                nav.isSearching = true
-            } else if !searchFocused {
-                nav.isSearching = false  // campo svuotato fuori dalla ricerca
-            }
-        }
-        .onChange(of: nav.searchFocusRequest) { searchFocused = true }
+        .modifier(GlobalSearchBehavior(searchFocused: $searchFocused))
         .frame(minWidth: 860, minHeight: 580)
         #if DEBUG
         .task { DebugSnapshots.runIfRequested(nav: nav, openSettings: openSettings) }
         #endif
-        .sheet(isPresented: $nav.addingAccount) {
-            AddAccountSheet()
+        .modifier(MacWindowSheets())
+    }
+}
+
+/// Apertura e chiusura della ricerca generale, comune alle due finestre.
+private struct GlobalSearchBehavior: ViewModifier {
+    @Environment(MacNavigation.self) private var nav
+    var searchFocused: FocusState<Bool>.Binding
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: searchFocused.wrappedValue) { _, focused in
+                if focused {
+                    nav.isSearching = true
+                } else if nav.searchQuery.isEmpty {
+                    nav.isSearching = false
+                }
+            }
+            .onChange(of: nav.searchEndRequest) {
+                nav.searchQuery = ""
+                searchFocused.wrappedValue = false
+                nav.isSearching = false
+            }
+            .onChange(of: nav.searchQuery) { _, query in
+                if !query.isEmpty {
+                    nav.isSearching = true
+                } else if !searchFocused.wrappedValue {
+                    nav.isSearching = false  // campo svuotato fuori dalla ricerca
+                }
+            }
+            .onChange(of: nav.searchFocusRequest) { searchFocused.wrappedValue = true }
+    }
+}
+
+/// Fogli e dialoghi della finestra: aggiunta di un account, uscita.
+private struct MacWindowSheets: ViewModifier {
+    @Environment(AppModel.self) private var model
+    @Environment(MacNavigation.self) private var nav
+
+    func body(content: Content) -> some View {
+        @Bindable var nav = nav
+        content
+            .sheet(isPresented: $nav.addingAccount) {
+                AddAccountSheet { nav.addingAccount = false }
+            }
+            .m3Dialog(model.isDemo ? "Vuoi uscire dalla demo?" : "Vuoi uscire da \(model.displayName)?",
+                      isPresented: $nav.confirmingSignOut,
+                      message: model.isDemo ? model.demoExitMessage
+                      : "Le credenziali di questo account verranno rimosse da questo Mac.") {
+                [.cancel(), DialogAction(title: "Esci", style: .destructive) { model.signOut() }]
+            }
+    }
+}
+
+// MARK: - Finestra di Material 3
+
+/// Finestra senza Liquid Glass, come la versione web su schermi larghi: barra laterale espansa
+/// (riducibile a sole icone) sul colore `surface-container`, la pagina in un pannello con gli
+/// angoli extra large e la ricerca generale in alto a destra. La barra della finestra di sistema
+/// è nascosta: restano solo i pulsanti a semaforo, sopra la barra laterale.
+private struct MacMaterialRootView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(MacNavigation.self) private var nav
+    #if DEBUG
+    @Environment(\.openSettings) private var openSettings
+    #endif
+    @FocusState private var searchFocused: Bool
+    @AppStorage("macRailCollapsed") private var railCollapsed = false
+
+    private static let searchWidth: CGFloat = 300
+
+    var body: some View {
+        @Bindable var nav = nav
+
+        HStack(spacing: 0) {
+            MaterialRail(collapsed: $railCollapsed)
+            NavigationStack {
+                MacDetailView(section: nav.section, isSearching: nav.isSearching)
+                    .environment(\.isRootPage, true)
+            }
+            .id(nav.isSearching ? "ricerca" : nav.section.rawValue)
+            .background(Theme.surface)
+            .clipShape(.rect(cornerRadius: Theme.radii.xl, style: .continuous))
+            .padding([.vertical, .trailing], 8)
+            .overlay(alignment: .topTrailing) {
+                M3SearchBar(text: $nav.searchQuery, prompt: SearchView.prompt, height: 48, focus: $searchFocused)
+                    .frame(width: Self.searchWidth)
+                    .padding(.top, 20)
+                    .padding(.trailing, 28)
+                    .onExitCommand {
+                        nav.searchEndRequest += 1
+                    }
+            }
         }
-        .alert(signOutTitle, isPresented: $nav.confirmingSignOut) {
-            Button("Esci", role: .destructive) { model.signOut() }
-            Button("Annulla", role: .cancel) {}
-        } message: {
-            Text(model.isDemo ? model.demoExitMessage
-                 : "Le credenziali di questo account verranno rimosse da questo Mac.")
+        .background(Theme.surfaceContainer)
+        .ignoresSafeArea(.container, edges: .top)
+        .toolbar(removing: .title)
+        .toolbarVisibility(.hidden, for: .windowToolbar)
+        .modifier(GlobalSearchBehavior(searchFocused: $searchFocused))
+        .frame(minWidth: 860, minHeight: 580)
+        .onAppear { MacChrome.searchReserve = Self.searchWidth + 44 }
+        #if DEBUG
+        .task { DebugSnapshots.runIfRequested(nav: nav, openSettings: openSettings) }
+        #endif
+        .modifier(MacWindowSheets())
+    }
+}
+
+/// Barra laterale di Material 3 (navigation drawer): sezioni in gruppi con l'indicatore a pillola
+/// e l'account in fondo. Ridotta, solo icone con le etichette sotto (navigation rail).
+private struct MaterialRail: View {
+    @Environment(AppModel.self) private var model
+    @Environment(MacNavigation.self) private var nav
+    @Environment(\.openSettings) private var openSettings
+    @Binding var collapsed: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // In alto a sinistra ci sono i pulsanti a semaforo della finestra.
+            HStack(spacing: 8) {
+                IconButton(collapsed ? "sidebar" : "menuOpen",
+                           label: collapsed ? "Espandi la barra laterale" : "Riduci la barra laterale") {
+                    withAnimation(Motion.spatial) { collapsed.toggle() }
+                }
+                if !collapsed {
+                    BCWLogo(size: 20)
+                        .transition(.opacity)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, collapsed ? 24 : 4)
+            .padding(.top, 40)
+            .padding(.bottom, 8)
+            .frame(height: 96, alignment: .bottom)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(MacSection.groups.indices, id: \.self) { index in
+                        let group = MacSection.groups[index]
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let title = group.title {
+                                if collapsed {
+                                    if index > 0 { M3Divider().padding(.horizontal, 16).padding(.vertical, 8) }
+                                } else {
+                                    Text(title)
+                                        .font(.m3(14, weight: 600))
+                                        .foregroundStyle(Theme.onSurfaceVariant)
+                                        .lineLimit(1)
+                                        .padding(.horizontal, 16)
+                                        .padding(.top, 16)
+                                        .padding(.bottom, 6)
+                                }
+                            }
+                            ForEach(group.sections) { section in
+                                RailItem(section: section, selected: !nav.isSearching && nav.section == section,
+                                         badge: badge(for: section), collapsed: collapsed) {
+                                    nav.show(section)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.bottom, 8)
+            }
+            .scrollIndicators(.hidden)
+
+            accountButton
+                .padding(.top, 8)
         }
+        .padding(.horizontal, collapsed ? 8 : 12)
+        .padding(.bottom, 12)
+        .frame(width: collapsed ? 96 : 264)
+        .background(Theme.surfaceContainer)
     }
 
-    private var signOutTitle: String {
-        model.isDemo ? "Vuoi uscire dalla demo?" : "Vuoi uscire da \(model.displayName)?"
+    private var accountButton: some View {
+        AppMenu(alignment: .leading) {
+            MenuSection("Account") {
+                ForEach(model.accounts) { account in
+                    let isActive = !model.isDemo && account.id == model.activeAccountID
+                    MenuItem(account.name, subtitle: account.school, checked: isActive) {
+                        withAnimation { model.switchAccount(to: account.id) }
+                    }
+                    .disabled(isActive)
+                }
+                if model.isDemo {
+                    MenuItem("Demo", checked: true) {}
+                }
+            }
+            MenuItem("Aggiungi account…", icon: "userPlus") { nav.addingAccount = true }
+            if !model.isDemo {
+                MenuItem("Prova la demo", icon: "sparkles") { withAnimation { model.startDemo() } }
+            }
+            MenuDivider()
+            MenuItem("Il tuo profilo", icon: "you") { nav.show(.you) }
+            MenuItem("Impostazioni…", icon: "gear") { openSettings() }
+            MenuDivider()
+            MenuItem(model.isDemo ? "Esci dalla demo…" : "Esci da questo account…", icon: "logout", role: .destructive) {
+                nav.confirmingSignOut = true
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Avatar(initials: model.card?.initials ?? String(model.displayName.prefix(1)), size: 40, shape: .cookie9Sided)
+                if !collapsed {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.displayName)
+                            .font(.m3(14, weight: 600))
+                            .foregroundStyle(Theme.ink)
+                            .lineLimit(1)
+                        Text(subtitle)
+                            .font(.m3(12))
+                            .foregroundStyle(Theme.onSurfaceVariant)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    Icon("chevronUpDown", size: 18)
+                        .foregroundStyle(Theme.onSurfaceVariant)
+                }
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, collapsed ? 8 : 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: collapsed ? .center : .leading)
+            .background(collapsed ? .clear : Theme.surfaceContainerHigh)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.pressable(radius: Theme.radii.xl, pressed: Theme.radii.l))
+        .help("Account")
+    }
+
+    private var subtitle: String {
+        if model.isDemo { return "Modalità demo" }
+        return model.classDescription?.sentenceCased ?? model.card?.schoolDescription ?? "Classeviva"
+    }
+
+    private func badge(for section: MacSection) -> Int {
+        switch section {
+        case .noticeboard: model.unreadNoticesCount
+        case .notes: model.notes.filter { !$0.isRead }.count
+        case .absences: model.unjustifiedAbsences.count
+        default: 0
+        }
+    }
+}
+
+/// Voce della barra laterale: icona (piena se scelta), titolo e conteggio; scelta, la pillola nel
+/// contenitore secondario.
+private struct RailItem: View {
+    let section: MacSection
+    let selected: Bool
+    let badge: Int
+    let collapsed: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if collapsed {
+                    VStack(spacing: 4) {
+                        ZStack {
+                            Capsule(style: .continuous)
+                                .fill(Theme.secondaryContainer)
+                                .opacity(selected ? 1 : 0)
+                                .scaleEffect(x: selected ? 1 : 0.6)
+                            Capsule(style: .continuous)
+                                .fill(Theme.onSurfaceVariant.opacity(hovering && !selected ? 0.08 : 0))
+                            Icon(selected ? section.selectedIcon : section.icon)
+                            if badge > 0 {
+                                CountBadge(count: badge).offset(x: 13, y: -10)
+                            }
+                        }
+                        .frame(width: 56, height: 32)
+                        Text(section.title)
+                            .font(.m3(12, weight: selected ? 750 : 550))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                    .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity)
+                } else {
+                    HStack(spacing: 4) {
+                        Icon(selected ? section.selectedIcon : section.icon)
+                            .frame(width: 52, height: 32)
+                        Text(section.title)
+                            .font(.m3(14, weight: selected ? 750 : 550))
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if badge > 0 {
+                            Text("\(badge)")
+                                .font(.m3(12, weight: 650))
+                                .monospacedDigit()
+                                .padding(.horizontal, 10)
+                        }
+                    }
+                    .padding(.trailing, 4)
+                    .frame(height: 48)
+                    .background {
+                        Capsule(style: .continuous)
+                            .fill(Theme.secondaryContainer)
+                            .opacity(selected ? 1 : 0)
+                            .scaleEffect(x: selected ? 1 : 0.7, anchor: .leading)
+                        Capsule(style: .continuous)
+                            .fill(Theme.onSurfaceVariant.opacity(hovering && !selected ? 0.08 : 0))
+                    }
+                }
+            }
+            .foregroundStyle(selected ? Theme.onSecondaryContainer : Theme.onSurfaceVariant)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(Motion.spatial, value: selected)
+        .animation(Motion.effectsFast, value: hovering)
+        .help(section.shortcut.map { "\(section.title) (⌘\(String($0.character)))" } ?? section.title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -290,23 +619,6 @@ struct WindowBarScrollObserver: NSViewRepresentable {
     }
 }
 
-/// Foglio per aggiungere un account, con le dimensioni adatte a macOS.
-struct AddAccountSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            LoginView(isAddingAccount: true)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Annulla") { dismiss() }
-                    }
-                }
-        }
-        .sheetFrame(width: 480, height: 600)
-    }
-}
-
 private struct MacDetailView: View {
 
     @Environment(AppModel.self) private var model
@@ -357,9 +669,11 @@ struct RefreshButton: View {
             Task { await model.refreshAll() }
         } label: {
             if model.isRefreshing {
-                ProgressView().controlSize(.small)
+                LoadingIndicator(size: 20)
             } else {
-                Label("Aggiorna", systemImage: "arrow.clockwise")
+                Label { Text("Aggiorna") } icon: {
+                    ThemeStore.shared.liquidGlass ? AnyView(Image.m("refresh")) : AnyView(Icon("refresh"))
+                }
             }
         }
         .disabled(model.isRefreshing)
@@ -397,7 +711,7 @@ private struct MacSidebar: View {
 
     private func rows(_ sections: [MacSection]) -> some View {
         ForEach(sections) { section in
-            Label(section.title, systemImage: section.symbol)
+            Label { Text(section.title) } icon: { Image.m(section.icon) }
                 .badge(badge(for: section))
                 .listItemTint(section.tint)
                 .tag(section)
@@ -423,35 +737,31 @@ private struct SidebarAccountMenu: View {
         Menu {
             AccountMenuItems { nav.addingAccount = true }
             Divider()
-            Button("Il tuo profilo", systemImage: "person.crop.circle") { nav.show(.you) }
+            Button { nav.show(.you) } label: { Label("Il tuo profilo", icon: "you") }
             SettingsLink {
-                Label("Impostazioni…", systemImage: "gearshape")
+                Label("Impostazioni…", icon: "gear")
             }
             Divider()
-            Button(model.isDemo ? "Esci dalla demo…" : "Esci da questo account…",
-                   systemImage: "rectangle.portrait.and.arrow.right") {
+            Button {
                 nav.confirmingSignOut = true
+            } label: {
+                Label(model.isDemo ? "Esci dalla demo…" : "Esci da questo account…", icon: "logout")
             }
         } label: {
             HStack(spacing: 10) {
-                Text(model.card?.initials ?? String(model.displayName.prefix(1)))
-                    .font(.numeral(14, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-                    .background(Theme.accent.gradient, in: .circle)
+                Avatar(initials: model.card?.initials ?? String(model.displayName.prefix(1)), size: 32, shape: .cookie9Sided)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(model.displayName)
-                        .font(.callout.weight(.semibold))
+                        .font(.m3(14, weight: 600))
                         .foregroundStyle(Theme.ink)
                         .lineLimit(1)
                     Text(subtitle)
-                        .font(.caption)
+                        .font(.m3(12))
                         .foregroundStyle(Theme.secondaryInk)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption.weight(.semibold))
+                Icon("chevronUpDown", size: 18)
                     .foregroundStyle(Theme.secondaryInk)
             }
             .padding(8)

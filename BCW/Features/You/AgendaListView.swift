@@ -27,14 +27,10 @@ struct AgendaListView: View {
         let grouped = grouped
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                PageSearchBar(text: $search, prompt: Self.searchPrompt)
                 HStack(spacing: 12) {
-                    Picker("Periodo", selection: $showPast) {
-                        Text("In arrivo").tag(false)
-                        Text("Passati").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .compactOnMac()
+                    SegmentedButtons(selection: $showPast, options: [(false, "In arrivo", nil), (true, "Passati", nil)],
+                                     compact: Platform.isMac)
                     #if os(macOS)
                     Spacer(minLength: 0)
                     LocalSearchField(text: $search, prompt: Self.searchPrompt)
@@ -42,30 +38,27 @@ struct AgendaListView: View {
                 }
 
                 ChipRow {
-                    FilterChip(title: "Da fare", symbol: "circle", isSelected: onlyPending) { onlyPending.toggle() }
+                    FilterChip(title: "Da fare", icon: "circle", isSelected: onlyPending) { onlyPending.toggle() }
                     FilterChip(title: "Tutto", isSelected: kind == nil) { kind = nil }
                     ForEach(AgendaEvent.Kind.allCases) { k in
-                        FilterChip(title: k.title, symbol: k.symbol, isSelected: kind == k) {
+                        FilterChip(title: k.title, icon: k.icon, isSelected: kind == k) {
                             kind = kind == k ? nil : k
                         }
                     }
                 }
 
                 if grouped.isEmpty {
-                    ContentUnavailableView("Niente da mostrare", systemImage: "checklist",
-                                           description: Text("Nessun elemento corrisponde ai filtri."))
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 30)
+                    EmptyState("Niente da mostrare", icon: "checklist", description: "Nessun elemento corrisponde ai filtri.")
                 }
 
-                CardGrid(minWidth: 380, spacing: 14) {
+                CardGrid(minWidth: 380, spacing: 12) {
                     ForEach(grouped, id: \.0) { day, events in
                         VStack(alignment: .leading, spacing: 12) {
-                            Eyebrow(text: day.relativeDayName, color: Theme.accent)
+                            Eyebrow(text: day.relativeDayName, color: Theme.primary)
                             let lastID = events.last?.id
                             ForEach(events) { event in
                                 AgendaEventRow(event: event)
-                                if event.id != lastID { Divider().overlay(Theme.separator) }
+                                if event.id != lastID { M3Divider() }
                             }
                         }
                         .card()
@@ -73,13 +66,21 @@ struct AgendaListView: View {
                 }
             }
             .pagePadding()
-            .padding(.bottom, 24)
-            .animation(.snappy, value: kind)
-            .animation(.snappy, value: showPast)
+            .padding(.bottom, 32)
+            .animation(Motion.spatial, value: kind)
+            .animation(Motion.spatial, value: showPast)
         }
+        .tracksPageScroll()
         .themedBackground()
-        .screenTitle("Agenda")
-        .localSearchable(text: $search, prompt: Self.searchPrompt)
+        .modifier(GlassLocalSearch(text: $search, prompt: Self.searchPrompt))
         .refreshable { await model.loadAgenda() }
+        .pageChrome("Agenda", style: .inline) {
+            ShareLink(item: AgendaCalendarFile(events: model.agenda.filter { $0.begin >= Date().startOfDay },
+                                               reminderHour: model.preferences.homeworkReminders ? model.preferences.reminderHour : nil),
+                      preview: SharePreview("Agenda di BCW")) {
+                Label { Text("Esporta nel calendario") } icon: { ThemeStore.shared.liquidGlass ? AnyView(Image.m("calendarPlus")) : AnyView(Icon("calendarPlus")) }
+            }
+            .help("Esporta nel calendario")
+        }
     }
 }

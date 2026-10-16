@@ -16,7 +16,7 @@ struct LessonsView: View {
 
     var body: some View {
         content
-            .screenTitle("Lezioni")
+            .pageChrome("Lezioni", style: .inline)
             .task(id: day) {
                 await model.ensureLessons(from: day.startOfWeek, to: day.startOfWeek.adding(days: 6))
             }
@@ -29,10 +29,7 @@ struct LessonsView: View {
     }
 
     private var modePicker: some View {
-        Picker("Vista", selection: $mode) {
-            ForEach(Mode.allCases) { Text($0.title).tag($0) }
-        }
-        .pickerStyle(.segmented)
+        SegmentedButtons(selection: $mode, options: Mode.allCases.map { ($0, $0.title, nil) })
     }
 
     @ViewBuilder
@@ -41,7 +38,6 @@ struct LessonsView: View {
         // A sinistra la scelta (giorno o materia), a destra le lezioni.
         SplitColumns(sideWidth: 320, spacing: 16) {
             modePicker
-                .labelsHidden()
             switch mode {
             case .day:
                 // Lo stesso calendario della Dashboard: grande e con i pallini di compiti e verifiche.
@@ -70,46 +66,39 @@ struct LessonsView: View {
                 }
             }
             .pagePadding()
-            .padding(.bottom, 24)
+            .padding(.bottom, 32)
         }
+        .tracksPageScroll()
         .themedBackground()
         #endif
     }
 
     private var dayNavigator: some View {
-        HStack {
-            Button { day = previousSchoolDay(from: day) } label: { Image(systemName: "chevron.left") }
-                .glassButton()
-                .buttonBorderShape(.circle)
-            Spacer()
-            DatePicker("Giorno", selection: $day, in: CVDate.schoolYear().start...Date(), displayedComponents: .date)
-                .labelsHidden()
-                .environment(\.locale, Locale(identifier: "it_IT"))
-            Spacer()
-            Button { day = min(Date().startOfDay, nextSchoolDay(from: day)) } label: { Image(systemName: "chevron.right") }
-                .glassButton()
-                .buttonBorderShape(.circle)
-                .disabled(day.isToday)
+        HStack(spacing: 8) {
+            IconButton("chevronLeft", label: "Giorno precedente", kind: .tonal) { day = previousSchoolDay(from: day) }
+            DateField(date: $day, range: CVDate.schoolYear().start...Date())
+            IconButton("chevronRight", label: "Giorno successivo", kind: .tonal) {
+                day = min(Date().startOfDay, nextSchoolDay(from: day))
+            }
+            .disabled(day.isToday)
         }
     }
 
     @ViewBuilder
     private var dayLessons: some View {
         Text(day.longDay)
-            .font(.title2.weight(.semibold))
+            .font(.m3(22, weight: 500, rounded: true))
             .foregroundStyle(Theme.ink)
             .padding(.horizontal, 4)
 
         let lessons = model.lessons(on: day)
         if lessons.isEmpty {
             if day.startOfDay > Date().startOfDay {
-                ContentUnavailableView("Nessuna lezione", systemImage: "text.book.closed",
-                                       description: Text("Le lezioni compaiono nel registro dopo essere state svolte."))
-                    .frame(maxWidth: .infinity)
+                EmptyState("Nessuna lezione", icon: "bookText",
+                           description: "Le lezioni compaiono nel registro dopo essere state svolte.")
             } else if model.hasLoadedLessons(on: day) {
-                ContentUnavailableView("Nessuna lezione", systemImage: "text.book.closed",
-                                       description: Text(day.isWeekend ? "È il fine settimana." : "Non ci sono lezioni registrate per questo giorno."))
-                    .frame(maxWidth: .infinity)
+                EmptyState("Nessuna lezione", icon: "bookText",
+                           description: day.isWeekend ? "È il fine settimana." : "Non ci sono lezioni registrate per questo giorno.")
             } else {
                 LoadingCard()
             }
@@ -117,7 +106,7 @@ struct LessonsView: View {
             VStack(spacing: 14) {
                 ForEach(lessons) { lesson in
                     LessonRow(lesson: lesson)
-                    if lesson.id != lessons.last?.id { Divider().overlay(Theme.separator) }
+                    if lesson.id != lessons.last?.id { M3Divider() }
                 }
             }
             .card()
@@ -146,7 +135,7 @@ struct LessonsView: View {
         if loadingAll {
             LoadingCard(text: "Carico il registro dell'anno…")
         } else {
-            CardGrid(minWidth: 380, spacing: 16) {
+            CardGrid(minWidth: 380, spacing: 12) {
                 ForEach(subjectGroups.filter { subjectFilter == nil || $0.id == subjectFilter }, id: \.id) { subject in
                     let topics = subject.lessons.filter { !$0.topic.isEmpty }
                     VStack(alignment: .leading, spacing: 12) {
@@ -154,23 +143,24 @@ struct LessonsView: View {
                             SubjectTag(name: subject.name, id: subject.id)
                             Spacer()
                             Text("\(subject.lessons.reduce(0) { $0 + Int($1.duration) }) ore")
-                                .font(.caption)
+                                .font(.m3(12))
                                 .foregroundStyle(Theme.secondaryInk)
                         }
                         ForEach(topics.prefix(subjectFilter == nil ? 4 : 200)) { lesson in
                             HStack(alignment: .firstTextBaseline, spacing: 10) {
                                 Text(lesson.date.shortDay)
-                                    .font(.caption.monospacedDigit())
+                                    .font(.m3(14).monospacedDigit())
                                     .foregroundStyle(Theme.secondaryInk)
-                                    .frame(width: 52, alignment: .leading)
+                                    .frame(width: 56, alignment: .leading)
                                 Text(lesson.topic)
-                                    .font(.subheadline)
+                                    .font(.m3(14))
                                     .foregroundStyle(Theme.ink)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                         if subjectFilter == nil && topics.count > 4 {
                             Button("Mostra tutti i \(topics.count) argomenti") { subjectFilter = subject.id }
-                                .font(.footnote.weight(.semibold))
+                                .buttonStyle(LinkButtonStyle())
                         }
                     }
                     .frame(maxHeight: .infinity, alignment: .top)

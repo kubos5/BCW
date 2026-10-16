@@ -16,19 +16,16 @@ struct NotesView: View {
                 ChipRow {
                     FilterChip(title: "Tutte", isSelected: category == nil) { category = nil }
                     ForEach(DisciplinaryNote.Category.allCases) { c in
-                        FilterChip(title: c.title, symbol: c.symbol, isSelected: category == c) {
+                        FilterChip(title: c.title, icon: c.icon, isSelected: category == c) {
                             category = category == c ? nil : c
                         }
                     }
                 }
 
                 if filtered.isEmpty {
-                    ContentUnavailableView("Nessuna nota", systemImage: "hand.thumbsup",
-                                           description: Text("Continua così!"))
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 40)
+                    EmptyState("Nessuna nota", icon: "thumbsUp", description: "Continua così!")
                 } else {
-                    CardGrid(minWidth: 360) {
+                    CardGrid(minWidth: 360, spacing: 12) {
                         ForEach(filtered) { note in
                             NoteCard(note: note)
                         }
@@ -36,19 +33,21 @@ struct NotesView: View {
                 }
             }
             .pagePadding()
-            .padding(.bottom, 24)
-            .animation(.snappy, value: category)
+            .padding(.bottom, 32)
+            .animation(Motion.spatial, value: category)
         }
+        .tracksPageScroll()
         .themedBackground()
-        .screenTitle("Note")
         .refreshable { await model.loadNotes() }
+        .pageChrome("Note", style: .inline)
     }
 
     private var summary: some View {
         HStack(spacing: 10) {
             ForEach([DisciplinaryNote.Category.annotation, .disciplinary]) { c in
                 StatTile(title: c.title, value: "\(model.notes.filter { $0.category == c }.count)",
-                         symbol: c.symbol, tint: c == .annotation ? Theme.neutral : Theme.poor)
+                         icon: c.icon, tint: c == .annotation ? Theme.neutral : Theme.poor,
+                         shape: c == .annotation ? .cookie4Sided : .clover4Leaf)
             }
         }
     }
@@ -61,20 +60,24 @@ private struct NoteCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label(note.category.singular, systemImage: note.category.symbol)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(tint)
+                HStack(spacing: 8) {
+                    Icon(note.category.icon, size: 20)
+                    Text(note.category.singular)
+                        .font(.m3(14, weight: 650))
+                }
+                .foregroundStyle(tint)
                 Spacer()
                 if !note.isRead {
-                    Pill(text: "Nuova", filled: true, font: .caption2.weight(.bold))
+                    Pill(text: "Nuova", filled: true, small: true)
                 }
             }
             Text(note.text.isEmpty ? "Tocca per leggere il contenuto." : note.text)
-                .font(.body)
+                .font(.m3(15))
+                .lineSpacing(3)
                 .foregroundStyle(Theme.ink)
                 .textSelection(.enabled)
             Text("\(note.authorName) · \(note.date.longDay)")
-                .font(.caption)
+                .font(.m3(12))
                 .foregroundStyle(Theme.secondaryInk)
         }
         .card(padding: 14)

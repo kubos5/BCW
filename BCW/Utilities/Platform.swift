@@ -285,20 +285,6 @@ struct EqualRowGrid: Layout {
 }
 #endif
 
-/// Indicatore di caricamento dentro righe e pulsanti: su macOS la misura normale è più
-/// alta della riga, quindi si usa quella piccola.
-struct InlineProgress: View {
-    var tint: Color?
-
-    var body: some View {
-        ProgressView()
-            .tint(tint)
-            #if os(macOS)
-            .controlSize(.small)
-            #endif
-    }
-}
-
 /// Cerchio centrato nel riquadro, di diametro fisso: area cliccabile dei giorni del calendario.
 struct CenteredCircle: Shape {
     var diameter: CGFloat
@@ -314,11 +300,7 @@ struct CenteredCircle: Shape {
 /// la pagina mostra il campo `LocalSearchField` nel proprio contenuto.
 extension View {
     func localSearchable(text: Binding<String>, prompt: String) -> some View {
-        #if os(macOS)
-        self
-        #else
-        searchable(text: text, prompt: prompt)
-        #endif
+        modifier(GlassLocalSearch(text: text, prompt: prompt))
     }
 }
 
@@ -328,28 +310,8 @@ struct LocalSearchField: View {
     let prompt: String
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(Theme.secondaryInk)
-            TextField(prompt, text: $text)
-                .textFieldStyle(.plain)
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(Theme.secondaryInk)
-                }
-                .buttonStyle(.plain)
-                .help("Cancella")
-            }
-        }
-        .font(.subheadline)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .frame(maxWidth: 360)
-        .background(Theme.surface, in: .capsule)
-        .overlay { Capsule().strokeBorder(Theme.separator, lineWidth: 0.5) }
+        M3SearchBar(text: $text, prompt: prompt, height: 48)
+            .frame(maxWidth: 420)
     }
 }
 #endif
@@ -366,8 +328,10 @@ struct ChipRow<Content: View>: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) { content() }
                 .padding(.vertical, 2)
+                .padding(.horizontal, 16)
         }
         .scrollClipDisabled()
+        .padding(.horizontal, -16)
         #endif
     }
 }
@@ -375,13 +339,9 @@ struct ChipRow<Content: View>: View {
 /// Separatore verticale tra gruppi di filtri (funziona anche dentro `FlowLayout`).
 struct ChipDivider: View {
     var body: some View {
-        #if os(macOS)
         Rectangle()
-            .fill(Theme.separator)
-            .frame(width: 1, height: 22)
-        #else
-        Divider().frame(height: 22)
-        #endif
+            .fill(Theme.outlineVariant)
+            .frame(width: 1, height: 24)
     }
 }
 
@@ -394,7 +354,10 @@ struct PlatformNavigationStack<Content: View>: View {
         #if os(macOS)
         content()
         #else
-        NavigationStack(root: content)
+        NavigationStack {
+            content()
+                .environment(\.isRootPage, true)
+        }
         #endif
     }
 }

@@ -20,7 +20,7 @@ struct TimetableDayList: View {
     let actions: TimetableActions
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             header
             if showsTests && !content.unmatchedTests.isEmpty {
                 unmatchedTests
@@ -42,18 +42,19 @@ struct TimetableDayList: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(content.day.longDay)
-                .font(.title3.weight(.semibold))
+                .font(.m3(22, weight: 500, rounded: true))
                 .foregroundStyle(Theme.ink)
             if let summary {
                 Text(summary)
-                    .font(.subheadline)
+                    .font(.m3(14))
                     .foregroundStyle(Theme.secondaryInk)
             }
         }
         .padding(.horizontal, 4)
-        .padding(.bottom, 2)
+        .padding(.top, 4)
+        .padding(.bottom, 4)
     }
 
     private var summary: String? {
@@ -90,13 +91,13 @@ struct TimetableDayList: View {
     private var showsTests: Bool { model.preferences.timetableShowsTests }
 
     private func gapRow(start: Int, end: Int) -> some View {
-        HStack(spacing: 8) {
-            Rectangle().fill(Theme.separator).frame(height: 0.5)
+        HStack(spacing: 10) {
+            Rectangle().fill(Theme.outlineVariant).frame(height: 1)
             Text("Libero · \(TimeOfDay.duration(end - start))")
-                .font(.caption)
+                .font(.m3(12))
                 .foregroundStyle(Theme.secondaryInk)
                 .fixedSize()
-            Rectangle().fill(Theme.separator).frame(height: 0.5)
+            Rectangle().fill(Theme.outlineVariant).frame(height: 1)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
@@ -104,41 +105,34 @@ struct TimetableDayList: View {
 
     private var emptyState: some View {
         let weekday = content.day.timetableWeekday
-        return VStack(spacing: 12) {
-            Image(systemName: content.day.isWeekend ? "sun.max" : "calendar.badge.plus")
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(Theme.accent)
-            Text("Nessuna lezione il \(Weekday.name(weekday).lowercased())")
-                .font(.headline)
-                .foregroundStyle(Theme.ink)
-            Text(model.timetable.timetable.isEmpty
-                 ? "Aggiungi le materie a mano o crea una bozza dell'orario dalle lezioni registrate."
-                 : "Aggiungi un evento per questo giorno della settimana.")
-                .font(.subheadline)
-                .foregroundStyle(Theme.secondaryInk)
-                .multilineTextAlignment(.center)
+        return EmptyState("Nessuna lezione il \(Weekday.name(weekday).lowercased())",
+                          icon: content.day.isWeekend ? "sun" : "calendarPlus",
+                          description: model.timetable.timetable.isEmpty
+                          ? "Aggiungi le materie a mano o crea una bozza dell'orario dalle lezioni registrate."
+                          : "Aggiungi un evento per questo giorno della settimana.") {
             if !content.isDraft {
-                HStack(spacing: 10) {
-                    Button("Aggiungi", systemImage: "plus") { actions.create(weekday, nil) }
-                    if model.timetable.timetable.isEmpty {
-                        Button("Genera", systemImage: "wand.and.stars") { actions.generate() }
-                    }
+                Button { actions.create(weekday, nil) } label: { Label { Text("Aggiungi") } icon: { Icon("plus") } }
+                    .buttonStyle(.m3(.tonal))
+                if model.timetable.timetable.isEmpty {
+                    Button { actions.generate() } label: { Label { Text("Genera") } icon: { Icon("wand") } }
+                        .buttonStyle(.m3(.filled))
                 }
-                .glassButton()
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .card()
+        .card(padding: 0)
     }
 
     private var unmatchedTests: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Verifiche senza lezione in orario", systemImage: "exclamationmark.triangle")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Theme.secondaryInk)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Icon("alertTriangle", size: 20)
+                Text("Verifiche senza lezione in orario")
+                    .font(.m3(14, weight: 650))
+            }
+            .foregroundStyle(Theme.secondaryInk)
             ForEach(content.unmatchedTests) { test in
                 RegisterTestRow(test: test, isHidden: false, unmatched: true)
+                if test.id != content.unmatchedTests.last?.id { M3Divider() }
             }
         }
         .card()
@@ -161,7 +155,7 @@ struct EntryBlockCard: View {
     let compact: Bool
     let actions: TimetableActions
 
-    private static let radius: CGFloat = 16
+    private var radius: CGFloat { Theme.radii.li }
 
     /// Senza l'opzione "Mostra le verifiche" la lista non segna le verifiche (si vedono comunque
     /// nel dettaglio dell'evento e nella vista Giorno).
@@ -195,17 +189,14 @@ struct EntryBlockCard: View {
                     .accessibilityAddTraits(.isButton)
             }
         }
-        .clipShape(.rect(cornerRadius: Self.radius, style: .continuous))
+        .clipShape(.rect(cornerRadius: radius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
-                .strokeBorder(borderColor, style: content.isDraft
-                              ? StrokeStyle(lineWidth: 1.5, dash: [6, 4]) : StrokeStyle(lineWidth: 0.5))
+            if content.isDraft {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(Theme.timetableColor(block.entries[0], store: model.timetable),
+                                  style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+            }
         }
-    }
-
-    private var borderColor: Color {
-        let tint = Theme.timetableColor(block.entries[0], store: model.timetable)
-        return content.isDraft ? tint : Theme.separator.opacity(0.7)
     }
 }
 
@@ -221,65 +212,66 @@ struct EntryRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: compact ? 8 : 12) {
             if !compact {
-                VStack(alignment: .trailing, spacing: 1) {
+                VStack(alignment: .trailing, spacing: 0) {
                     Text(TimeOfDay.string(entry.start))
-                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .font(.m3(15, weight: 650).monospacedDigit())
                         .foregroundStyle(Theme.ink)
                     Text(TimeOfDay.string(entry.end))
-                        .font(.caption.monospacedDigit())
+                        .font(.m3(12).monospacedDigit())
                         .foregroundStyle(Theme.secondaryInk)
                 }
+                .padding(.top, 1)
                 .frame(width: 46, alignment: .trailing)
             }
             RoundedRectangle(cornerRadius: 2, style: .continuous)
                 .fill(tint.opacity(isDraft ? 0.6 : 1))
                 .frame(width: 4)
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 if compact {
                     Text(entry.timeRange)
-                        .font(.caption.monospacedDigit())
+                        .font(.m3(12).monospacedDigit())
                         .foregroundStyle(Theme.secondaryInk)
                 }
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                HStack(alignment: .top, spacing: 8) {
                     Text(entry.displayTitle)
-                        .font((compact ? Font.subheadline : .body).weight(.semibold))
+                        .font(.m3(compact ? 14 : 16, weight: 600))
                         .foregroundStyle(Theme.ink.opacity(showsTitle ? 1 : 0.55))
                         .lineLimit(compact ? 3 : 2)
                         .minimumScaleFactor(compact ? 0.75 : 1)
                     Spacer(minLength: 0)
                     if badges.isTest && !compact {
-                        Pill(text: "Verifica", color: Theme.accent, font: .caption.weight(.bold))
+                        Pill(text: "Verifica", color: Theme.primary, bold: true)
                     }
                 }
                 if badges.isTest && compact {
-                    Pill(text: "Verifica", color: Theme.accent, font: .caption2.weight(.bold))
+                    Pill(text: "Verifica", color: Theme.primary, bold: true, small: true)
                 }
                 let details = [entry.teacher, entry.room].filter { !$0.isEmpty }
                 if !details.isEmpty || (!compact && entry.duration != 60) {
                     Text((details + (compact || entry.duration == 60 ? [] : [TimeOfDay.duration(entry.duration)]))
                         .joined(separator: " · "))
-                        .font(.caption)
+                        .font(.m3(12))
                         .foregroundStyle(Theme.secondaryInk)
                         .lineLimit(compact ? 2 : 1)
                 }
                 if badges.hasNote || badges.attachmentCount > 0 {
                     HStack(spacing: 10) {
                         if badges.hasNote {
-                            Label("Nota", systemImage: "note.text")
+                            HStack(spacing: 3) { Icon("note", size: 14); Text("Nota") }
                         }
                         if badges.attachmentCount > 0 {
-                            Label("\(badges.attachmentCount)", systemImage: "paperclip")
+                            HStack(spacing: 3) { Icon("paperclip", size: 14); Text("\(badges.attachmentCount)") }
                         }
                     }
-                    .font(.caption)
+                    .font(.m3(12))
                     .foregroundStyle(Theme.secondaryInk)
-                    .labelStyle(.titleAndIcon)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, compact ? 10 : 12)
-        .padding(.horizontal, compact ? 10 : 12)
+        .padding(.leading, compact ? 10 : 12)
+        .padding(.trailing, compact ? 10 : 14)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -299,13 +291,13 @@ struct BreakRow: View {
         HStack(spacing: 10) {
             wave
             HStack(spacing: 6) {
-                Image(systemName: "cup.and.saucer.fill")
+                Icon("coffeeFill", size: 18)
                     .foregroundStyle(tint)
                 Text("\(entry.displayTitle) · \(entry.timeRange)")
                     .monospacedDigit()
                     .foregroundStyle(Theme.secondaryInk)
             }
-            .font(.caption)
+            .font(.m3(12))
             .fixedSize()
             wave
         }
@@ -321,7 +313,7 @@ struct BreakRow: View {
 
     private var wave: some View {
         WavyLine()
-            .stroke(Theme.secondaryInk.opacity(0.55), style: StrokeStyle(lineWidth: 1.2, lineCap: .round, lineJoin: .round))
+            .stroke(Theme.secondaryInk.opacity(0.55), style: StrokeStyle(lineWidth: 1.3, lineCap: .round, lineJoin: .round))
             .frame(height: 6)
             .frame(maxWidth: .infinity)
     }
@@ -356,11 +348,11 @@ struct EntryContextMenu: View {
 
     var body: some View {
         if !isDraft {
-            Button("Modifica", systemImage: "pencil") { actions.edit(entry) }
-            Button("Duplica", systemImage: "plus.square.on.square") { actions.duplicate(entry) }
-            Button("Colora la giornata…", systemImage: "paintpalette") { actions.colorDay(entry.weekday) }
+            Button { actions.edit(entry) } label: { Label("Modifica", icon: "edit") }
+            Button { actions.duplicate(entry) } label: { Label("Duplica", icon: "duplicate") }
+            Button { actions.colorDay(entry.weekday) } label: { Label("Colora la giornata…", icon: "palette") }
             Divider()
-            Button("Elimina", systemImage: "trash", role: .destructive) { actions.delete(entry) }
+            Button(role: .destructive) { actions.delete(entry) } label: { Label("Elimina", icon: "trash") }
         }
     }
 }
@@ -373,36 +365,35 @@ struct RegisterTestRow: View {
     var unmatched = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "pencil.and.list.clipboard")
-                .foregroundStyle(isHidden ? Theme.secondaryInk : Theme.accent)
-                .frame(width: 22)
+        HStack(alignment: .top, spacing: 12) {
+            Icon("test")
+                .foregroundStyle(isHidden ? Theme.secondaryInk : Theme.primary)
+                .padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
                 Text(test.title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.m3(15, weight: 600))
                     .foregroundStyle(Theme.ink)
                 Text(test.notes.isEmpty ? "Verifica" : test.notes)
-                    .font(.subheadline)
-                    .foregroundStyle(isHidden ? Theme.secondaryInk : Theme.ink.opacity(0.85))
+                    .font(.m3(14))
+                    .foregroundStyle(isHidden ? Theme.secondaryInk : Theme.ink)
                     .strikethrough(isHidden, color: Theme.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                 if !test.authorName.isEmpty {
                     Text("Segnata da \(test.authorName) su Classeviva")
-                        .font(.caption)
+                        .font(.m3(12))
                         .foregroundStyle(Theme.secondaryInk)
                 }
                 if isHidden, let reason = model.timetable.hiddenReason(for: test, unmatched: unmatched) {
                     Text(reason.description)
-                        .font(.caption)
+                        .font(.m3(12))
                         .foregroundStyle(Theme.secondaryInk)
                 }
             }
             Spacer(minLength: 4)
             Button(isHidden ? "Mostra" : "Nascondi") {
-                withAnimation(.snappy) { model.timetable.setTestHidden(!isHidden, test: test, unmatched: unmatched) }
+                withAnimation(Motion.spatial) { model.timetable.setTestHidden(!isHidden, test: test, unmatched: unmatched) }
             }
-            .font(.caption.weight(.semibold))
-            .buttonStyle(.borderless)
+            .buttonStyle(.m3(.text, size: .xs))
             .help(isHidden ? "Mostra di nuovo la verifica nell'orario"
                   : "Nasconde la verifica dall'orario (resta su Classeviva)")
         }

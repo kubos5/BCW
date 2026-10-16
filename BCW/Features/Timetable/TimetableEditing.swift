@@ -5,33 +5,28 @@ import SwiftUI
 /// lunghi di un'ora).
 struct TimetableAlignmentPicker: View {
     @Environment(AppModel.self) private var model
+    /// Gruppo di pulsanti collegati (barra della modifica) invece del pulsante con il menu.
     var segmented = false
     @State private var confirming = false
 
     private var store: TimetableStore { model.timetable }
 
     var body: some View {
-        let picker = Picker("Allineamento", selection: Binding(get: { store.alignment }, set: request)) {
-            ForEach(TimetableAlignment.allCases) { alignment in
-                Text(alignment.shortTitle).tag(alignment)
-            }
-        }
+        let selection = Binding(get: { store.alignment }, set: request)
+        let options = TimetableAlignment.allCases.map { ($0, $0.shortTitle, Optional<String>.none) }
         Group {
             if segmented {
-                picker
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
+                SegmentedButtons(selection: selection, options: options, compact: true, height: 34,
+                                 selectedColor: Theme.tertiary, selectedForeground: Theme.onTertiary,
+                                 background: Theme.surface.opacity(0.55))
             } else {
-                picker
+                SelectRow("Allineamento", icon: store.alignment.icon, selection: selection, options: options)
             }
         }
-        .alert("Allineare gli eventi?", isPresented: $confirming) {
-            Button("Allinea") {
-                withAnimation(.snappy) { store.setAlignment(.automatic) }
-            }
-            Button("Annulla", role: .cancel) {}
-        } message: {
-            Text(message)
+        .m3Dialog("Allineare gli eventi?", isPresented: $confirming, message: message) {
+            [.cancel(), DialogAction(title: "Allinea", style: .strong) {
+                withAnimation(Motion.spatial) { store.setAlignment(.automatic) }
+            }]
         }
     }
 
@@ -40,7 +35,7 @@ struct TimetableAlignmentPicker: View {
         if alignment == .automatic && !store.unalignedEntries.isEmpty {
             confirming = true
         } else {
-            withAnimation(.snappy) { store.setAlignment(alignment) }
+            withAnimation(Motion.spatial) { store.setAlignment(alignment) }
         }
     }
 
@@ -59,35 +54,34 @@ struct TimetableAlignmentPicker: View {
     }
 }
 
-/// Barra della modalità di modifica: allineamento e istruzioni.
+/// Barra della modalità di modifica: allineamento e istruzioni (nel contenitore terziario).
 struct TimetableEditBar: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                Label("Allineamento", systemImage: model.timetable.alignment.symbol)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.ink)
-                    .fixedSize()
+                HStack(spacing: 8) {
+                    Icon(model.timetable.alignment.icon, size: 20)
+                    Text("Allineamento")
+                        .font(.m3(14, weight: 650))
+                }
+                .fixedSize()
                 Spacer(minLength: 0)
                 TimetableAlignmentPicker(segmented: true)
-                    .frame(maxWidth: 260)
             }
             Text(hint)
-                .font(.caption)
-                .foregroundStyle(Theme.secondaryInk)
+                .font(.m3(12))
+                .opacity(0.85)
                 // Niente `fixedSize` verticale: fuori da uno scorrimento macOS chiederebbe l'altezza
                 // del testo largo zero e la finestra impaginerebbe tutto fuori posto.
                 .lineLimit(4)
         }
+        .foregroundStyle(Theme.onTertiaryContainer)
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Theme.accentSoft.opacity(0.45))
-        }
+        .background(Theme.tertiaryContainer, in: .rect(cornerRadius: Theme.radii.li, style: .continuous))
     }
 
     private var hint: String {
@@ -98,5 +92,31 @@ struct TimetableEditBar: View {
             ? "Trascina per spostare (anche in un altro giorno), trascina il bordo in basso per la durata, doppio clic su un'ora vuota per aggiungere."
             : "Tieni premuto e trascina per spostare, trascina il bordo in basso per la durata, tocca due volte un'ora vuota per aggiungere."
         return "\(gestures) \(alignment) Intervalli sempre liberi."
+    }
+}
+
+/// Campo con un orario (pillola piena): toccandolo si apre il selettore di sistema.
+struct TimeField: View {
+    @Binding var minutes: Int
+    var minWidth: CGFloat = 96
+
+    var body: some View {
+        ZStack {
+            Text(TimeOfDay.string(minutes))
+                .font(.m3(16).monospacedDigit())
+                .foregroundStyle(Theme.ink)
+                .padding(.horizontal, 12)
+                .frame(minWidth: minWidth, minHeight: 44)
+                .background(Theme.surfaceContainerHighest, in: .rect(cornerRadius: Theme.radii.l, style: .continuous))
+            // Il selettore di sistema sta sopra, quasi invisibile: lo apre un tocco sul campo.
+            DatePicker("Orario", selection: Binding { TimeOfDay.date(minutes) } set: { minutes = TimeOfDay.minutes(of: $0) },
+                       displayedComponents: .hourAndMinute)
+                .labelsHidden()
+                .frame(minWidth: minWidth, minHeight: 44)
+                .scaleEffect(x: 1.6, y: 1)
+                .opacity(0.011)
+                .clipped()
+        }
+        .fixedSize()
     }
 }

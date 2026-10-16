@@ -23,8 +23,6 @@ struct BCWApp: App {
             RootView()
                 .environment(model)
                 .environment(nav)
-                .fontDesign(.serif)
-                .tint(Theme.accent)
                 .onChange(of: model.preferences.appearance, initial: true) { _, mode in
                     MacAppearance.apply(mode)
                 }
@@ -36,15 +34,12 @@ struct BCWApp: App {
             MacSettingsView()
                 .environment(model)
                 .environment(nav)
-                .fontDesign(.serif)
-                .tint(Theme.accent)
+                .appTheme()
         }
         #else
         WindowGroup {
             RootView()
                 .environment(model)
-                .fontDesign(.serif)
-                .tint(Theme.accent)
                 .preferredColorScheme(model.preferences.appearance.colorScheme)
         }
         // Aggiornamento in background per le notifiche delle novità (`NewsNotifications`).
@@ -102,6 +97,8 @@ struct RootView: View {
             }
         }
         .animation(.smooth, value: model.phase)
+        .appTheme()
+        .overlayHost()
         .task {
             model.bootstrap()
             if model.preferences.useBiometrics && model.phase == .signedIn {
@@ -120,83 +117,6 @@ struct RootView: View {
     }
 }
 
-#if os(iOS)
-struct MainTabView: View {
-    @Environment(AppModel.self) private var model
-    @State private var selection: AppTab = MainTabView.initialTab
-    @State private var searchQuery = ""
-    /// Incrementato toccando la scheda Dashboard quando è già quella aperta.
-    @State private var dashboardReselection = 0
-    @State private var timetableReselection = 0
-    @State private var switchingAccount = false
-
-    enum AppTab: Hashable { case dashboard, timetable, grades, you, search }
-
-    private static var initialTab: AppTab {
-        #if DEBUG
-        // Per le prove di sviluppo: `-BCWTab timetable` apre l'Orario.
-        if UserDefaults.standard.string(forKey: "BCWTab") == "timetable" { return .timetable }
-        #endif
-        return .dashboard
-    }
-
-    var body: some View {
-        TabView(selection: tabSelection) {
-            Tab("Dashboard", systemImage: "calendar.day.timeline.left", value: AppTab.dashboard) {
-                DashboardView(reselection: dashboardReselection)
-            }
-            Tab("Orario", systemImage: "tablecells", value: AppTab.timetable) {
-                TimetableView(reselection: timetableReselection)
-            }
-            Tab("Voti", systemImage: "chart.line.uptrend.xyaxis", value: AppTab.grades) {
-                GradesView()
-            }
-            Tab("Tu", systemImage: "person.crop.circle", value: AppTab.you) {
-                YouView()
-            }
-            .badge(model.unreadNoticesCount)
-            Tab("Cerca", systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
-                SearchView(query: $searchQuery)
-            }
-        }
-        .modifier(SeparateSearchTab())
-        .tabBarMinimizeBehavior(.onScrollDown)
-        // Tenendo premuta la scheda Tu si cambia account al volo.
-        .background {
-            TabBarItemLongPress(index: 3) { switchingAccount = true }
-        }
-        .sheet(isPresented: $switchingAccount) {
-            AccountSwitcherSheet()
-        }
-    }
-
-    /// Selezione delle schede che riconosce un nuovo tocco sulla scheda già aperta.
-    private var tabSelection: Binding<AppTab> {
-        Binding {
-            selection
-        } set: { tab in
-            if tab == selection, tab == .dashboard { dashboardReselection += 1 }
-            if tab == selection, tab == .timetable { timetableReselection += 1 }
-            selection = tab
-        }
-    }
-}
-
-/// Con l'SDK di iOS 27 la scheda Cerca finisce dentro la barra delle schede e il campo va in
-/// alto. Legando l'attivazione della ricerca alla selezione della scheda torna come su iOS 26:
-/// un pulsante separato, con il campo che prende il posto della barra.
-/// Su iOS 26 il comportamento è già quello, quindi resta com'è.
-private struct SeparateSearchTab: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 27, *) {
-            content.tabViewSearchActivation(.searchTabSelection)
-        } else {
-            content
-        }
-    }
-}
-#endif
-
 #if os(macOS)
 import AppKit
 
@@ -213,3 +133,12 @@ enum MacAppearance {
 }
 #endif
 
+
+extension View {
+    /// Carattere, colore d'accento e sfondo dell'app (Google Sans Flex e i colori di Material 3).
+    func appTheme() -> some View {
+        font(.m3(16))
+            .tint(Theme.primary)
+            .foregroundStyle(Theme.ink)
+    }
+}

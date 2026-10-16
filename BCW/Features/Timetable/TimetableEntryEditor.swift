@@ -52,103 +52,89 @@ struct TimetableEntryEditor: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    Picker("Tipo", selection: kindBinding) {
-                        ForEach(TimetableEntry.Kind.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
+            ScrollView {
+                VStack(spacing: 20) {
+                    VStack(spacing: 12) {
+                        SegmentedButtons(selection: kindBinding,
+                                         options: TimetableEntry.Kind.allCases.map { ($0, $0.title, $0.icon) },
+                                         height: 44)
+                        titleField
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    titleField
-                }
-                .listRowBackground(Theme.surface)
 
-                Section {
-                    if isNew {
-                        weekdayChips
-                    } else {
-                        Picker("Giorno", selection: $draft.weekday) {
-                            ForEach(1...7, id: \.self) { Text(Weekday.name($0)).tag($0) }
+                    ListGroup("Quando", footer: timeFooter) {
+                        if isNew {
+                            weekdayChips
+                        } else {
+                            SelectRow("Giorno", icon: "calendar", selection: $draft.weekday,
+                                      options: (1...7).map { ($0, Weekday.name($0), nil) })
+                        }
+                        timeFields
+                    }
+
+                    ListGroup("Dettagli") {
+                        if !draft.isBreak {
+                            TextFieldRow("Docente", text: $draft.teacher, icon: "person")
+                            TextFieldRow("Aula", text: $draft.room, icon: "doorOpen")
+                        }
+                        NavigationLink {
+                            EntryColorPicker(color: $draft.color, entry: draft)
+                        } label: {
+                            ListRow("Colore", leading: { FormIcon("palette") }, trailing: {
+                                HStack(spacing: 10) {
+                                    colorDescription
+                                    Circle()
+                                        .fill(Theme.timetableColor(draft, store: store))
+                                        .frame(width: 24, height: 24)
+                                    Icon("chevronRight", size: 20)
+                                        .foregroundStyle(Theme.secondaryInk)
+                                }
+                            })
+                        }
+                        .buttonStyle(.listRow)
+                        NoteField(text: $draft.note, prompt: "Nota per ogni settimana")
+                    }
+
+                    if !isNew {
+                        ListGroup {
+                            ButtonRow("Elimina evento", icon: "trash", destructive: true) {
+                                confirmingDelete = true
+                            }
                         }
                     }
-                    timeFields
-                } header: {
-                    Text("Quando")
-                } footer: {
-                    Text(timeFooter)
                 }
-                .listRowBackground(Theme.surface)
-
-                Section("Dettagli") {
-                    if !draft.isBreak {
-                        TextField("Docente", text: $draft.teacher)
-                        TextField("Aula", text: $draft.room)
-                    }
-                    NavigationLink {
-                        EntryColorPicker(color: $draft.color, entry: draft)
-                    } label: {
-                        HStack {
-                            Text("Colore")
-                            Spacer()
-                            colorDescription
-                            Circle()
-                                .fill(Theme.timetableColor(draft, store: store))
-                                .frame(width: 22, height: 22)
-                        }
-                    }
-                    TextField("Nota per ogni settimana", text: $draft.note, axis: .vertical)
-                        .lineLimit(2...6)
-                }
-                .listRowBackground(Theme.surface)
-
-                if !isNew {
-                    Section {
-                        Button("Elimina evento", systemImage: "trash", role: .destructive) {
-                            confirmingDelete = true
-                        }
-                        .foregroundStyle(Theme.poor)
-                    }
-                    .listRowBackground(Theme.surface)
-                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
             }
-            .formStyle(.grouped)
-            .themedList()
+            .scrollDismissesKeyboard(.interactively)
             .onAppear {
                 // Un evento fuori dalle mezz'ore con l'allineamento automatico (es. da un backup):
                 // l'editor lo allinea, come farebbe il passaggio all'allineamento automatico.
                 if usesAutomaticAlignment && !draft.isAutoAligned { align() }
             }
-            .navigationTitle(isNew ? (draft.isBreak ? "Nuovo intervallo" : "Nuovo evento") : "Modifica evento")
-            .inlineTitleDisplay()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Annulla", systemImage: "xmark") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Salva", systemImage: "checkmark") { save() }
-                        .disabled(!isValid)
-                }
+            .sheetChrome(isNew ? (draft.isBreak ? "Nuovo intervallo" : "Nuovo evento") : "Modifica evento",
+                         leading: .cancel { dismiss() },
+                         trailing: [.confirm("Salva", disabled: !isValid) { save() }])
+            .m3Dialog("Applicare le modifiche anche agli altri eventi «\(request.entry?.displayTitle ?? "")»?",
+                      isPresented: $askingPropagation,
+                      message: "Nome, materia, docente, aula, colore e nota verranno aggiornati in tutti gli eventi con lo stesso nome. Orari, giorni e colori delle palette applicate a una giornata restano invariati.",
+                      stacked: true) {
+                [DialogAction(title: "Applica a tutti (\(sameName.count + 1))", style: .strong) { commit(propagate: true) },
+                 DialogAction(title: "Solo a questo evento") { commit(propagate: false) },
+                 .cancel()]
             }
-            .confirmationDialog("Applicare le modifiche anche agli altri eventi «\(request.entry?.displayTitle ?? "")»?",
-                                isPresented: $askingPropagation, titleVisibility: .visible) {
-                Button("Applica a tutti (\(sameName.count + 1))") { commit(propagate: true) }
-                Button("Solo a questo evento") { commit(propagate: false) }
-                Button("Annulla", role: .cancel) {}
-            } message: {
-                Text("Nome, materia, docente, aula, colore e nota verranno aggiornati in tutti gli eventi con lo stesso nome. Orari, giorni e colori delle palette applicate a una giornata restano invariati.")
-            }
-            .confirmationDialog("Eliminare «\(draft.displayTitle)»?", isPresented: $confirmingDelete,
-                                titleVisibility: .visible) {
-                Button("Elimina solo questo", role: .destructive) { delete(all: false) }
+            .m3Dialog("Eliminare «\(draft.displayTitle)»?", isPresented: $confirmingDelete, stacked: true) {
+                var actions = [DialogAction(title: "Elimina solo questo", style: .destructive) { delete(all: false) }]
                 if !sameName.isEmpty {
-                    Button("Elimina tutti gli eventi «\(draft.displayTitle)» (\(sameName.count + 1))", role: .destructive) {
-                        delete(all: true)
-                    }
+                    actions.append(DialogAction(title: "Elimina tutti gli eventi «\(draft.displayTitle)» (\(sameName.count + 1))",
+                                                style: .destructive) { delete(all: true) })
                 }
-                Button("Annulla", role: .cancel) {}
+                actions.append(.cancel())
+                return actions
             }
         }
-        .sheetFrame(width: 500, height: 640)
+        .m3Sheet()
+        .sheetFrame(width: 520, height: 680)
     }
 
     // MARK: Campi
@@ -170,23 +156,33 @@ struct TimetableEntryEditor: View {
 
     @ViewBuilder
     private var titleField: some View {
-        HStack {
+        HStack(spacing: 8) {
             TextField(draft.isBreak ? "Nome (es. Intervallo)" : "Materia o evento", text: $draft.title)
+                .textFieldStyle(.plain)
+                .font(.m3(16))
+                .foregroundStyle(Theme.ink)
             if !draft.isBreak && !suggestions.isEmpty {
-                Menu {
-                    ForEach(suggestions, id: \.name) { suggestion in
-                        Button(suggestion.name) { choose(suggestion) }
+                AppMenu {
+                    MenuSection("Materie") {
+                        ForEach(suggestions, id: \.name) { suggestion in
+                            MenuItem(suggestion.name, checked: TimetableEntry.normalized(suggestion.name)
+                                     == TimetableEntry.normalized(draft.title)) { choose(suggestion) }
+                        }
                     }
                 } label: {
-                    Image(systemName: "list.bullet.circle")
-                        .font(.title3)
-                        .foregroundStyle(Theme.accent)
+                    Label { Text("Scegli una materia") } icon: { Icon("list") }
+                        .labelStyle(.iconOnly)
                 }
-                .plainMenuOnMac()
+                .buttonStyle(.m3Icon(.tonal, size: 36))
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
                 .help("Scegli una materia")
-                .accessibilityLabel("Scegli una materia")
             }
         }
+        .padding(.leading, 16)
+        .padding(.trailing, 10)
+        .frame(minHeight: 56)
+        .background(Theme.surfaceContainerHighest, in: .rect(cornerRadius: Theme.radii.l, style: .continuous))
     }
 
     private struct Suggestion {
@@ -225,27 +221,33 @@ struct TimetableEntryEditor: View {
     }
 
     private var weekdayChips: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("Giorni")
-            HStack(spacing: 6) {
+                .font(.m3(16, weight: 500))
+                .foregroundStyle(Theme.ink)
+            HStack(spacing: 4) {
                 ForEach(1...7, id: \.self) { weekday in
                     let selected = weekdays.contains(weekday)
                     Button {
-                        if selected { weekdays.remove(weekday) } else { weekdays.insert(weekday) }
+                        Haptics.selection()
+                        withAnimation(Motion.spatialFast) {
+                            if selected { weekdays.remove(weekday) } else { weekdays.insert(weekday) }
+                        }
                     } label: {
                         Text(Weekday.shortName(weekday))
-                            .font(.subheadline.weight(selected ? .semibold : .regular))
+                            .font(.m3(13, weight: selected ? 700 : 550))
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 7)
-                            .foregroundStyle(selected ? Color.white : Theme.ink)
-                            .background(selected ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.background),
-                                        in: .rect(cornerRadius: 10, style: .continuous))
+                            .frame(height: 40)
+                            .foregroundStyle(selected ? Theme.onPrimary : Theme.ink)
+                            .background(selected ? Theme.primary : Theme.surfaceContainerHighest,
+                                        in: .rect(cornerRadius: selected ? 20 : Theme.radii.m, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
         }
+        .padding(16)
     }
 
     /// Orari inseriti a mano. Con l'allineamento automatico l'inizio si sceglie tra le ore e le
@@ -254,21 +256,17 @@ struct TimetableEntryEditor: View {
     @ViewBuilder
     private var timeFields: some View {
         if usesAutomaticAlignment {
-            Picker("Inizio", selection: startBinding) {
-                ForEach(Array(stride(from: 0, to: 24 * 60, by: 30)), id: \.self) { minute in
-                    Text(TimeOfDay.string(minute)).tag(minute)
-                }
-            }
-            Picker("Durata", selection: durationBinding) {
-                Text("30 minuti").tag(30)
-                Text("1 ora").tag(60)
-            }
-            .pickerStyle(.segmented)
-            LabeledContent("Fine", value: TimeOfDay.string(draft.end))
+            SelectRow("Inizio", icon: "clock", selection: startBinding,
+                      options: stride(from: 0, to: 24 * 60, by: 30).map { ($0, TimeOfDay.string($0), nil) })
+            ListRow("Durata", leading: { FormIcon("timer") }, trailing: {
+                SegmentedButtons(selection: durationBinding, options: [(30, "30 min", nil), (60, "1 ora", nil)],
+                                 compact: true, height: 36)
+            })
+            ValueRow("Fine", value: TimeOfDay.string(draft.end), icon: "clockAlert")
         } else {
-            DatePicker("Inizio", selection: minuteBinding(\.start), displayedComponents: .hourAndMinute)
-            DatePicker("Fine", selection: minuteBinding(\.end), displayedComponents: .hourAndMinute)
-            LabeledContent("Durata", value: draft.end > draft.start ? TimeOfDay.duration(draft.duration) : "—")
+            ListRow("Inizio", leading: { FormIcon("clock") }, trailing: { TimeField(minutes: startMinutes) })
+            ListRow("Fine", leading: { FormIcon("clockAlert") }, trailing: { TimeField(minutes: endMinutes) })
+            ValueRow("Durata", value: draft.end > draft.start ? TimeOfDay.duration(draft.duration) : "—", icon: "timer")
         }
     }
 
@@ -302,19 +300,22 @@ struct TimetableEntryEditor: View {
         }
     }
 
-    private func minuteBinding(_ keyPath: WritableKeyPath<TimetableEntry, Int>) -> Binding<Date> {
+    /// Inizio libero: spostandolo la durata resta la stessa.
+    private var startMinutes: Binding<Int> {
         Binding {
-            TimeOfDay.date(min(draft[keyPath: keyPath], 24 * 60 - 1))
-        } set: { date in
-            let minutes = TimeOfDay.minutes(of: date)
-            if keyPath == \.start {
-                // Spostando l'inizio la durata resta la stessa.
-                let length = max(1, draft.duration)
-                draft.start = minutes
-                draft.end = min(24 * 60, minutes + length)
-            } else {
-                draft.end = minutes == 0 ? 24 * 60 : minutes
-            }
+            min(draft.start, 24 * 60 - 1)
+        } set: { minutes in
+            let length = max(1, draft.duration)
+            draft.start = minutes
+            draft.end = min(24 * 60, minutes + length)
+        }
+    }
+
+    private var endMinutes: Binding<Int> {
+        Binding {
+            min(draft.end, 24 * 60 - 1)
+        } set: { minutes in
+            draft.end = minutes == 0 ? 24 * 60 : minutes
         }
     }
 
@@ -335,7 +336,7 @@ struct TimetableEntryEditor: View {
         case .custom?: "Personalizzato"
         case let .series(id, _, _)?: store.palette(id: id)?.name ?? "Palette"
         }
-        Text(text).foregroundStyle(Theme.secondaryInk)
+        Text(text).font(.m3(14)).foregroundStyle(Theme.secondaryInk)
     }
 
     // MARK: Salvataggio
@@ -350,7 +351,7 @@ struct TimetableEntryEditor: View {
     }
 
     private func commit(propagate: Bool) {
-        withAnimation(.snappy) {
+        withAnimation(Motion.spatial) {
             if isNew {
                 let entries = weekdays.sorted().enumerated().map { index, weekday in
                     var entry = draft
@@ -369,7 +370,7 @@ struct TimetableEntryEditor: View {
     private func delete(all: Bool) {
         guard let original = request.entry else { return }
         let ids = Set([original.id] + (all ? sameName.map(\.id) : []))
-        withAnimation(.snappy) { store.delete(ids) }
+        withAnimation(Motion.spatial) { store.delete(ids) }
         dismiss()
     }
 }

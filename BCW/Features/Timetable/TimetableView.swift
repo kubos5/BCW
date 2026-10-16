@@ -51,7 +51,7 @@ struct TimetableView: View {
         TimetableActions(
             open: { entry, day in detail = TimetableDetailRequest(entryID: entry.id, day: day) },
             edit: { entry in editor = TimetableEditorRequest(entry: entry) },
-            duplicate: { entry in withAnimation(.snappy) { _ = store.duplicate(entry) } },
+            duplicate: { entry in withAnimation(Motion.spatial) { _ = store.duplicate(entry) } },
             delete: { entry in deleting = entry },
             colorDay: { weekday in paletteWeekday = PaletteWeekday(weekday: weekday) },
             create: { weekday, start in editor = TimetableEditorRequest(weekday: weekday, start: start) },
@@ -62,15 +62,21 @@ struct TimetableView: View {
     var body: some View {
         PlatformNavigationStack {
             content
-                // `screenTitle` va prima del `.toolbar` della pagina: su macOS così Aggiorna resta
-                // dopo i pulsanti dell'orario, subito prima della ricerca.
-                #if os(macOS)
-                .screenTitle(isEditing ? "Modifica orario" : "Orario", subtitle: selectedDay.longDay)
-                #else
-                .screenTitle(isEditing ? "Modifica" : "Orario")
-                .inlineLargeTitleDisplay()
+                #if os(iOS)
+                .overlay(alignment: .bottomTrailing) {
+                    // Nuovo evento: il pulsante d'azione flottante della pagina, come nella versione web.
+                    if !isEditing && store.draft == nil {
+                        FAB(icon: "plus", label: "Nuovo evento") {
+                            editor = TimetableEditorRequest(weekday: selectedDay.timetableWeekday)
+                        }
+                        .padding(16)
+                    }
+                }
                 #endif
-                .toolbar { toolbar }
+                .pageChrome(isEditing ? (Platform.isMac ? "Modifica orario" : "Modifica") : "Orario",
+                            subtitle: Platform.isMac ? selectedDay.longDay : nil, style: .inline) {
+                    barActions
+                }
                 .sheet(item: $editor) { request in
                     TimetableEntryEditor(request: request)
                 }
@@ -92,24 +98,27 @@ struct TimetableView: View {
                 .sheet(isPresented: $showingHiddenTests) {
                     TimetableHiddenTestsView()
                 }
-                .confirmationDialog("Eliminare «\(deleting?.displayTitle ?? "")»?",
-                                    isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-                                    titleVisibility: .visible, presenting: deleting) { entry in
-                    Button("Elimina solo questo", role: .destructive) {
-                        withAnimation(.snappy) { store.delete([entry.id]) }
-                    }
+                .m3Dialog("Eliminare «\(deleting?.displayTitle ?? "")»?",
+                          isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+                          stacked: true) {
+                    guard let entry = deleting else { return [] }
+                    var actions = [DialogAction(title: "Elimina solo questo", style: .destructive) {
+                        withAnimation(Motion.spatial) { store.delete([entry.id]) }
+                    }]
                     let others = store.sameNameEntries(as: entry)
                     if !others.isEmpty {
-                        Button("Elimina tutti gli eventi «\(entry.displayTitle)» (\(others.count + 1))", role: .destructive) {
-                            withAnimation(.snappy) { store.delete(Set([entry.id] + others.map(\.id))) }
-                        }
+                        actions.append(DialogAction(title: "Elimina tutti gli eventi «\(entry.displayTitle)» (\(others.count + 1))",
+                                                    style: .destructive) {
+                            withAnimation(Motion.spatial) { store.delete(Set([entry.id] + others.map(\.id))) }
+                        })
                     }
-                    Button("Annulla", role: .cancel) {}
+                    actions.append(.cancel())
+                    return actions
                 }
                 .onAppear(perform: adjustInitialDay)
                 .onChange(of: selectedDay, initial: true) { _, day in
                     guard showsToday == day.isToday else { return }
-                    withAnimation(.snappy) { showsToday = !day.isToday }
+                    withAnimation(Motion.spatial) { showsToday = !day.isToday }
                 }
                 .onChange(of: reselection) {
                     select(Date().startOfDay)
@@ -152,12 +161,12 @@ struct TimetableView: View {
 
     private func setEditing(_ editing: Bool) {
         guard editing != isEditing else { return }
-        withAnimation(.snappy) { isEditing = editing }
+        withAnimation(Motion.spatial) { isEditing = editing }
     }
 
     private func select(_ day: Date) {
         guard !day.isSameDay(as: selectedDay) else { return }
-        withAnimation(.snappy) { selectedDay = day.startOfDay }
+        withAnimation(Motion.spatial) { selectedDay = day.startOfDay }
     }
 
     private var daySelection: Binding<Date> {
@@ -169,102 +178,64 @@ struct TimetableView: View {
 
     // MARK: Barra
 
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
+    @ViewBuilder
+    private var barActions: some View {
         // "Oggi" c'è solo se il giorno scelto non è oggi, come "Domani" nella Dashboard.
         if showsToday {
-            ToolbarItem(placement: .trailingBar) {
-                Button("Oggi") { select(Date()) }
-                    #if os(macOS)
-                    .keyboardShortcut("t")
-                    .help("Vai a oggi (⌘T)")
-                    #endif
-            }
-            ToolbarSpacer(.fixed, placement: .trailingBar)
+            BarTextButton(title: "Oggi") { select(Date()) }
+                .keyboardShortcut("t")
+                .help("Vai a oggi (⌘T)")
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
         }
         #if os(macOS)
         if !isEditing {
-            ToolbarItem(placement: .trailingBar) {
-                Picker("Vista", selection: Bindable(model.preferences).timetableMode) {
-                    ForEach(TimetableMode.allCases) { mode in
-                        Label(mode == .day ? "Settimana" : mode.title, systemImage: mode.symbol).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelStyle(.iconOnly)
+            TimetableModePicker()
                 .help("Vista: lista, calendario o settimana")
-            }
         }
-        ToolbarItemGroup(placement: .trailingBar) {
-            Button("Nuovo evento", systemImage: "plus") {
-                editor = TimetableEditorRequest(weekday: selectedDay.timetableWeekday)
-            }
-            .keyboardShortcut("n")
-            .help("Nuovo evento (⌘N)")
-            .disabled(store.draft != nil)
-            if isEditing {
-                Button("Fine") { setEditing(false) }
-                    .keyboardShortcut(.defaultAction)
-                    .help("Esci dalla modifica dell'orario (↩)")
-            } else {
-                optionsMenu
-                    .menuIndicator(.hidden)
-                    .help("Modifica, colori e generazione")
-            }
+        BarButton("Nuovo evento", icon: "plus") {
+            editor = TimetableEditorRequest(weekday: selectedDay.timetableWeekday)
         }
-        #else
-        ToolbarItem(placement: .trailingBar) {
-            Button("Nuovo evento", systemImage: "plus") {
-                editor = TimetableEditorRequest(weekday: selectedDay.timetableWeekday)
-            }
-            .disabled(store.draft != nil)
-        }
-        ToolbarSpacer(.fixed, placement: .trailingBar)
-        if isEditing {
-            ToolbarItem(placement: .trailingBar) {
-                Button("Fine", systemImage: "checkmark") { setEditing(false) }
-                    .buttonStyle(.glassProminent)
-                    .accessibilityLabel("Fine modifica")
-            }
-        } else {
-            ToolbarItem(placement: .trailingBar) {
-                optionsMenu
-            }
-        }
+        .keyboardShortcut("n")
+        .help("Nuovo evento (⌘N)")
+        .disabled(store.draft != nil)
         #endif
+        if isEditing {
+            BarTextButton(title: "Fine", icon: "check", prominent: true) { setEditing(false) }
+                .keyboardShortcut(.defaultAction)
+                .help("Esci dalla modifica dell'orario (↩)")
+                .accessibilityLabel("Fine modifica")
+        } else {
+            optionsMenu
+                .help("Modifica, colori e generazione")
+        }
     }
 
     private var optionsMenu: some View {
-        Menu {
-            Button("Modifica orario", systemImage: "slider.horizontal.below.rectangle") { setEditing(true) }
+        BarMenu(icon: "moreH", label: "Opzioni dell'orario") {
+            MenuItem("Modifica orario", icon: "alignFree") { setEditing(true) }
                 .disabled(store.draft != nil)
-            Divider()
+            MenuDivider()
             #if os(iOS)
-            Picker("Vista", selection: Binding(get: { mode }, set: { model.preferences.timetableMode = $0 })) {
-                ForEach(TimetableMode.available) { mode in
-                    Label(mode.title, systemImage: mode.symbol).tag(mode)
-                }
-            }
+            MenuPicker(title: "Vista", selection: Binding(get: { mode }, set: { model.preferences.timetableMode = $0 }),
+                       options: TimetableMode.available.map { ($0, $0.title, $0.icon) })
             #endif
             // Cambia ciò che mostra la lista: sta con la scelta della vista.
-            Toggle("Mostra le verifiche", systemImage: "pencil.and.list.clipboard",
-                   isOn: Bindable(model.preferences).timetableShowsTests)
-            Button("Verifiche nascoste…", systemImage: "eye.slash") { showingHiddenTests = true }
-            Divider()
-            Button("Nuovo intervallo", systemImage: "cup.and.saucer") {
+            MenuItem("Mostra le verifiche", icon: "test", checked: model.preferences.timetableShowsTests) {
+                model.preferences.timetableShowsTests.toggle()
+            }
+            MenuItem("Verifiche nascoste…", icon: "eyeOff") { showingHiddenTests = true }
+            MenuDivider()
+            MenuItem("Nuovo intervallo", icon: "coffee") {
                 editor = TimetableEditorRequest(weekday: selectedDay.timetableWeekday, kind: .breakTime)
             }
             .disabled(store.draft != nil)
-            Button("Colora una giornata…", systemImage: "paintpalette") {
+            MenuItem("Colora una giornata…", icon: "palette") {
                 paletteWeekday = PaletteWeekday(weekday: selectedDay.timetableWeekday)
             }
             .disabled(store.timetable.isEmpty || store.draft != nil)
-            Divider()
-            Button("Genera dalle lezioni registrate…", systemImage: "wand.and.stars") { showingGenerator = true }
-        } label: {
-            Image(systemName: "ellipsis")
+            MenuDivider()
+            MenuItem("Genera dalle lezioni registrate…", icon: "wand") { showingGenerator = true }
         }
-        .accessibilityLabel("Opzioni dell'orario")
     }
 
     // MARK: Contenuto
@@ -312,9 +283,9 @@ struct TimetableView: View {
             .padding(.horizontal)
             .padding(.top, 4)
         }
-        .animation(.snappy, value: selectedDay)
-        .animation(.snappy, value: isEditing)
-        .animation(.snappy, value: store.draft == nil)
+        .animation(Motion.spatial, value: selectedDay)
+        .animation(Motion.spatial, value: isEditing)
+        .animation(Motion.spatial, value: store.draft == nil)
         .themedBackground()
         .onAppear {
             // Scorrendo di lato si passa al giorno prima o dopo (non durante la modifica).
@@ -355,23 +326,27 @@ struct TimetableView: View {
         if store.draft != nil || isEditing || !unmatched.isEmpty {
             VStack(spacing: 10) {
                 if store.draft != nil {
-                    banner.glassEffect(.regular, in: .rect(cornerRadius: 18, style: .continuous))
+                    banner
+                        .shadow(color: Theme.shadow.opacity(0.14), radius: 8, y: 3)
                 }
                 if isEditing {
                     TimetableEditBar()
-                        .glassEffect(.regular, in: .rect(cornerRadius: 18, style: .continuous))
+                        .shadow(color: Theme.shadow.opacity(0.14), radius: 8, y: 3)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 if !unmatched.isEmpty {
-                    Label(unmatched.count == 1 ? "1 verifica senza lezione in orario: \(unmatched[0].title)"
-                          : "\(unmatched.count) verifiche senza lezione in orario",
-                          systemImage: "exclamationmark.triangle")
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(Theme.ink)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .glassEffect(.regular.tint(Theme.fair.opacity(0.2)), in: .capsule)
+                    HStack(spacing: 8) {
+                        Icon("alertTriangle", size: 18)
+                        Text(unmatched.count == 1 ? "1 verifica senza lezione in orario: \(unmatched[0].title)"
+                             : "\(unmatched.count) verifiche senza lezione in orario")
+                            .font(.m3(13, weight: 550))
+                            .lineLimit(2)
+                    }
+                    .foregroundStyle(Theme.onFairContainer)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Theme.fairContainer, in: .rect(cornerRadius: 20, style: .continuous))
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -409,11 +384,11 @@ struct TimetableView: View {
                     .id(selectedDay)
                     .transition(.opacity)
             }
-            .animation(.snappy, value: selectedDay)
+            .animation(Motion.spatial, value: selectedDay)
         case .day:
             MacWeekTimeline(selectedDay: daySelection, days: weekDays, actions: actions, isEditing: isEditing,
                             banner: { banner })
-                .animation(.snappy, value: isEditing)
+                .animation(Motion.spatial, value: isEditing)
         }
     }
     #endif
@@ -438,15 +413,16 @@ private struct MacWeekTimeline<Banner: View>: View {
                     VStack(alignment: .leading, spacing: 20) {
                         MonthCalendar(selectedDay: $selectedDay)
                         TimetableWeekOverview(selectedDay: selectedDay) { day in
-                            withAnimation(.snappy) { selectedDay = day }
+                            withAnimation(Motion.spatial) { selectedDay = day }
                         }
                     }
                     .padding(.leading, 28)
-                    .padding(.trailing, 10)
+                    .padding(.trailing, 12)
                     .padding(.top, 8)
                     .padding(.bottom, Theme.bottomInset)
                 }
-                .frame(width: 340 + 38)
+                .scrollIndicators(.hidden)
+                .frame(width: 340 + 40)
             }
             VStack(spacing: 10) {
                 if !wide {
@@ -459,9 +435,10 @@ private struct MacWeekTimeline<Banner: View>: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 TimetableTimeline(days: wide ? days : [selectedDay], selectedDay: selectedDay,
-                                  onSelectDay: { day in withAnimation(.snappy) { selectedDay = day } },
+                                  onSelectDay: { day in withAnimation(Motion.spatial) { selectedDay = day } },
                                   actions: actions, isEditing: isEditing)
                     .card(padding: 0)
+                    .clipShape(.rect(cornerRadius: Theme.radii.li, style: .continuous))
             }
             .padding(.leading, wide ? 10 : 28)
             .padding(.trailing, 28)
@@ -487,20 +464,18 @@ struct TimetableWeekOverview: View {
         let days = (0..<7).map { start.adding(days: $0) }.filter { day in
             !day.isWeekend || !model.timetable.entries(on: day).isEmpty
         }
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Eyebrow(text: "Settimana")
                 .padding(.horizontal, 4)
             VStack(spacing: 0) {
                 ForEach(days, id: \.self) { day in
                     row(day)
-                    if day != days.last { Divider().overlay(Theme.separator) }
+                    if day != days.last { M3Divider() }
                 }
             }
-            // `.card()` non ritaglia il contenuto: senza, l'evidenziazione del giorno scelto (un
-            // rettangolo) sporgerebbe dagli angoli arrotondati sulla prima e sull'ultima riga.
             .frame(maxWidth: .infinity)
-            .clipShape(.rect(cornerRadius: Theme.corner, style: .continuous))
-            .card(padding: 0)
+            .background(Theme.card)
+            .clipShape(.rect(cornerRadius: Theme.radii.li, style: .continuous))
         }
     }
 
@@ -514,21 +489,20 @@ struct TimetableWeekOverview: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(day.it("EEEEd").capitalizedFirst)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(selected ? Theme.accent : Theme.ink)
+                            .font(.m3(14, weight: 600))
+                            .foregroundStyle(selected ? Theme.primary : Theme.ink)
                         if tests > 0 && model.preferences.timetableShowsTests {
-                            Image(systemName: "pencil.and.list.clipboard")
-                                .font(.caption)
-                                .foregroundStyle(Theme.accent)
+                            Icon("test", size: 16)
+                                .foregroundStyle(Theme.primary)
                         }
                     }
                     if let span = content.layout.span {
                         Text("\(content.entries.filter { !$0.isBreak }.count) lezioni · \(TimeOfDay.string(span.start))–\(TimeOfDay.string(span.end))")
-                            .font(.caption.monospacedDigit())
+                            .font(.m3(12).monospacedDigit())
                             .foregroundStyle(Theme.secondaryInk)
                     } else {
                         Text("Nessuna lezione")
-                            .font(.caption)
+                            .font(.m3(12))
                             .foregroundStyle(Theme.secondaryInk)
                     }
                 }
@@ -536,7 +510,7 @@ struct TimetableWeekOverview: View {
                 // Una barretta per lezione (i gruppi contano una volta), nei loro colori.
                 HStack(spacing: 2) {
                     ForEach(lessons.prefix(8)) { block in
-                        RoundedRectangle(cornerRadius: 2)
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
                             .fill(Theme.timetableColor(block.entries[0], store: model.timetable)
                                 .opacity(content.isDraft ? 0.5 : 1))
                             .frame(width: CGFloat(6 * block.entries.count), height: 14)
@@ -545,7 +519,7 @@ struct TimetableWeekOverview: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(selected ? Theme.accent.opacity(0.08) : Color.clear)
+            .background(selected ? Theme.primary.opacity(0.1) : Color.clear)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -884,6 +858,30 @@ enum TimetableSelfTest {
 
         print(failures.isEmpty ? "BCW-SELFTEST PASS" : "BCW-SELFTEST FAIL\n- " + failures.joined(separator: "\n- "))
         exit(failures.isEmpty ? 0 : 1)
+    }
+}
+#endif
+
+#if os(macOS)
+/// Scelta della vista dell'orario nella barra del Mac: lista, calendario o settimana.
+private struct TimetableModePicker: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if ThemeStore.shared.liquidGlass {
+            Picker("Vista", selection: Bindable(model.preferences).timetableMode) {
+                ForEach(TimetableMode.allCases) { mode in
+                    Label { Text(mode == .day ? "Settimana" : mode.title) } icon: { Image.m(mode.icon) }.tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelStyle(.iconOnly)
+        } else {
+            SegmentedButtons(selection: Bindable(model.preferences).timetableMode,
+                             options: TimetableMode.allCases.map { ($0, $0 == .day ? "Settimana" : $0.title, $0.icon) },
+                             compact: true, iconsOnly: true, height: 36)
+                .padding(.trailing, 4)
+        }
     }
 }
 #endif

@@ -50,17 +50,17 @@ struct DayDetail: View {
 
     var body: some View {
         let content = makeContent()
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 12) {
             header(content)
 
             if splitsLessons(content) {
-                HStack(alignment: .top, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 12) {
                         if !content.hasAgenda { emptyState }
                         agendaSections(content)
                     }
                     .frame(maxWidth: .infinity, alignment: .top)
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 12) {
                         lessonsSection(content)
                         if content.lessons.isEmpty && content.lessonsLoaded {
                             noLessons
@@ -93,7 +93,7 @@ struct DayDetail: View {
         let testsAndEvents = content.testsAndEvents
         if !testsAndEvents.isEmpty {
             let lastID = testsAndEvents.last?.id
-            section(.testsAndEvents, title: "Verifiche ed eventi", symbol: "pencil.and.list.clipboard") {
+            section(.testsAndEvents, title: "Verifiche ed eventi", icon: "test") {
                 ForEach(testsAndEvents) { event in
                     AgendaEventRow(event: event)
                     if event.id != lastID { divider }
@@ -104,7 +104,7 @@ struct DayDetail: View {
         let homework = content.homework
         if !homework.isEmpty {
             let lastID = homework.last?.id
-            section(.homework, title: "Compiti", symbol: "book.closed",
+            section(.homework, title: "Compiti", icon: "book",
                     trailing: "\(content.completedHomework)/\(homework.count)") {
                 ForEach(homework) { event in
                     AgendaEventRow(event: event)
@@ -116,7 +116,7 @@ struct DayDetail: View {
         let absences = content.absences
         if !absences.isEmpty {
             let lastID = absences.last?.id
-            section(.attendance, title: "Presenze", symbol: "person.badge.clock") {
+            section(.attendance, title: "Presenze", icon: "userClock") {
                 ForEach(absences) { absence in
                     AbsenceRow(absence: absence)
                     if absence.id != lastID { divider }
@@ -126,25 +126,29 @@ struct DayDetail: View {
     }
 
     private var noLessons: some View {
-        Label("Nessuna lezione registrata", systemImage: "text.book.closed")
-            .font(.subheadline)
-            .foregroundStyle(Theme.secondaryInk)
-            .frame(maxWidth: .infinity)
-            .card()
+        HStack(spacing: 10) {
+            Icon("bookText")
+            Text("Nessuna lezione registrata")
+                .font(.m3(14))
+        }
+        .foregroundStyle(Theme.secondaryInk)
+        .card()
     }
 
     private func header(_ content: Content) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(day.longDay)
-                .font(.title2.weight(.semibold))
+                .font(.m3(22, weight: 500, rounded: true))
                 .foregroundStyle(Theme.ink)
+                .accessibilityAddTraits(.isHeader)
             if let status = statusText(content) {
                 Text(status)
-                    .font(.subheadline)
+                    .font(.m3(14))
                     .foregroundStyle(Theme.secondaryInk)
             }
         }
         .padding(.horizontal, 4)
+        .padding(.top, 4)
     }
 
     private func statusText(_ content: Content) -> String? {
@@ -166,7 +170,7 @@ struct DayDetail: View {
         let lessons = content.lessons
         if !lessons.isEmpty {
             let lastID = lessons.last?.id
-            section(.lessons, title: "Lezioni", symbol: "text.book.closed", trailing: "\(lessons.reduce(0) { $0 + Int($1.duration) }) ore") {
+            section(.lessons, title: "Lezioni", icon: "bookText", trailing: "\(lessons.reduce(0) { $0 + Int($1.duration) }) ore") {
                 ForEach(lessons) { lesson in
                     LessonRow(lesson: lesson)
                     if lesson.id != lastID { divider }
@@ -178,30 +182,31 @@ struct DayDetail: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: day.isWeekend ? "sun.max" : "checkmark.seal")
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(Theme.accent)
-            Text(day.isWeekend ? "Goditi il weekend" : "Niente in programma")
-                .font(.headline)
-                .foregroundStyle(Theme.ink)
-            Text("Nessun compito, verifica o evento per questo giorno.")
-                .font(.subheadline)
-                .foregroundStyle(Theme.secondaryInk)
-                .multilineTextAlignment(.center)
+        HStack(spacing: 18) {
+            Shaped(shape: day.isWeekend ? .sunny : .cookie9Sided, fill: Theme.tertiaryContainer, size: 64) {
+                Icon(day.isWeekend ? "sun" : "checkSeal", size: 30)
+                    .foregroundStyle(Theme.onTertiaryContainer)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(day.isWeekend ? "Goditi il weekend" : "Niente in programma")
+                    .font(.m3(18, weight: 550))
+                    .foregroundStyle(Theme.ink)
+                Text("Nessun compito, verifica o evento per questo giorno.")
+                    .font(.m3(14))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .card()
+        .card(padding: 20)
     }
 
     private var divider: some View {
-        Divider().overlay(Theme.separator)
+        M3Divider()
     }
 
-    private func section<SectionContent: View>(_ id: DashboardSection, title: String, symbol: String, trailing: String? = nil,
+    private func section<SectionContent: View>(_ id: DashboardSection, title: String, icon: String, trailing: String? = nil,
                                                @ViewBuilder content: @escaping () -> SectionContent) -> some View {
-        CollapsibleCard(section: id, title: title, symbol: symbol, trailing: trailing, content: content)
+        CollapsibleCard(section: id, title: title, icon: icon, trailing: trailing, content: content)
     }
 }
 
@@ -211,7 +216,7 @@ struct CollapsibleCard<Content: View>: View {
     @Environment(AppModel.self) private var model
     let section: DashboardSection
     let title: String
-    let symbol: String
+    let icon: String
     var trailing: String?
     @ViewBuilder let content: () -> Content
 
@@ -220,23 +225,25 @@ struct CollapsibleCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.snappy) { model.preferences.toggleCollapsed(section) }
+                withAnimation(Motion.spatial) { model.preferences.toggleCollapsed(section) }
             } label: {
-                HStack {
-                    Label(title, systemImage: symbol)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Theme.secondaryInk)
+                HStack(spacing: 10) {
+                    HStack(spacing: 8) {
+                        Icon(icon, size: 20)
+                            .foregroundStyle(Theme.primary)
+                        Text(title)
+                            .font(.m3(14, weight: 650))
+                            .foregroundStyle(Theme.secondaryInk)
+                    }
                     Spacer()
                     if let trailing {
                         Text(trailing)
-                            .font(.footnote.monospacedDigit())
+                            .font(.m3(13).monospacedDigit())
                             .foregroundStyle(Theme.secondaryInk)
                     }
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Theme.secondaryInk)
-                        .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                    Chevron(collapsed: isCollapsed)
                 }
+                .frame(minHeight: 32)
                 .contentShape(.rect)
             }
             .buttonStyle(HeaderButtonStyle())
@@ -247,6 +254,7 @@ struct CollapsibleCard<Content: View>: View {
                 VStack(alignment: .leading, spacing: 14) { content() }
             }
         }
+        .padding(.top, -2)
         .card()
     }
 }

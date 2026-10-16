@@ -20,6 +20,17 @@ enum NewsKind: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Icona di Material Symbols.
+    var icon: String {
+        switch self {
+        case .grades: "graduationCap"
+        case .notices: "megaphone"
+        case .notes: "messageAlert"
+        case .absences: "userClock"
+        case .agenda: "checklist"
+        }
+    }
+
     var symbol: String {
         switch self {
         case .grades: "graduationcap"
