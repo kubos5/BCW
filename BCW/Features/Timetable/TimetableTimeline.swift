@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Vista Giorno: le ore della giornata in verticale, come in Calendario. Su iPhone una colonna
-/// (il giorno scelto), su Mac una colonna per ogni giorno della settimana.
-/// Nella modalità di modifica (`isEditing`) gli eventi si spostano trascinandoli (su iPhone dopo
-/// averli tenuti premuti) e si allungano dal bordo inferiore, seguendo l'allineamento dell'orario;
+/// Vista Giorno: le ore della giornata in verticale, come in Calendario. Una colonna per il
+/// giorno scelto.
+/// Nella modalità di modifica (`isEditing`) gli eventi si spostano trascinandoli (dopo averli tenuti
+/// premuti) e si allungano dal bordo inferiore, seguendo l'allineamento dell'orario;
 /// un doppio tocco su uno spazio vuoto crea un evento a quell'ora. Fuori dalla modifica un tocco
 /// apre il dettaglio dell'evento.
 struct TimetableTimeline: View {
@@ -17,11 +17,9 @@ struct TimetableTimeline: View {
     /// cominciano sotto di essa e scorrendo le passano sotto. Con l'intestazione mobile le
     /// verifiche senza lezione sono mostrate da chi la disegna.
     var topInset: CGFloat = 0
-    #if os(iOS)
     /// Intestazione mobile (iPhone): la giornata si sposta con lei e i suoi gesti stanno qui.
     var headerState: WeekHeaderScroll? = nil
-    #endif
-    var hourHeight: CGFloat = Platform.isMac ? 52 : 60
+    var hourHeight: CGFloat = 60
 
     static let gutter: CGFloat = 54
     private static let verticalPadding: CGFloat = 12
@@ -40,7 +38,6 @@ struct TimetableTimeline: View {
             }
             ScrollViewReader { proxy in
                 ScrollView {
-                    #if os(iOS)
                     if let headerState {
                         // Con il giorno accanto, già visibile mentre si scorre di lato (in sola lettura).
                         SwipeDayPages(state: headerState, day: selectedDay, prepares: !isEditing) { day, isMain in
@@ -50,18 +47,11 @@ struct TimetableTimeline: View {
                     } else {
                         grid(contents, isEditing: isEditing)
                     }
-                    #else
-                    grid(contents, isEditing: isEditing)
-                    #endif
                 }
-                #if os(iOS)
                 .scrollClipDisabled(headerState != nil)
-                #endif
                 .scrollIndicators(.hidden)
                 .safeAreaPadding(.top, topInset)
-                #if os(iOS)
                 .modifier(OptionalHeaderShift(state: headerState))
-                #endif
                 .onAppear { proxy.scrollTo(HourGrid.anchor(initialHour(contents)), anchor: .top) }
                 .onChange(of: selectedDay) { _, _ in
                     // Su iPhone, cambiando giorno, si va alla prima lezione del nuovo giorno.
@@ -94,7 +84,7 @@ struct TimetableTimeline: View {
         }
         .frame(height: 24 * hourHeight)
         .padding(.vertical, Self.verticalPadding)
-        .padding(.bottom, Platform.isMac ? 0 : 60)
+        .padding(.bottom, 60)
     }
 
     private func initialHour(_ contents: [TimetableDayContent]) -> Int {
@@ -263,8 +253,7 @@ private struct TimelineDayColumn: View {
                         .font(.m3(14, weight: 600))
                         .foregroundStyle(Theme.ink)
                     Text(isEditing
-                         ? (Platform.isMac ? "Fai doppio clic su un'ora per aggiungere un evento."
-                            : "Tocca due volte un'ora per aggiungere un evento.")
+                         ? "Tocca due volte un'ora per aggiungere un evento"
                          : "Aggiungi eventi con + o da Modifica orario.")
                         .font(.m3(12))
                         .foregroundStyle(Theme.secondaryInk)
@@ -301,7 +290,7 @@ private struct TimelineSegment: View {
     let roundsBottom: Bool
     let x: CGFloat
     let width: CGFloat
-    /// Larghezza di una colonna-giorno, per spostare l'evento in un altro giorno (Mac).
+    /// Larghezza di una colonna-giorno.
     let dayWidth: CGFloat
     let dayIndex: Int
     let days: [Date]
@@ -377,12 +366,7 @@ private struct TimelineSegment: View {
             .onTapGesture {
                 if canEdit { actions.edit(entry) } else { actions.open(entry, day) }
             }
-            #if os(macOS)
-            .gesture(moveGesture, isEnabled: canEdit)
-            .contextMenu { EntryContextMenu(entry: entry, isDraft: isDraft, actions: actions) }
-            #else
             .gesture(moveGesture)
-            #endif
             .offset(x: x + CGFloat(preview.dayShift) * dayWidth,
                     y: CGFloat(preview.start) / 60 * hourHeight)
             .zIndex(dragging ? 10 : 0)
@@ -490,7 +474,7 @@ private struct TimelineSegment: View {
                 Icon("test", size: 14)
                     .foregroundStyle(Theme.primary)
             }
-            // Nelle colonne strette (eventi affiancati, settimana su Mac) il nome ha la precedenza.
+            // Nelle colonne strette (eventi affiancati) il nome ha la precedenza.
             if width >= 100 {
                 if badges.hasNote { Icon("note", size: 14) }
                 if badges.attachmentCount > 0 { Icon("paperclip", size: 14) }
@@ -512,29 +496,11 @@ private struct TimelineSegment: View {
                     .padding(.bottom, 3)
             }
             .contentShape(.rect)
-            #if os(macOS)
-            .onHover { inside in
-                if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
-            }
-            #endif
             .gesture(resizeGesture)
     }
 
     // MARK: Gesti
 
-    #if os(macOS)
-    private var moveGesture: some Gesture {
-        DragGesture(minimumDistance: 3, coordinateSpace: .global)
-            .onChanged { move = $0.translation }
-            .onEnded { _ in commit() }
-    }
-
-    private var resizeGesture: some Gesture {
-        DragGesture(minimumDistance: 1, coordinateSpace: .global)
-            .onChanged { resize = $0.translation.height }
-            .onEnded { _ in commit() }
-    }
-    #else
     /// Su iPhone si tiene premuto e poi si trascina. Un riconoscitore di UIKit: quelli di SwiftUI,
     /// dentro lo scorrimento della giornata, perdevano contro lo scorrimento stesso.
     private var moveGesture: LongPressDragRecognizer {
@@ -560,7 +526,6 @@ private struct TimelineSegment: View {
             commit()
         }
     }
-    #endif
 
     private func commit() {
         let result = preview
@@ -574,7 +539,6 @@ private struct TimelineSegment: View {
     }
 }
 
-#if os(iOS)
 import UIKit
 
 /// `WeekHeaderScroll.Shift` solo se c'è un'intestazione mobile.
@@ -633,4 +597,3 @@ struct LongPressDragRecognizer: UIGestureRecognizerRepresentable {
         }
     }
 }
-#endif

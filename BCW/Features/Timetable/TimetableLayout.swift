@@ -1,9 +1,5 @@
 import SwiftUI
-#if os(macOS)
-import AppKit
-#else
 import UIKit
-#endif
 
 // MARK: - Colori
 
@@ -53,13 +49,8 @@ extension Theme {
 extension Color {
     /// Valore RGB esadecimale (per salvare i colori scelti con il selettore di sistema).
     var rgbHex: Int? {
-        #if os(macOS)
-        guard let color = NSColor(self).usingColorSpace(.sRGB) else { return nil }
-        let r = color.redComponent, g = color.greenComponent, b = color.blueComponent
-        #else
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         guard UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a) else { return nil }
-        #endif
         func byte(_ v: CGFloat) -> Int { Int((min(max(v, 0), 1) * 255).rounded()) }
         return byte(r) << 16 | byte(g) << 8 | byte(b)
     }

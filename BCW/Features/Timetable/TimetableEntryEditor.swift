@@ -61,15 +61,23 @@ struct TimetableEntryEditor: View {
                         titleField
                     }
 
-                    ListGroup("Quando", footer: timeFooter) {
+                    // Campi con l'etichetta sopra, come nella versione web.
+                    VStack(alignment: .leading, spacing: 12) {
+                        ListHeader("Quando")
+                            .padding(.bottom, -8)
                         if isNew {
                             weekdayChips
                         } else {
-                            SelectRow("Giorno", icon: "calendar", selection: $draft.weekday,
-                                      options: (1...7).map { ($0, Weekday.name($0), nil) })
+                            FormField("Giorno") {
+                                SelectButton(selection: $draft.weekday, options: (1...7).map { ($0, Weekday.name($0), nil) },
+                                             label: "Giorno", fill: Theme.surfaceContainerHighest, minHeight: 44, expands: true)
+                            }
                         }
                         timeFields
+                        ListFooter(timeFooter)
+                            .padding(.top, -8)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     ListGroup("Dettagli") {
                         if !draft.isBreak {
@@ -134,7 +142,6 @@ struct TimetableEntryEditor: View {
             }
         }
         .m3Sheet()
-        .sheetFrame(width: 520, height: 680)
     }
 
     // MARK: Campi
@@ -221,10 +228,7 @@ struct TimetableEntryEditor: View {
     }
 
     private var weekdayChips: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Giorni")
-                .font(.m3(16, weight: 500))
-                .foregroundStyle(Theme.ink)
+        FormField("Giorni") {
             HStack(spacing: 4) {
                 ForEach(1...7, id: \.self) { weekday in
                     let selected = weekdays.contains(weekday)
@@ -247,7 +251,6 @@ struct TimetableEntryEditor: View {
                 }
             }
         }
-        .padding(16)
     }
 
     /// Orari inseriti a mano. Con l'allineamento automatico l'inizio si sceglie tra le ore e le
@@ -256,17 +259,26 @@ struct TimetableEntryEditor: View {
     @ViewBuilder
     private var timeFields: some View {
         if usesAutomaticAlignment {
-            SelectRow("Inizio", icon: "clock", selection: startBinding,
-                      options: stride(from: 0, to: 24 * 60, by: 30).map { ($0, TimeOfDay.string($0), nil) })
-            ListRow("Durata", leading: { FormIcon("timer") }, trailing: {
-                SegmentedButtons(selection: durationBinding, options: [(30, "30 min", nil), (60, "1 ora", nil)],
-                                 compact: true, height: 36)
-            })
-            ValueRow("Fine", value: TimeOfDay.string(draft.end), icon: "clockAlert")
+            HStack(alignment: .bottom, spacing: 12) {
+                FormField("Inizio") {
+                    SelectButton(selection: startBinding,
+                                 options: stride(from: 0, to: 24 * 60, by: 30).map { ($0, TimeOfDay.string($0), nil) },
+                                 label: "Inizio", fill: Theme.surfaceContainerHighest, minHeight: 44, expands: true)
+                }
+                FormField("Fine") { FormFieldValue(TimeOfDay.string(draft.end)) }
+            }
+            FormField("Durata") {
+                SegmentedButtons(selection: durationBinding, options: [(30, "30 minuti", nil), (60, "1 ora", nil)],
+                                 height: 44)
+            }
         } else {
-            ListRow("Inizio", leading: { FormIcon("clock") }, trailing: { TimeField(minutes: startMinutes) })
-            ListRow("Fine", leading: { FormIcon("clockAlert") }, trailing: { TimeField(minutes: endMinutes) })
-            ValueRow("Durata", value: draft.end > draft.start ? TimeOfDay.duration(draft.duration) : "—", icon: "timer")
+            HStack(alignment: .bottom, spacing: 12) {
+                FormField("Inizio") { TimeField(minutes: startMinutes, minWidth: 0, expands: true) }
+                FormField("Fine") { TimeField(minutes: endMinutes, minWidth: 0, expands: true) }
+                FormField("Durata") {
+                    FormFieldValue(draft.end > draft.start ? TimeOfDay.duration(draft.duration) : "—")
+                }
+            }
         }
     }
 
@@ -336,7 +348,12 @@ struct TimetableEntryEditor: View {
         case .custom?: "Personalizzato"
         case let .series(id, _, _)?: store.palette(id: id)?.name ?? "Palette"
         }
-        Text(text).font(.m3(14)).foregroundStyle(Theme.secondaryInk)
+        Text(text)
+            .font(.m3(14))
+            .foregroundStyle(Theme.secondaryInk)
+            .lineLimit(1)
+            // Su una riga anche accanto al titolo; i nomi di palette lunghi si accorciano.
+            .fixedSize(horizontal: text.count <= 16, vertical: false)
     }
 
     // MARK: Salvataggio

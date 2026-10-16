@@ -4,9 +4,6 @@ import UserNotifications
 @main
 struct BCWApp: App {
     @State private var model = AppModel()
-    #if os(macOS)
-    @State private var nav = MacNavigation()
-    #endif
 
     init() {
         Theme.configureAppearance()
@@ -17,26 +14,6 @@ struct BCWApp: App {
     }
 
     var body: some Scene {
-        #if os(macOS)
-        // Una sola finestra: il registro è uno, come in Musica o Calendario.
-        Window("BCW", id: "main") {
-            RootView()
-                .environment(model)
-                .environment(nav)
-                .onChange(of: model.preferences.appearance, initial: true) { _, mode in
-                    MacAppearance.apply(mode)
-                }
-        }
-        .defaultSize(width: 1280, height: 840)
-        .commands { BCWCommands(model: model, nav: nav) }
-
-        Settings {
-            MacSettingsView()
-                .environment(model)
-                .environment(nav)
-                .appTheme()
-        }
-        #else
         WindowGroup {
             RootView()
                 .environment(model)
@@ -46,7 +23,6 @@ struct BCWApp: App {
         .backgroundTask(.appRefresh(NewsNotifications.refreshTaskID)) {
             await NewsNotifications.runBackgroundRefresh(model: model)
         }
-        #endif
     }
 }
 
@@ -61,28 +37,11 @@ struct RootView: View {
             case .launching:
                 Theme.background.ignoresSafeArea()
             case .signedOut:
-                #if os(macOS)
-                // Dentro una pila di navigazione la finestra ha la stessa barra (e gli stessi
-                // margini dei pulsanti a semaforo) della finestra principale.
-                NavigationStack {
-                    LoginView()
-                }
-                .transition(.opacity)
-                .frame(minWidth: 520, minHeight: 640)
-                #if DEBUG
-                .task { DebugSnapshots.captureLogin() }
-                #endif
-                #else
                 LoginView()
                     .transition(.opacity)
-                #endif
             case .signedIn:
                 Group {
-                    #if os(macOS)
-                    MacRootView()
-                    #else
                     MainTabView()
-                    #endif
                 }
                 // Cambiando account tutto scompare e riappare con i nuovi dati (`changeSession`).
                 .opacity(model.isChangingSession ? 0 : 1)
@@ -100,6 +59,8 @@ struct RootView: View {
         .appTheme()
         .overlayHost()
         .task {
+            // La finestra ora esiste: prende il colore d'accento del tema per i componenti di UIKit.
+            Theme.applyTint()
             model.bootstrap()
             if model.preferences.useBiometrics && model.phase == .signedIn {
                 lock.lock()
@@ -107,32 +68,13 @@ struct RootView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            #if os(iOS)
             if phase == .background { NewsNotifications.scheduleBackgroundRefresh(model: model) }
-            #endif
             guard model.preferences.useBiometrics, model.phase == .signedIn else { return }
             if phase == .background { lock.lock() }
             if phase == .active, lock.isLocked { Task { await lock.unlock() } }
         }
     }
 }
-
-#if os(macOS)
-import AppKit
-
-/// Su macOS `preferredColorScheme(nil)` non riporta la finestra all'aspetto di sistema:
-/// si imposta quindi l'aspetto dell'intera app (vale anche per la finestra Impostazioni).
-enum MacAppearance {
-    static func apply(_ mode: AppearanceMode) {
-        switch mode {
-        case .system: NSApp.appearance = nil
-        case .light: NSApp.appearance = NSAppearance(named: .aqua)
-        case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
-        }
-    }
-}
-#endif
-
 
 extension View {
     /// Carattere, colore d'accento e sfondo dell'app (Google Sans Flex e i colori di Material 3).

@@ -50,7 +50,6 @@ struct TimetableEntryDetail: View {
             .sheetChrome(entry?.displayTitle ?? "Evento", leading: .close { finish() }, trailing: trailingActions)
         }
         .m3Sheet()
-        .sheetFrame(width: 540, height: 680)
         .interactiveDismissDisabled(hasRecurringChanges && !sameName.isEmpty)
         .onAppear {
             guard original == nil, let entry else { return }

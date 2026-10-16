@@ -5,11 +5,7 @@ struct YouView: View {
     @State private var switchingAccount = false
 
     var body: some View {
-        #if os(macOS)
-        MacYouView()
-        #else
         iOSBody
-        #endif
     }
 
     private var iOSBody: some View {
@@ -82,11 +78,9 @@ struct YouView: View {
             .pageChrome("Tu") {
                 accountSwitcher
             }
-            #if os(iOS)
             .sheet(isPresented: $switchingAccount) {
                 AccountSwitcherSheet()
             }
-            #endif
         }
     }
 
@@ -176,7 +170,7 @@ private struct MenuRow<Destination: View>: View {
 
 struct ProfileCard: View {
     @Environment(AppModel.self) private var model
-    /// Riempie l'altezza disponibile (su macOS, accanto alle statistiche).
+    /// Riempie l'altezza disponibile.
     var fillsHeight = false
     @State private var hovering = false
 
@@ -206,147 +200,3 @@ struct ProfileCard: View {
     }
 }
 
-#if os(macOS)
-/// "Tu" su macOS: le funzioni sono già nella barra laterale, quindi la pagina diventa
-/// un riepilogo dell'account con lo stato di ogni sezione, a griglia.
-private struct MacYouView: View {
-    @Environment(AppModel.self) private var model
-    @Environment(MacNavigation.self) private var nav
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
-                // Profilo e statistiche affiancati se c'è spazio, altrimenti uno sotto l'altro.
-                // Affiancati hanno tutti la stessa altezza: quella del più alto. Tra profilo e
-                // statistiche c'è la stessa distanza che c'è tra le statistiche.
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: 10) {
-                        profile(fillsHeight: true)
-                            .frame(minWidth: 380)
-                        stats(fillsHeight: true)
-                            .frame(width: 520)
-                    }
-                    .fixedSize(horizontal: false, vertical: true)
-                    VStack(spacing: 10) {
-                        profile(fillsHeight: false)
-                        stats(fillsHeight: false)
-                    }
-                }
-
-                ForEach(MacSection.groups.dropFirst().indices, id: \.self) { index in
-                    let group = MacSection.groups[index]
-                    VStack(alignment: .leading, spacing: 10) {
-                        Eyebrow(text: group.title ?? "")
-                            .padding(.leading, 4)
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 10, alignment: .top)],
-                                  alignment: .leading, spacing: 10) {
-                            ForEach(group.sections) { section in
-                                SectionTile(section: section, subtitle: subtitle(for: section),
-                                            badge: badge(for: section)) {
-                                    nav.show(section)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                YouFooter()
-            }
-            .pagePadding()
-            .padding(.bottom, Theme.bottomInset)
-        }
-        .tracksPageScroll()
-        .themedBackground()
-        .pageChrome("Tu")
-    }
-
-    private func profile(fillsHeight: Bool) -> some View {
-        NavigationLink {
-            AccountView()
-        } label: {
-            ProfileCard(fillsHeight: fillsHeight)
-        }
-        .buttonStyle(.pressable(radius: Theme.radii.xl, pressed: Theme.radii.l))
-    }
-
-    private func stats(fillsHeight: Bool) -> some View {
-        let absences = model.absences.filter { $0.kind == .absence }.count
-        let lates = model.absences.filter { $0.kind == .late || $0.kind == .shortLate }.count
-        let exits = model.absences.filter { $0.kind == .earlyExit }.count
-        return HStack(spacing: 10) {
-            StatTile(title: "Media", value: GradeFormat.average(model.gradeBook.average()),
-                     icon: "graduationCap", tint: Theme.gradeColor(value: model.gradeBook.average()),
-                     shape: .cookie9Sided, fillsHeight: fillsHeight)
-            StatTile(title: "Assenze", value: "\(absences)", icon: "userX", tint: Theme.poor, shape: .clover4Leaf, fillsHeight: fillsHeight)
-            StatTile(title: "Ritardi", value: "\(lates)", icon: "clock", tint: Theme.fair, shape: .sunny, fillsHeight: fillsHeight)
-            StatTile(title: "Uscite", value: "\(exits)", icon: "doorOpen", tint: Theme.neutral, shape: .cookie6Sided, fillsHeight: fillsHeight)
-        }
-    }
-
-    private func subtitle(for section: MacSection) -> String {
-        switch section {
-        case .noticeboard:
-            let unread = model.unreadNoticesCount
-            return unread == 0 ? "Tutto letto" : (unread == 1 ? "1 comunicazione da leggere" : "\(unread) comunicazioni da leggere")
-        case .notes: return model.notes.isEmpty ? "Nessuna nota" : "\(model.notes.count) in totale"
-        case .reports: return "Documenti di valutazione"
-        case .previousYears: return "Pagelle e archivio degli anni passati"
-        case .absences:
-            let pending = model.unjustifiedAbsences.count
-            return pending == 0 ? "Tutto giustificato" : "\(pending) da giustificare"
-        case .didactics: return "File condivisi dai docenti"
-        case .lessons: return "Argomenti svolti in classe"
-        case .agenda: return "Tutti i compiti e le verifiche"
-        case .subjects: return "\(model.subjects.count) materie"
-        case .schoolbooks: return "Adozioni dell'anno in corso"
-        case .schoolCalendar: return "Vacanze e giorni di lezione"
-        default: return ""
-        }
-    }
-
-    private func badge(for section: MacSection) -> Int {
-        switch section {
-        case .noticeboard: model.unreadNoticesCount
-        case .notes: model.notes.filter { !$0.isRead }.count
-        case .absences: model.unjustifiedAbsences.count
-        default: 0
-        }
-    }
-}
-
-/// Riquadro di una sezione nella pagina "Tu" su macOS.
-private struct SectionTile: View {
-    let section: MacSection
-    let subtitle: String
-    let badge: Int
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 14) {
-                IconBadge(icon: section.icon, tint: section.tint, size: 44)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(section.title)
-                        .font(.m3(16, weight: 600))
-                        .foregroundStyle(Theme.ink)
-                    Text(subtitle)
-                        .font(.m3(13))
-                        .foregroundStyle(Theme.secondaryInk)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 4)
-                if badge > 0 {
-                    Pill(text: "\(badge)", color: Theme.error, filled: true)
-                }
-                Icon("chevronRight", size: 22)
-                    .foregroundStyle(Theme.secondaryInk)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.card)
-        }
-        .buttonStyle(.pressable)
-    }
-}
-#endif

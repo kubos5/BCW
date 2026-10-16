@@ -73,8 +73,6 @@ struct TimetableEditBar: View {
             Text(hint)
                 .font(.m3(12))
                 .opacity(0.85)
-                // Niente `fixedSize` verticale: fuori da uno scorrimento macOS chiederebbe l'altezza
-                // del testo largo zero e la finestra impaginerebbe tutto fuori posto.
                 .lineLimit(4)
         }
         .foregroundStyle(Theme.onTertiaryContainer)
@@ -88,9 +86,7 @@ struct TimetableEditBar: View {
         let alignment = model.timetable.alignment == .automatic
             ? "Scatti di mezz'ora, eventi da 30 minuti o un'ora."
             : "Scatti di 5 minuti; orari esatti dall'evento."
-        let gestures = Platform.isMac
-            ? "Trascina per spostare (anche in un altro giorno), trascina il bordo in basso per la durata, doppio clic su un'ora vuota per aggiungere."
-            : "Tieni premuto e trascina per spostare, trascina il bordo in basso per la durata, tocca due volte un'ora vuota per aggiungere."
+        let gestures = "Tieni premuto e trascina per spostare, trascina il bordo in basso per la durata, tocca due volte un'ora vuota per aggiungere."
         return "\(gestures) \(alignment) Intervalli sempre liberi."
     }
 }
@@ -99,24 +95,28 @@ struct TimetableEditBar: View {
 struct TimeField: View {
     @Binding var minutes: Int
     var minWidth: CGFloat = 96
+    /// Occupa tutta la larghezza (campi dei moduli).
+    var expands = false
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: expands ? .leading : .center) {
             Text(TimeOfDay.string(minutes))
-                .font(.m3(16).monospacedDigit())
+                .font(.m3(expands ? 15 : 16).monospacedDigit())
                 .foregroundStyle(Theme.ink)
                 .padding(.horizontal, 12)
-                .frame(minWidth: minWidth, minHeight: 44)
+                .frame(maxWidth: expands ? .infinity : nil, minHeight: 44, alignment: expands ? .leading : .center)
+                .frame(minWidth: minWidth)
                 .background(Theme.surfaceContainerHighest, in: .rect(cornerRadius: Theme.radii.l, style: .continuous))
             // Il selettore di sistema sta sopra, quasi invisibile: lo apre un tocco sul campo.
             DatePicker("Orario", selection: Binding { TimeOfDay.date(minutes) } set: { minutes = TimeOfDay.minutes(of: $0) },
                        displayedComponents: .hourAndMinute)
                 .labelsHidden()
-                .frame(minWidth: minWidth, minHeight: 44)
+                .frame(maxWidth: expands ? .infinity : nil, minHeight: 44)
+                .frame(minWidth: minWidth)
                 .scaleEffect(x: 1.6, y: 1)
                 .opacity(0.011)
                 .clipped()
         }
-        .fixedSize()
+        .fixedSize(horizontal: !expands, vertical: true)
     }
 }

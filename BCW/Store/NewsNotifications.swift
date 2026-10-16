@@ -1,8 +1,6 @@
 import Foundation
 import UserNotifications
-#if os(iOS)
 import BackgroundTasks
-#endif
 
 /// Tipi di novità per cui si può ricevere una notifica (Impostazioni › Notifiche).
 enum NewsKind: String, CaseIterable, Identifiable {
@@ -149,7 +147,6 @@ enum NewsNotifications {
         }
     }
 
-    #if os(iOS)
     /// Chiede a iOS un aggiornamento in background (al più presto tra mezz'ora), se qualche tipo
     /// di novità è attivato. iOS sceglie quando eseguirlo, in base a come si usa l'app.
     @MainActor
@@ -174,10 +171,9 @@ enum NewsNotifications {
         for _ in 0..<50 where model.isRefreshing { try? await Task.sleep(for: .milliseconds(200)) }
         await model.refreshAll()
     }
-    #endif
 }
 
-/// Mostra le notifiche anche con BCW aperta: senza un delegato iOS e macOS le scartano (non
+/// Mostra le notifiche anche con BCW aperta: senza un delegato iOS le scarta (non
 /// compaiono né come banner né nel Centro notifiche).
 final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationPresenter()

@@ -75,62 +75,32 @@ enum Keychain {
 
     // MARK: Primitive
 
-    /// Portachiavi da usare, in ordine: `true` è quello "moderno" (data protection), lo stesso di
-    /// iOS. Su macOS richiede un'app firmata con un profilo di provisioning; senza, si usa il
-    /// portachiavi di login. Attenzione: senza autorizzazione `SecItemAdd` e `SecItemDelete`
-    /// rispondono `errSecMissingEntitlement`, ma `SecItemCopyMatching` risponde
-    /// `errSecItemNotFound` (verificato). Per questo in lettura si guardano sempre entrambi:
-    /// prima si ripiegava solo sull'errore di autorizzazione, la lettura non trovava l'account
-    /// salvato nel portachiavi di login e a ogni avvio si tornava alla schermata di accesso.
-    private static var stores: [Bool] {
-        #if os(macOS)
-        [true, false]
-        #else
-        [true]
-        #endif
-    }
-
-    private static func query(_ account: String, dataProtection: Bool) -> [String: Any] {
-        var query: [String: Any] = [
+    private static func query(_ account: String) -> [String: Any] {
+        [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
-        #if os(macOS)
-        if dataProtection { query[kSecUseDataProtectionKeychain as String] = true }
-        #endif
-        return query
     }
 
-    /// Salva nel primo portachiavi che accetta la voce (e la toglie dagli altri).
     private static func write(_ data: Data, for account: String) {
         remove(account)
-        for dataProtection in stores {
-            var item = query(account, dataProtection: dataProtection)
-            item[kSecValueData as String] = data
-            if dataProtection {
-                item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-            }
-            if SecItemAdd(item as CFDictionary, nil) == errSecSuccess { return }
-        }
+        var item = query(account)
+        item[kSecValueData as String] = data
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        SecItemAdd(item as CFDictionary, nil)
     }
 
     private static func read(_ account: String) -> Data? {
-        for dataProtection in stores {
-            var search = query(account, dataProtection: dataProtection)
-            search[kSecReturnData as String] = true
-            search[kSecMatchLimit as String] = kSecMatchLimitOne
-            var result: AnyObject?
-            if SecItemCopyMatching(search as CFDictionary, &result) == errSecSuccess, let data = result as? Data {
-                return data
-            }
-        }
-        return nil
+        var search = query(account)
+        search[kSecReturnData as String] = true
+        search[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: AnyObject?
+        guard SecItemCopyMatching(search as CFDictionary, &result) == errSecSuccess else { return nil }
+        return result as? Data
     }
 
     private static func remove(_ account: String) {
-        for dataProtection in stores {
-            SecItemDelete(query(account, dataProtection: dataProtection) as CFDictionary)
-        }
+        SecItemDelete(query(account) as CFDictionary)
     }
 }

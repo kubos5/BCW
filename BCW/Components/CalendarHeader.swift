@@ -5,7 +5,6 @@ func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat {
     a + (b - a) * t
 }
 
-#if os(iOS)
 import UIKit
 
 // MARK: - Stato
@@ -646,7 +645,7 @@ struct CalendarHeaderPan: UIViewRepresentable {
         }
 
         func attach(to scrollView: UIScrollView) {
-            guard self.scrollView !== scrollView else { return }
+            guard self.scrollView !== scrollView || vertical.view !== scrollView else { return }
             detach()
             self.scrollView = scrollView
             state.scrollView = scrollView
@@ -658,8 +657,24 @@ struct CalendarHeaderPan: UIViewRepresentable {
         }
 
         func detach() {
-            scrollView?.removeGestureRecognizer(vertical)
-            scrollView?.removeGestureRecognizer(horizontal)
+            // Un gesto tolto a metà non riceve la fine: la si dà qui, altrimenti l'intestazione
+            // resterebbe "trascinata" e lo scorrimento laterale spento.
+            if [.began, .changed].contains(vertical.state) { state.ended(velocity: 0) }
+            if [.began, .changed].contains(horizontal.state) { state.swipeEnded(velocity: 0) }
+            vertical.view?.removeGestureRecognizer(vertical)
+            horizontal.view?.removeGestureRecognizer(horizontal)
+            scrollView = nil
+        }
+
+        /// Cerca lo scorrimento che contiene `view` e ci aggiunge i gesti. Si ripete a ogni
+        /// spostamento nella gerarchia: quando la pagina viene ricostruita (es. cambiando Liquid
+        /// Glass) lo scorrimento può cambiare, o non esserci ancora alla prima ricerca, e i gesti
+        /// resterebbero su quello vecchio (con l'area bloccata e l'intestazione ferma).
+        func attach(from view: UIView) {
+            guard view.window != nil else { return }
+            var current = view.superview
+            while let candidate = current, !(candidate is UIScrollView) { current = candidate.superview }
+            if let scrollView = current as? UIScrollView { attach(to: scrollView) }
         }
 
         @objc private func verticalPan(_ recognizer: UIPanGestureRecognizer) {
@@ -717,24 +732,44 @@ struct CalendarHeaderPan: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(state: state) }
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
-        view.isUserInteractionEnabled = false
-        view.isHidden = true
-        return view
-    }
+    /// Vista invisibile che segnala quando entra in una finestra o cambia contenitore.
+    final class Anchor: UIView {
+        var onMove: ((UIView) -> Void)?
 
-    func updateUIView(_ view: UIView, context: Context) {
-        let coordinator = context.coordinator
-        coordinator.swipeEnabled = swipeEnabled
-        DispatchQueue.main.async {
-            var current = view.superview
-            while let candidate = current, !(candidate is UIScrollView) { current = candidate.superview }
-            if let scrollView = current as? UIScrollView { coordinator.attach(to: scrollView) }
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            onMove?(self)
+        }
+
+        override func didMoveToSuperview() {
+            super.didMoveToSuperview()
+            onMove?(self)
         }
     }
 
-    static func dismantleUIView(_ view: UIView, coordinator: Coordinator) {
+    func makeUIView(context: Context) -> Anchor {
+        let view = Anchor(frame: .zero)
+        view.isUserInteractionEnabled = false
+        view.isHidden = true
+        let coordinator = context.coordinator
+        view.onMove = { view in
+            DispatchQueue.main.async { [weak view] in
+                if let view { coordinator.attach(from: view) }
+            }
+        }
+        return view
+    }
+
+    func updateUIView(_ view: Anchor, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.swipeEnabled = swipeEnabled
+        DispatchQueue.main.async { [weak view] in
+            if let view { coordinator.attach(from: view) }
+        }
+    }
+
+    static func dismantleUIView(_ view: Anchor, coordinator: Coordinator) {
+        view.onMove = nil
         coordinator.detach()
     }
 }
@@ -1328,4 +1363,3 @@ private struct MonthMorphCell: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
-#endif

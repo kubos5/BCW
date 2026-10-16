@@ -1,7 +1,4 @@
 import SwiftUI
-#if os(macOS)
-import AppKit
-#endif
 
 // MARK: - Colore di un evento
 
@@ -46,7 +43,7 @@ struct EntryColorPicker: View {
                     .padding(16)
                 }
 
-                ListGroup("Personalizzati", footer: "I colori salvati restano disponibili per tutti gli eventi. \(Platform.isMac ? "Fai clic con il tasto destro" : "Tieni premuto") su un colore per eliminarlo.") {
+                ListGroup("Personalizzati", footer: "I colori salvati restano disponibili per tutti gli eventi. Tieni premuto su un colore per eliminarlo.") {
                     if !store.timetable.customColors.isEmpty {
                         LazyVGrid(columns: columns, spacing: 12) {
                             ForEach(store.timetable.customColors, id: \.self) { hex in
@@ -305,7 +302,6 @@ struct PaletteEditor: View {
             }
         }
         .m3Sheet()
-        .sheetFrame(width: 460, height: 600)
     }
 }
 
@@ -321,7 +317,6 @@ struct PaletteSeriesSheet: View {
     @State private var paletteID: String = "builtin.lagoon"
     @State private var editingPalette: ColorPalette?
     /// Primo evento toccato per la selezione di un intervallo.
-    @State private var rangeAnchor: UUID?
 
     init(weekday: Int) {
         _weekday = State(initialValue: weekday)
@@ -406,12 +401,12 @@ struct PaletteSeriesSheet: View {
                             Spacer()
                             HStack(spacing: 4) {
                                 Button("Tutti") { selection = Set(lessons.map(\.id)) }
-                                Button("Nessuno") { selection = []; rangeAnchor = nil }
+                                Button("Nessuno") { selection = [] }
                             }
                             .buttonStyle(.m3(.text, size: .xs))
                             .padding(.bottom, 6)
                         }
-                        ListGroup(footer: "\(Platform.isMac ? "Fai clic sugli eventi per sceglierli (con ⇧ prendi tutti quelli di seguito)." : "Tocca gli eventi per sceglierli: una serie di seguito o tutta la giornata.") Gli eventi uguali accostati prendono lo stesso colore. La palette vale solo per il \(Weekday.name(weekday).lowercased()): gli eventi con lo stesso nome negli altri giorni restano come sono.") {
+                        ListGroup(footer: "Tocca gli eventi per sceglierli: una serie di seguito o tutta la giornata. Gli eventi uguali accostati prendono lo stesso colore. La palette vale solo per il \(Weekday.name(weekday).lowercased()): gli eventi con lo stesso nome negli altri giorni restano come sono.") {
                             if lessons.isEmpty {
                                 ListRow("Nessuna lezione il \(Weekday.name(weekday).lowercased()).", titleColor: Theme.secondaryInk)
                             }
@@ -459,7 +454,6 @@ struct PaletteSeriesSheet: View {
                          }])
             .onChange(of: weekday) {
                 selection = []
-                rangeAnchor = nil
             }
             .onAppear {
                 // Di partenza tutta la giornata; se è già colorata con una palette, quella.
@@ -471,31 +465,15 @@ struct PaletteSeriesSheet: View {
             }
         }
         .m3Sheet()
-        .sheetFrame(width: 520, height: 680)
     }
 
-    /// Un clic aggiunge o toglie un evento; su Mac con ⇧ sceglie tutti quelli tra l'ultimo
-    /// scelto e questo.
+    /// Un tocco aggiunge o toglie un evento.
     private func toggle(_ entry: TimetableEntry, in lessons: [TimetableEntry]) {
-        #if os(macOS)
-        if NSEvent.modifierFlags.contains(.shift), let anchor = rangeAnchor {
-            selectRange(from: anchor, to: entry.id, in: lessons)
-            rangeAnchor = entry.id
-            return
-        }
-        #endif
         if selection.contains(entry.id) {
             selection.remove(entry.id)
         } else {
             selection.insert(entry.id)
-            rangeAnchor = entry.id
         }
-    }
-
-    private func selectRange(from anchor: UUID, to id: UUID, in lessons: [TimetableEntry]) {
-        guard let a = lessons.firstIndex(where: { $0.id == anchor }),
-              let b = lessons.firstIndex(where: { $0.id == id }) else { return }
-        selection.formUnion(lessons[min(a, b)...max(a, b)].map(\.id))
     }
 }
 

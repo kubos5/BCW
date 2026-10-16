@@ -6,11 +6,6 @@ struct DayDetail: View {
     @Environment(AppModel.self) private var model
     let day: Date
 
-    /// Larghezza disponibile: su macOS, se c'è spazio, le lezioni vanno in una colonna a parte.
-    /// Abbastanza largo per le lezioni in una colonna a parte (solo il passaggio, non la larghezza,
-    /// che ricalcolerebbe il giorno a ogni fotogramma mentre si ridimensiona la finestra).
-    @State private var fitsLessonsColumn = false
-
     /// Tutto ciò che serve per disegnare il giorno, calcolato una volta per aggiornamento
     /// (prima ogni sezione, e ogni riga, rifiltrava l'agenda).
     private struct Content {
@@ -44,41 +39,19 @@ struct DayDetail: View {
 
     private var isPastOrToday: Bool { day.startOfDay <= Date().startOfDay }
 
-    private func splitsLessons(_ content: Content) -> Bool {
-        Platform.isMac && isPastOrToday && fitsLessonsColumn && !(day.isWeekend && content.lessons.isEmpty)
-    }
-
     var body: some View {
         let content = makeContent()
         VStack(alignment: .leading, spacing: 12) {
             header(content)
 
-            if splitsLessons(content) {
-                HStack(alignment: .top, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if !content.hasAgenda { emptyState }
-                        agendaSections(content)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    VStack(alignment: .leading, spacing: 12) {
-                        lessonsSection(content)
-                        if content.lessons.isEmpty && content.lessonsLoaded {
-                            noLessons
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .top)
-                }
-            } else {
-                if !content.hasAgenda && (content.lessons.isEmpty || !isPastOrToday) {
-                    emptyState
-                }
-                agendaSections(content)
-                if isPastOrToday {
-                    lessonsSection(content)
-                }
+            if !content.hasAgenda && (content.lessons.isEmpty || !isPastOrToday) {
+                emptyState
+            }
+            agendaSections(content)
+            if isPastOrToday {
+                lessonsSection(content)
             }
         }
-        .onGeometryChange(for: Bool.self) { $0.size.width >= 580 } action: { fitsLessonsColumn = $0 }
         // Anche dopo ogni aggiornamento completo, che azzera le lezioni già scaricate:
         // altrimenti, aprendo l'app su un giorno passato, resterebbero "in caricamento".
         .task(id: [day.timeIntervalSince1970, model.lastUpdated?.timeIntervalSince1970 ?? 0]) {
@@ -123,16 +96,6 @@ struct DayDetail: View {
                 }
             }
         }
-    }
-
-    private var noLessons: some View {
-        HStack(spacing: 10) {
-            Icon("bookText")
-            Text("Nessuna lezione registrata")
-                .font(.m3(14))
-        }
-        .foregroundStyle(Theme.secondaryInk)
-        .card()
     }
 
     private func header(_ content: Content) -> some View {

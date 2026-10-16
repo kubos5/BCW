@@ -31,7 +31,7 @@ final class BiometricLock {
         case .faceID: return "Face ID"
         case .touchID: return "Touch ID"
         case .opticID: return "Optic ID"
-        default: return Platform.isMac ? "password" : "codice"
+        default: return "codice"
         }
     }
 

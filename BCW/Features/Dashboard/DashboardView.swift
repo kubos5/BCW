@@ -5,24 +5,16 @@ struct DashboardView: View {
     /// Cambia quando si tocca di nuovo la scheda Dashboard (iOS): si torna in cima alla
     /// pagina o, se si è già in cima, alla giornata di domani.
     var reselection = 0
-    #if os(iOS)
     @State private var scrollPosition = ScrollPosition(edge: .top)
     @State private var isAtTop = true
     /// Calendario mobile, intero o ridotto (`CalendarHeader`).
     @State private var headerState = WeekHeaderScroll()
-    #endif
     /// Si apre sul giorno dopo, come richiesto: è quello per cui servono i compiti.
     @State private var selectedDay = Date().adding(days: DashboardView.initialOffset).startOfDay
     /// Larghezza della barra di navigazione, per capire se il titolo esteso ci sta.
     @State private var barWidth: CGFloat = 0
     /// "Domani" nella barra (vedi `onChange` del giorno scelto).
     @State private var showsTomorrow = false
-    #if os(macOS)
-    /// Identità dei giorni successivi: cambia (con transizione) solo quando cambia il giorno
-    /// scelto e con esso il contenuto della sezione espansa (vedi `select`). Su iPhone è il giorno
-    /// della pagina (`upcoming(after:)`).
-    @State private var upcomingGeneration = 0
-    #endif
     /// Altezza del giorno scelto: i giorni successivi si spostano di altrettanto nella
     /// transizione, così si muovono come il contenuto principale (vedi `upcomingTransition`).
     /// Non è uno stato osservato: aprendo una sezione l'altezza cambia a ogni fotogramma, e
@@ -53,8 +45,7 @@ struct DashboardView: View {
     }
 
     private func titleFits(_ text: String) -> Bool {
-        // Su macOS il titolo sta nella barra della finestra, dove c'è sempre spazio.
-        guard !Platform.isMac, barWidth > 0 else { return true }
+        guard barWidth > 0 else { return true }
         let glass = ThemeStore.shared.liquidGlass
         let titleFont = glass ? Typography.platformFont(size: 34, weight: 500, rounded: true)
             : Typography.platformFont(size: 22, weight: 500, rounded: true)
@@ -71,11 +62,8 @@ struct DashboardView: View {
     var body: some View {
         PlatformNavigationStack {
             content
-                #if os(iOS)
-                // Solo per abbreviare il titolo su iPhone: su Mac ricalcolerebbe la pagina a ogni
-                // fotogramma mentre si ridimensiona la finestra.
+                // Per abbreviare il titolo quando non entra.
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { barWidth = $0 }
-                #endif
                 .refreshable { await model.refreshAll() }
                 .onChange(of: selectedDay, initial: true) { _, day in
                     // Sempre con un'animazione, anche quando il giorno cambia senza (scorrendo di lato).
@@ -88,7 +76,7 @@ struct DashboardView: View {
                             select(Date().adding(days: 1).startOfDay)
                         }
                         .keyboardShortcut("t", modifiers: [.command, .shift])
-                        .help("Vai a domani (⇧⌘T)")
+                        .help("Vai a domani")
                         .transition(.scale(scale: 0.6).combined(with: .opacity))
                     }
                     viewMenu
@@ -108,7 +96,7 @@ struct DashboardView: View {
             MenuItem("Nascondi compiti fatti", icon: "checkCircle", checked: model.preferences.hideCompletedHomework) {
                 model.preferences.hideCompletedHomework.toggle()
             }
-            if mode == .list || Platform.isMac {
+            if mode == .list {
                 MenuItem("Mostra i prossimi giorni", icon: "timeline", checked: model.preferences.showUpcomingDays) {
                     model.preferences.showUpcomingDays.toggle()
                 }
@@ -118,20 +106,10 @@ struct DashboardView: View {
 
     /// Cambia il giorno scelto. Nella stessa transazione può cambiare anche l'identità dei
     /// giorni successivi, così la sezione vecchia esce con il contenuto vecchio e quella nuova
-    /// entra insieme al giorno: su iOS sempre (l'identità è il giorno), su macOS solo se la sezione
-    /// è espansa e il suo contenuto cambia davvero.
+    /// entra insieme al giorno (l'identità è il giorno).
     private func select(_ day: Date, animated: Bool = true) {
         guard !day.isSameDay(as: selectedDay) else { return }
-        #if os(macOS)
-        let replacesUpcoming = !model.preferences.isCollapsed(.upcoming)
-            && upcomingKey(after: selectedDay) != upcomingKey(after: day)
-        let update = {
-            selectedDay = day
-            if replacesUpcoming { upcomingGeneration += 1 }
-        }
-        #else
         let update = { selectedDay = day }
-        #endif
         if animated { withAnimation(Motion.spatial, update) } else { update() }
     }
 
@@ -142,28 +120,6 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var content: some View {
-        #if os(macOS)
-        // Calendario e giorni successivi restano a sinistra mentre si legge il giorno scelto.
-        SplitColumns(sideWidth: 340) {
-            calendar
-            // Con le colonne impilate i giorni successivi vanno in fondo, dopo il giorno scelto.
-            StackAware { stacked in
-                if !stacked { upcoming }
-            }
-        } main: {
-            if let error = model.lastError {
-                StatusBanner(message: error, icon: model.isOffline ? "wifiOff" : "alertTriangle")
-            }
-            DayDetail(day: selectedDay)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { if $0 > 0 { dayDetailHeight.value = $0 } }
-                .id(selectedDay)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-            StackAware { stacked in
-                if stacked { upcoming }
-            }
-        }
-        .animation(Motion.spatial, value: selectedDay)
-        #else
         // Il calendario (settimana o mese) galleggia sopra il contenuto (`CalendarHeader`), come
         // nell'Orario: il contenuto parte sotto il calendario ridotto e si sposta con lui.
         ZStack(alignment: .top) {
@@ -233,10 +189,8 @@ struct DashboardView: View {
             }
         }
         .themedBackground()
-        #endif
     }
 
-    #if os(iOS)
     /// I giorni successivi di una pagina: cambiano (con la transizione) insieme al suo giorno. Su
     /// iPhone l'identità è il giorno stesso e non `upcomingGeneration`: così, quando le pagine si
     /// scambiano di ruolo scorrendo di lato, non vengono ricostruiti.
@@ -251,24 +205,6 @@ struct DashboardView: View {
             .transition(upcomingTransition)
         }
     }
-    #endif
-
-    #if os(macOS)
-    /// I giorni successivi cambiano insieme al giorno scelto, con la stessa transizione,
-    /// ma solo se il loro contenuto cambia davvero: da compressi o con gli stessi giorni ed
-    /// eventi restano fermi. L'identità non dipende dallo stato compresso, altrimenti
-    /// comprimere ed espandere sostituirebbe l'intera sezione (intestazione compresa).
-    @ViewBuilder
-    private var upcoming: some View {
-        if model.preferences.showUpcomingDays {
-            UpcomingDays(after: selectedDay) { day in
-                select(day)
-            }
-            .id(upcomingGeneration)
-            .transition(upcomingTransition)
-        }
-    }
-    #endif
 
     /// Il giorno scelto usa `.move(edge:)`, che sposta una vista di tutta la sua altezza: con la
     /// stessa transizione i giorni successivi si sposterebbero troppo da aperti (settimane di card)
@@ -276,12 +212,6 @@ struct DashboardView: View {
     /// così si muovono insieme al resto del contenuto.
     private var upcomingTransition: AnyTransition {
         .opacity.combined(with: .offset(y: dayDetailHeight.value))
-    }
-
-    private func upcomingKey(after day: Date) -> String {
-        UpcomingDays.days(after: day, model: model)
-            .map { day, events in "\(CVDate.dayKey(day)):\(events.map { String($0.id) }.joined(separator: ","))" }
-            .joined(separator: "|")
     }
 
     @ViewBuilder
@@ -295,7 +225,6 @@ struct DashboardView: View {
     }
 }
 
-#if os(iOS)
 /// Il calendario con l'avanzamento dello stato, letto solo qui (cambia a ogni fotogramma).
 private struct DashboardHeaderHost: View {
     @Binding var selectedDay: Date
@@ -308,7 +237,6 @@ private struct DashboardHeaderHost: View {
         }
     }
 }
-#endif
 
 // MARK: - Striscia settimanale
 

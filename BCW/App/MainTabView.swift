@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 
 /// Schede dell'app su iPhone e iPad. Con Liquid Glass è la `TabView` di sistema; altrimenti la
@@ -65,26 +64,36 @@ struct MainTabView: View {
         // Una sola `TabView` per entrambi gli aspetti: cambiando Liquid Glass nelle Impostazioni
         // le schede (e le pagine aperte) restano dove sono, cambia solo la barra.
         TabView(selection: tabSelection) {
-            Tab("Dashboard", image: "m.dashboard", value: AppTab.dashboard) {
+            Tab(value: AppTab.dashboard) {
                 DashboardView(reselection: reselections[.dashboard, default: 0])
                     .modifier(MaterialTab(reselection: reselections[.dashboard, default: 0]))
+            } label: {
+                tabLabel(.dashboard)
             }
-            Tab("Orario", image: "m.timetable", value: AppTab.timetable) {
+            Tab(value: AppTab.timetable) {
                 TimetableView(reselection: reselections[.timetable, default: 0])
                     .modifier(MaterialTab(reselection: reselections[.timetable, default: 0]))
+            } label: {
+                tabLabel(.timetable)
             }
-            Tab("Voti", image: "m.grades", value: AppTab.grades) {
+            Tab(value: AppTab.grades) {
                 GradesView()
                     .modifier(MaterialTab(reselection: reselections[.grades, default: 0]))
+            } label: {
+                tabLabel(.grades)
             }
-            Tab("Tu", image: "m.you", value: AppTab.you) {
+            Tab(value: AppTab.you) {
                 YouView()
                     .modifier(MaterialTab(reselection: reselections[.you, default: 0]))
+            } label: {
+                tabLabel(.you)
             }
             .badge(glass ? model.unreadNoticesCount : 0)
-            Tab("Cerca", image: "m.search", value: AppTab.search, role: .search) {
+            Tab(value: AppTab.search, role: .search) {
                 SearchView(query: $searchQuery)
                     .modifier(MaterialTab(reselection: reselections[.search, default: 0]))
+            } label: {
+                tabLabel(.search)
             }
         }
         .modifier(SeparateSearchTab())
@@ -108,6 +117,15 @@ struct MainTabView: View {
         }
         .sheet(isPresented: $switchingAccount) {
             AccountSwitcherSheet()
+        }
+    }
+
+    /// Etichetta della scheda per la barra di sistema: come sul web, la scheda aperta ha l'icona piena.
+    private func tabLabel(_ tab: AppTab) -> some View {
+        Label {
+            Text(tab.title)
+        } icon: {
+            Image("m." + (selection == tab ? tab.selectedIcon : tab.icon))
         }
     }
 
@@ -233,4 +251,3 @@ private struct SeparateSearchTab: ViewModifier {
         }
     }
 }
-#endif

@@ -24,10 +24,8 @@ struct LoginView: View {
                         LoginField(icon: "person", focused: focused == .username) {
                             TextField("Codice utente o email", text: $username)
                                 .textContentType(.username)
-                                #if os(iOS)
                                 .keyboardType(.emailAddress)
                                 .textInputAutocapitalization(.never)
-                                #endif
                                 .autocorrectionDisabled()
                                 .focused($focused, equals: .username)
                                 .submitLabel(.next)
@@ -90,24 +88,6 @@ struct LoginView: View {
         .scrollBounceBehavior(.basedOnSize)
         .scrollDismissesKeyboard(.interactively)
         .themedBackground()
-        #if os(macOS)
-        // Il logo fa già da titolo: niente titolo di sistema nella barra della finestra.
-        .toolbar(removing: .title)
-        // Senza elementi la finestra non avrebbe una barra degli strumenti e i pulsanti a
-        // semaforo starebbero più vicini al bordo che nella finestra principale: un elemento
-        // invisibile le dà la stessa barra.
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Color.clear
-                    .frame(width: 1, height: 1)
-                    .accessibilityHidden(true)
-            }
-            .sharedBackgroundVisibility(.hidden)
-        }
-        // La barra resta (con lei i margini dei pulsanti a semaforo e gli angoli arrotondati della
-        // finestra), ma senza sfondo né riga: non si vede.
-        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        #endif
         .animation(Motion.spatial, value: errorMessage)
         .animation(Motion.spatial, value: focused)
         .sheet(isPresented: Binding(get: { !choices.isEmpty }, set: { if !$0 { choices = [] } })) {
@@ -251,6 +231,5 @@ private struct ProfileChoiceSheet: View {
             .sheetChrome("Scegli il profilo", leading: .cancel { dismiss() })
         }
         .m3Sheet()
-        .sheetFrame(width: 420, height: 380)
     }
 }

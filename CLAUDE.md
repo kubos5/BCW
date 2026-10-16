@@ -3,7 +3,7 @@
 Contesto del progetto per Claude Code. Rispondi all'utente in **italiano**.
 
 ## Cos'è
-App nativa per iOS e macOS (SwiftUI, iOS/macOS 26+, Xcode 26) per il registro elettronico **Classeviva** di Spaggiari.
+App nativa per iPhone e iPad (SwiftUI, iOS 26+, Xcode 26) per il registro elettronico **Classeviva** di Spaggiari.
 Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.com/Gabboxl/ClassevivaPCTO (client Windows).
 
 ## Requisiti dell'utente (da rispettare)
@@ -35,45 +35,31 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Il progetto compila e gira sul simulatore. `xcode-select` punta ai Command Line Tools, quindi per compilare da
   terminale serve `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`:
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project BCW.xcodeproj -scheme BCW -destination 'platform=iOS Simulator,name=iPhone 17' build`
-  Per il Mac: `-destination 'platform=macOS'` (in locale aggiungere `CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM=`).
+- macOS non è più supportato in modo nativo (scelta dell'utente, ottobre 2026): niente codice, impostazioni o
+  `#if os(macOS)` per il Mac.
 - Per provare le modifiche visive usare "Prova la demo" (`DemoServer.swift`). Si avvia anche con l'argomento
   `-demoMode YES`.
-- Screenshot del Mac senza permessi di registrazione schermo (solo DEBUG, `App/DebugSnapshots.swift`):
-  avviare con `-demoMode YES -BCWSnapshot YES -BCWSections dashboard,grades -BCWSizes 1280x840,900x640`
-  (facoltativi `-BCWSettings YES`, `-appearance light`, `-BCWDaysAgo 2`, `-BCWOpenNotice YES`, `-dashboardMode calendar`,
-  `-BCWHover YES` per portare il puntatore sulla barra della finestra, `-BCWSearch testo` per aprire e chiudere la ricerca,
-  `-BCWOpenSubject YES` per aprire in Voti la materia con il nome più lungo, cioè una pagina aperta da un'altra;
-  `-BCWTimetableDemo YES` crea l'orario della demo dalle lezioni se è vuoto, `-BCWHideTests YES` aggiunge una regola
-  e una verifica nascosta, `-BCWTimetableSheet generator|hidden` apre il generatore (con `-BCWGeneratorBreaks N` intervalli)
-  o le verifiche nascoste (i fogli si salvano come `<sezione>-<larghezza>-sheet.png`), `-BCWTimetableDraft YES` lo mostra in
-  anteprima, `-timetableMode list|calendar|day` sceglie la vista, `-BCWTimetableEditing YES` apre la modifica, `-BCWTimetableDay N` apre l'orario N giorni dopo oggi; i
-  valori negativi non passano come argomenti, usare quelli positivi);
-  `-BCWScroll N` (con `-BCWWheel YES` come una rotella vera) scorre la pagina prima della foto,
-  `-BCWSearchClickAway YES` (con `-BCWSearch`) prova il clic su un risultato e su un'area vuota,
-  `-BCWResizeBench YES` misura il ridimensionamento della finestra (tempo per passo, passaggi lenti),
-  `-BCWResizeToggle N` passa N volte da due colonne a una (per `sample`),
-  `-BCWKeychainService nome` usa un Portachiavi vuoto (con `-demoMode NO` mostra l'accesso: `login.png`);
-  le immagini finiscono in `~/Library/Containers/com.bcw-classeviva.app/Data/tmp/BCWSnapshots` (o in `-BCWSnapshotDir`
-  con un build senza sandbox, `ENABLE_APP_SANDBOX=NO`) e l'app si chiude da sola. Per ogni immagine stampa anche gli
-  elementi della barra della finestra con la loro posizione (`BCWToolbar …`): con lo schermo bloccato le immagini escono
-  bianche, ma l'elenco resta affidabile.
+- Argomenti di avvio per le prove (solo DEBUG, con `simctl launch … <argomenti>`): `-BCWTab timetable|grades|you|search`
+  apre una scheda, `-BCWLiquidGlass YES|NO`, `-BCWAccent #RRGGBB`, `-BCWTimetableDemo YES` crea l'orario della demo
+  dalle lezioni se è vuoto, `-BCWHideTests YES` aggiunge una regola e una verifica nascosta,
+  `-BCWTimetableSheet generator|hidden` apre il generatore (con `-BCWGeneratorBreaks N` intervalli) o le verifiche
+  nascoste, `-BCWTimetableDraft YES` mostra la bozza in anteprima, `-timetableMode list|day` sceglie la vista,
+  `-BCWTimetableEditing YES` apre la modifica, `-BCWTimetableDay N` apre l'orario N giorni dopo oggi (i valori negativi
+  non passano come argomenti), `-BCWOpenSubject YES`, `-BCWDaysAgo N`, `-BCWKeychainService nome` (Portachiavi vuoto).
 - Autotest dell'orario (solo DEBUG): `-BCWTimetableSelfTest YES` prova backup (esportazione, importazione, file,
   rifiuto di file non validi, riapertura da disco), modifiche estese agli eventi con lo stesso nome, generazione e
   passaggio dall'allineamento libero all'automatico;
-  stampa `BCW-SELFTEST PASS/FAIL` ed esce. Si lancia l'eseguibile del Mac direttamente.
+  stampa `BCW-SELFTEST PASS/FAIL` ed esce. Sul simulatore: `simctl launch --console-pty booted com.bcw-classeviva.app
+  -demoMode YES -BCWTimetableSelfTest YES`.
 - Simulatori: sono disponibili iOS 26.3 e iOS 27. Lo strumento del simulatore di Claude Code (tocchi, pressioni lunghe,
   screenshot) funziona con il simulatore acceso; per le animazioni registrare con `simctl io … recordVideo`. Quello di iOS 27 appena avviato satura la CPU per minuti e fa
   bloccare `simctl install/launch`: tenerne acceso uno alla volta.
 
 ## Architettura
 - `BCW.xcodeproj` usa **cartelle sincronizzate** (objectVersion 77): i file in `BCW/` entrano nel target da soli.
-- **Un solo target multipiattaforma** (iOS + macOS nativo, non Catalyst; `SUPPORTED_PLATFORMS`, `SDKROOT = auto`).
-  Su macOS: sandbox con rete in uscita e Calendario (impostazioni `ENABLE_*[sdk=macosx*]`).
-- Differenze tra piattaforme: `Utilities/Platform.swift` (`Platform.copy`, `screenTitle`, `pushedPageTitle`, `.trailingBar`,
-  `pagePadding`, `CardGrid` (anche `equalRowHeights`), `ChipRow`, `glassButton`, `PlatformNavigationStack`,
-  `SplitColumns`/`StackAware`, `sheetFrame`, `localSearchable`/`LocalSearchField`,
-  `InlineProgress`, `CenteredCircle`, `UnobservedValue`). Usare questi invece di `#if` sparsi o di
-  API UIKit/AppKit nelle viste.
+- Un solo target iOS (iPhone e iPad; `SUPPORTED_PLATFORMS = iphoneos iphonesimulator`).
+- `Utilities/Platform.swift`: piccoli adattatori (`Platform.copy`, `screenTitle`, `pagePadding`, `CardGrid`, `ChipRow`,
+  `PlatformNavigationStack`, `localSearchable`, `CenteredCircle`, `UnobservedValue`).
 - iOS, ricerca: `.searchable` sta dentro la scheda Cerca (`SearchView`), con `Tab(role: .search)`. Con l'SDK di
   iOS 27 la scheda finirebbe dentro la barra e il campo in alto: da iOS 27 in poi `MainTabView` applica
   `.tabViewSearchActivation(.searchTabSelection)` (verificato: torna il pulsante separato con il campo in basso;
@@ -85,41 +71,22 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (verificato). Toccando di nuovo Dashboard (`MainTabView.tabSelection` riconosce il secondo tocco) si torna in
   cima, o a domani se si è già in cima (`DashboardView.reselection`).
   In tutte le schede il ritorno in cima è quello del sistema, che funziona solo con il titolo grande nella riga dei
-  pulsanti (`inlineLargeTitleDisplay()`, cioè `.toolbarTitleDisplayMode(.inlineLarge)`, come nella Dashboard). Con il
+  pulsanti (`.toolbarTitleDisplayMode(.inlineLarge)`, messo da `pageChrome`, come nella Dashboard). Con il
   titolo grande su una riga a parte (lo stile predefinito) il sistema si ferma sotto la barra con il titolo ancora
   compresso, e scorrere ancora da codice dopo o insieme al sistema dà uno scatto (verificato, anche con `ScrollPosition`):
   le pagine principali delle schede vanno tenute in `.inlineLarge`.
 - Account: su iOS il popup `AccountSwitcherSheet` (dal basso, in vetro, rilevamenti medio/grande) mostra la stessa
   `AccountsSection` della pagina Account; si apre dal pulsante in alto a destra in Tu e tenendo premuta la scheda Tu, e
-  si chiude da solo quando comincia il cambio. Su macOS c'è `AccountMenuItems` nella barra laterale. La demo non è un
+  si chiude da solo quando comincia il cambio. La demo non è un
   account: non entra nel conteggio (icona del pulsante, testi), si apre con "Prova la demo" anche con un account
   collegato (`activeAccountID` resta impostato e uscendo si torna a quello).
 - Cambio di sessione (altro account, demo, uscita dalla demo verso un account, rimozione dell'account attivo, account
   aggiunto ad app aperta): `AppModel.changeSession` sfuma l'interfaccia (`isChangingSession`, opacità in `RootView`),
   cambia i dati senza animazioni mentre non si vede e la fa riapparire quando ci sono i dati (subito con la cache,
-  altrimenti a fine aggiornamento, al massimo 3 s). Così niente si ridimensiona davanti all'utente. Su macOS la barra
-  della finestra resta: i suoi elementi stanno in `NSToolbar`, fuori dal contenuto (ricerca e barra laterale sono di
-  sistema e non sfumerebbero comunque).
-- macOS: `App/MacRootView.swift` (NavigationSplitView con `MacSection`, account in fondo alla barra laterale,
-  `BCWCommands` per i menu Vai/Account e le scorciatoie, `MacNavigation` ricorda l'ultima sezione e tiene lo stato
-  della ricerca generale: campo `.searchable` sulla split view; selezionarlo o scrivere apre `SearchView` nel dettaglio,
-  `nav.show(_:)` torna a una sezione chiudendo la ricerca, ⌘F la attiva), finestra `Window` singola + scena `Settings`
-  (`MacSettingsView` a schede, con le stesse sezioni di `SettingsView`).
-- Barra della finestra su macOS con Liquid Glass (con Material 3 la barra è nascosta, vedi "Sistema di design"), costruita in modo standard (niente colori, misure o allineamenti personalizzati):
-  titolo a sinistra, pulsanti della pagina a destra, poi Aggiorna e infine la ricerca (che diventa
-  un'icona da sola quando manca spazio). Come è fatta:
-  - `screenTitle` mette il titolo (etichetta in `.navigation`, il titolo di sistema è tolto) e Aggiorna.
-    Ogni pagina della finestra principale ce l'ha, comprese quelle aperte da un'altra (per quelle che su iOS non hanno
-    titolo c'è `pushedPageTitle`).
-  - La barra mette prima gli elementi dei modificatori più esterni (verificato): `screenTitle` va applicato prima
-    (più all'interno) del `.toolbar` della pagina, altrimenti Aggiorna finisce prima dei pulsanti della pagina.
-  - Il distanziatore flessibile tra titolo e pulsanti è nel `.toolbar` della `NavigationStack` del dettaglio
-    (esterno, quindi primo; resta anche nelle pagine aperte da un'altra). Togliendo il titolo di sistema SwiftUI non lo
-    mette più da solo e tutto finirebbe accanto al titolo.
-  - `.primaryAction` su macOS sta a sinistra: per il lato destro usare `.trailingBar` (`.automatic`).
-  `project.yml` è un'alternativa per XcodeGen.
-- Icona: `Resources/AppIcon.icon` (Icon Composer, con varianti chiara/scura/tinta), la stessa per iOS e macOS;
-  il nome corrisponde a `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`. Nel catalogo `Assets.xcassets` non c'è più
+  altrimenti a fine aggiornamento, al massimo 3 s). Così niente si ridimensiona davanti all'utente.
+- `project.yml` è un'alternativa per XcodeGen.
+- Icona: `Resources/AppIcon.icon` (Icon Composer, con varianti chiara/scura/tinta), il cui
+  nome corrisponde a `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`. Nel catalogo `Assets.xcassets` non c'è più
   un `AppIcon.appiconset`: non aggiungerlo, andrebbe in conflitto.
 - Build settings: `SWIFT_VERSION = 5.0`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, approachable concurrency.
 - `Networking/ClassevivaClient.swift`: client REST, `Transport` sostituibile (live/demo), rinnovo token,
@@ -131,10 +98,7 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (scrutini, didattica, libri) non finiscono nel banner globale `lastError`; `Preferences` (UserDefaults); `GradeBook` (medie,
   andamento, voto necessario); `Reminders` (notifiche locali); `ArchiveModel` (anno precedente);
   `DemoServer.swift` (dati finti deterministici per "Prova la demo").
-- `Networking/Keychain.swift`: su macOS usa il Portachiavi moderno (data protection) e ripiega su quello di login
-  se l'app non ha un profilo di provisioning (senza capacità che lo richiedano, nemmeno con il team impostato).
-  In lettura cerca sempre in entrambi: senza autorizzazione `SecItemCopyMatching` sul moderno risponde
-  `errSecItemNotFound`, non `errSecMissingEntitlement` (verificato; per questo a ogni avvio si doveva rientrare).
+- `Networking/Keychain.swift`: account salvati nel Portachiavi (voci generiche, `AfterFirstUnlockThisDeviceOnly`).
 - Orario: `Models/Timetable.swift` (modello `Codable` con decodifica tollerante, minuti dalla mezzanotte, giorni 1 = lunedì),
   `Store/TimetableStore.swift` (in `AppModel.timetable`, un JSON per account in Application Support/Timetable/<account>,
   file allegati in `Files`, cancellati quando nessuno li usa; la demo si cancella uscendo), `Store/TimetableGenerator.swift`,
@@ -147,13 +111,11 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   Gruppi di eventi uguali: `TimetableLayout(entries:splitAtBreaks:)`. Nelle viste Lista e Calendario
   (`splitAtBreaks: true`, righe da `listItems`) un intervallo sul passaggio tra due eventi uguali li separa e va tra
   i due; nella vista Giorno il gruppo resta unito e l'intervallo sta sopra.
-  Su macOS un testo con `fixedSize(horizontal: false, vertical: true)` fuori da uno scorrimento fa calcolare
-  un'altezza minima enorme (testo largo zero) e la finestra impagina tutto fuori posto: usare `lineLimit`.
   Dentro `TimetableStore.mutate` non leggere `timetable` (accesso simultaneo → crash): calcolare prima ciò che serve.
   Nella vista Giorno `contentShape` e gesti vanno prima di `.offset` (dopo valgono per la posizione di partenza);
   su iPhone il trascinamento usa `LongPressDragRecognizer` (UIKit): quelli di SwiftUI perdevano contro lo scorrimento.
   `fileImporter` chiude il selettore (e il suo `isPresented`) prima di consegnare i file: lo stato che serve dopo va
-  tenuto a parte. Su macOS i file scelti dall'utente richiedono `ENABLE_USER_SELECTED_FILES = readwrite`.
+  tenuto a parte.
 - `Theme/Theme.swift`: ruoli di colore Material letti da `ThemeStore` (alias `background`/`card`/`ink`…), toni fissi
   dei voti, colori delle materie (`subjectColor`), modificatore `.card()`.
 - `Features/`: Dashboard, Timetable, Grades, You (sottosezioni), Search, Settings, Login.
@@ -182,9 +144,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Endpoint voti: si prova `grades`, poi `grades2324`, poi `grades2`.
 - Verifiche riconosciute con euristica sul testo (`AgendaEvent.kind`), Classeviva non ha un codice dedicato.
 
-## Layout su macOS
-- Barra laterale al posto delle schede; "Tu" diventa un riepilogo (profilo, statistiche, riquadri delle sezioni).
-- Orario su iPhone: solo viste Lista e Giorno (`TimetableMode.available`; la Calendario resta su Mac e nella Dashboard).
+## Layout e comportamenti
+- Orario: solo viste Lista e Giorno (`TimetableMode.available`; il mese c'è nella Dashboard).
 - Calendario mobile su iPhone (`Components/CalendarHeader.swift`), uguale in Orario (Lista e Giorno) e Dashboard
   (Lista = settimana, Calendario = mese): `CalendarHeader` galleggia sopra l'area che scorre in uno `ZStack` e non fa
   parte dello scorrimento. L'area parte sotto il calendario ridotto (`safeAreaPadding` costante) e scende di `range`
@@ -211,10 +172,13 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   le griglie invisibili non devono prendere i tocchi (`allowsHitTesting`), altrimenti rubano i gesti all'area.
   Il mese si riduce alla settimana del giorno scelto: le altre settimane salgono e svaniscono, i giorni dei mesi
   accanto che la completano compaiono (`MonthMorphCell`), e riducendo si torna al mese del giorno scelto.
+  `CalendarHeaderPan` cerca lo scorrimento a ogni spostamento nella gerarchia (`Anchor`, `didMoveToWindow`/
+  `didMoveToSuperview`), non solo in `updateUIView`: quando la pagina viene ricostruita (es. cambiando Liquid Glass)
+  i gesti restavano sul vecchio scorrimento, con l'Orario bloccato (`scrollDisabled` da intero) e l'intestazione
+  della Dashboard ferma. Un gesto tolto a metà viene chiuso a mano (`detach`).
   Le registrazioni del simulatore salvano fotogrammi solo quando lo schermo cambia (le pause spariscono): per misurare
   un'animazione stampare i valori con l'ora (`CACurrentMediaTime`).
-- Impostazioni su iPhone: elenco di sottopagine (Generale, Voti, Dashboard, Orario, Notifiche, Account) con le stesse
-  sezioni delle schede della finestra Impostazioni del Mac.
+- Impostazioni: elenco di sottopagine (Generale, Aspetto, Voti, Dashboard, Orario, Notifiche, Account).
 - Dashboard, "Nei prossimi giorni": ogni giorno è una card comprimibile (`UpcomingDayCard`, intestazione = comprimi).
   Toccando il resto della card si va a quel giorno, ma i tocchi propri vincono: la casella del compito e il testo
   tagliato di una riga (che si apre); `AgendaEventRow.onPlainTap` misura se il testo è tagliato.
@@ -230,41 +194,15 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (`Timetable.testRules`, `TestHidingRules`: docenti, materie, giorni, periodi, parole, senza lezione in orario);
   mostrandone a mano una nascosta da una regola finisce in `shownTests` (eccezione), nascondendola di nuovo l'eccezione
   si toglie. Il motivo viene da `TimetableStore.hiddenReason(for:unmatched:)`; la Dashboard non ne è toccata.
-- Orario, barra: niente frecce per cambiare giorno; "Oggi" compare solo se il giorno scelto non è oggi (⌘T su Mac),
+- Orario, barra: niente frecce per cambiare giorno; "Oggi" compare solo se il giorno scelto non è oggi,
   come "Domani" nella Dashboard.
-- Orario su Mac: Lista e Calendario con `SplitColumns` (settimana o mese + riepilogo della settimana | giorno); la
-  vista Giorno (`MacWeekTimeline`) mostra tutta la settimana con gli eventi trascinabili anche tra i giorni.
-  Fuori da uno scorrimento `WeekStrip` va con `.fixedSize(horizontal: false, vertical: true)`, altrimenti si allunga.
-- Barra della finestra: di serie macOS le dà sempre lo sfondo con la riga, anche con la pagina in cima (verificato
-  anche con un'app SwiftUI minima: le `NSScrollPocket` restano spente). `MacRootView` la tiene trasparente
-  (`toolbarBackgroundVisibility(.hidden)`) e la mostra (chiara e sfocata) solo quando uno scorrimento della pagina che
-  arriva sotto la barra non è in cima (`WindowBarScrollObserver`, che ascolta i cambi dei limiti delle `NSClipView`).
-  Nella schermata di accesso la barra c'è ma senza sfondo: toglierla del tutto cambierebbe pulsanti e angoli.
-- Ricerca su Mac: un clic su un'area vuota della pagina di ricerca toglie la selezione al campo (sfondo con
-  `onTapGesture` sotto i risultati, che lo coprono; il contenuto riempie almeno l'altezza visibile).
-- `Form` su Mac: più controlli in una riga (es. `DatePicker` + `Stepper`) finiscono uno sopra l'altro e tagliati, e un
-  `Stepper` con un `LabeledContent` come etichetta stacca il valore dalle frecce: usare `LabeledContent` con i
-  controlli in un `HStack` (`labelsHidden`) e `LabeledStepper`. Nel generatore gli intervalli si tolgono con il
-  pulsante rosso (su iPhone scorrendo).
-- Pagine a due colonne con `SplitColumns` (laterale fissa + principale, scorrimento separato; sotto ~780 pt si
-  impilano): Dashboard (calendario + prossimi giorni | giorno, con lezioni in colonna a parte da 580 pt), Voti,
-  dettaglio materia, Scrutini, Anni precedenti, Lezioni. Bacheca: elenco + dettaglio affiancati sopra 820 pt.
-- Elenchi di card in `CardGrid` (una colonna su iOS, griglia adattiva su Mac); filtri in `ChipRow` (a capo su Mac).
-- Dashboard su Mac: il giorno scelto è il titolo nella barra, come nelle altre sezioni; a destra "Domani" (solo se il
-  giorno scelto non è domani, ⇧⌘T) e il menu della vista (con "Vai a oggi"), poi Aggiorna e la ricerca.
-  "Nei prossimi giorni" cambia identità (`upcomingGeneration`) in `select(_:)`, insieme al giorno: su iOS sempre, su
-  macOS solo se la sezione è espansa e il contenuto cambia davvero. L'identità non deve dipendere dallo stato
-  compresso: comprimere sostituirebbe la sezione intera e l'intestazione scenderebbe e risalirebbe. La transizione
-  usa lo spostamento del giorno scelto (`upcomingTransition`, `dayDetailHeight`): `.move(edge:)` sposta di tutta
-  l'altezza della vista, troppo con la lista aperta e troppo poco con la sola intestazione.
-- La schermata di accesso ha un elemento invisibile nella barra: senza barra i pulsanti a semaforo si spostano.
-- Pagine con ricerca propria (Bacheca, Agenda, Materiale): su Mac il campo è nel contenuto (`LocalSearchField`),
-  perché nella barra c'è già quello generale.
-- `ContentUnavailableView` su macOS non si allarga: dentro uno stack aggiungere `.frame(maxWidth: .infinity)`.
-  Le pagine che mostrano un messaggio in `.overlay` devono riempire la finestra (`frame(maxWidth:maxHeight: .infinity)`).
-- Rotelle in pulsanti e righe: `InlineProgress` (piccola su Mac, dove quella normale è più alta della riga).
-- `.glass` su macOS riempie il pulsante con la tinta: usare `glassButton()`. Anni precedenti apre il sito nel
-  browser (niente `SFSafariViewController`); "Aggiungi al Calendario" salva direttamente con accesso in sola scrittura.
+- Elenchi di card in `CardGrid` (una colonna); filtri in `ChipRow` (scorrono in orizzontale).
+- Dashboard: "Nei prossimi giorni" cambia identità (`upcomingGeneration`) in `select(_:)`, insieme al giorno.
+  L'identità non deve dipendere dallo stato compresso: comprimere sostituirebbe la sezione intera e l'intestazione
+  scenderebbe e risalirebbe. La transizione usa lo spostamento del giorno scelto (`upcomingTransition`,
+  `dayDetailHeight`): `.move(edge:)` sposta di tutta l'altezza della vista, troppo con la lista aperta e troppo poco
+  con la sola intestazione.
+- Rotelle in pulsanti e righe: `InlineProgress`.
 
 ## Prestazioni
 - Eventi, assenze e giorni del calendario per giorno: usare `model.events(on:)`, `absences(on:)`, `calendarStatus(on:)`,
@@ -272,10 +210,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (il calendario di Foundation dominava i profili) e le celle del calendario lo fanno a ogni aggiornamento.
 - Nelle viste calcolare gli elenchi una volta per aggiornamento (`let` nel `body`, o una struttura come
   `DayDetail.Content` e `SearchView.Results`), mai in proprietà calcolate richiamate più volte o dentro le righe.
-- Ridimensionando la finestra: niente `@State` con la larghezza (`onGeometryChange` di un `CGFloat`), che ricalcola la
-  pagina a ogni fotogramma; misurare solo il passaggio (`Bool`, con un po' di isteresi in `SplitColumns`). Il passaggio
-  da due colonne a una ricostruisce le due strutture (50–130 ms, quasi tutto in SwiftUI); tenere la colonna principale
-  nello stesso scorrimento è risultato molto più lento (~400 ms).
+- Niente `@State` con misure che cambiano di continuo (`onGeometryChange` di un `CGFloat`): ricalcola la pagina a ogni
+  fotogramma; misurare solo il passaggio che serve (`Bool`).
 - Misure che cambiano a ogni fotogramma e servono solo in certi momenti (es. `dayDetailHeight`) vanno in
   `UnobservedValue`, non in uno `@State` osservato: altrimenti l'intera pagina si ricalcola a ogni fotogramma.
 - `.card()` mette l'ombra sulla sola forma di sfondo: un'ombra sull'intera vista va ricalcolata dal contenuto.
@@ -284,8 +220,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (righe dell'agenda, giorni successivi, giorni dell'orario) sono `Equatable` e usate con `.equatable()`: altrimenti ogni
   aggiornamento della pagina le ricalcolava tutte. Nel mese che si riduce i giorni si spostano con `offset` invece di
   cambiare il margine (che faceva rimisurare tutte le pagine dei mesi a ogni fotogramma).
-- Per misurare: build Release del Mac con `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG`, un aggancio temporaneo che ripete
-  l'interazione e `sample <pid> 8`, poi sommare i campioni per funzione dell'app.
+- Per misurare: build Release per il simulatore con `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG`, un aggancio temporaneo
+  che ripete l'interazione e `sample <pid> 8` sul processo del simulatore, poi sommare i campioni per funzione dell'app.
 
 ## Sistema di design (Material 3 Expressive, `BCW/Design/`)
 - `ThemeStore.shared` (`@Observable`): preferenze di Aspetto (accento, stile dei colori, contrasto, angoli, movimento,
@@ -298,16 +234,27 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `Assets.xcassets/Material` (`Icon`, `Image.m`, `Label(_:icon:)`). Forme: `MaterialShape`/`Shaped`, `LoadingIndicator`.
 - Componenti: `Controls.swift` (`.m3(...)` pulsanti, `IconButton`, `FAB`, `SegmentedButtons`, `FilterChip`, `Pill`,
   `M3ToggleStyle`, `M3Stepper`, `M3SearchBar`), `Lists.swift` (`ListGroup` con angoli per cella, `ListRow`,
-  `ToggleRow`, `SelectRow`, `NavigationRow`…), `Overlays.swift` (`.overlayHost()`: menu `AppMenu`/`MenuItem`,
+  `ToggleRow`, `SelectRow`, `NavigationRow`, `FormField`/`FormFieldValue` per i campi con l'etichetta sopra come nei
+  fogli del web…), `Overlays.swift` (`.overlayHost()`: menu `AppMenu`/`MenuItem`,
   `.m3Dialog`, toast; con Liquid Glass i menu sono `Menu` di sistema), `Page.swift`.
 - Pagine: `pageChrome(title, …) { azioni }`. Con Liquid Glass usa titolo e barra di sistema (`.inlineLarge` per le
   pagine principali, `isRootPage`); con Material nasconde la barra e mette `TopAppBar` + titolo grande nel contenuto.
   Fogli: `sheetChrome` + `.m3Sheet()`. `MainTabView`: con Material la `M3NavigationBar` è sovrapposta (TabView e
   NavigationStack non propagano `safeAreaInset`), lo spazio in fondo arriva con `bottomBarInset`.
-- Mac con Material: `MacMaterialRootView` (barra laterale `MaterialRail` comprimibile, pannello con angoli, ricerca
-  `M3SearchBar` in alto a destra, barra della finestra nascosta); con Liquid Glass `MacGlassRootView`.
-- Argomenti di prova: `-BCWLiquidGlass YES|NO`, `-BCWAccent #RRGGBB`. Per le foto del Mac senza sandbox servono
-  anche `-BCWKeychainService <nome>` (altrimenti il Portachiavi chiede l'accesso e l'app resta ferma).
+- `ListGroup`: prima e ultima voce con angoli ampi (`li`), quelle in mezzo stretti (`xs`). Gli angoli vanno passati
+  anche direttamente allo sfondo della voce: un modificatore applicato a un `Subview` fuori da `.environment` legge
+  ancora i valori dell'ambiente esterno (prima tutte le voci avevano gli angoli ampi).
+- Colore d'accento dei componenti UIKit (barra delle schede, pulsanti e menu di sistema, avvisi): `Theme.applyTint()`
+  dà alle finestre il `primary` del tema, a ogni cambio di aspetto e all'avvio (`RootView.task`). Nel catalogo non c'è
+  più `AccentColor` (era il vecchio rosso-arancio, che compariva con Liquid Glass): non rimetterlo.
+- Barra delle schede di sistema (Liquid Glass): etichette con `Tab(value:content:label:)` e icona piena per la scheda
+  aperta (`AppTab.selectedIcon`), come la barra Material.
+- Indietro scorrendo: con Liquid Glass c'è il gesto di sistema da qualsiasi punto del contenuto (iOS 26). Con la barra
+  nascosta (Material) UIKit spegne sia quello dal bordo (riattivato dal delegato in `Page.swift`) sia quello dal
+  contenuto (che resta spento anche cambiandone il delegato: non viene nemmeno interpellato). Lo sostituisce
+  `ContentPopGesture`, un pan sul contenitore della pila che guida la stessa transizione di sistema
+  (`handleNavigationTransition:` del delegato del gesto di sistema), attivo solo con la barra nascosta e con una pagina
+  a cui tornare; gli scorrimenti orizzontali che possono ancora andare verso sinistra hanno la precedenza.
 - Sul simulatore i tocchi istantanei spesso non premono i pulsanti SwiftUI: usare `touch_path` da 120–150 ms.
 
 ## Convenzioni

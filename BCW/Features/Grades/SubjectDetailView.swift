@@ -51,18 +51,6 @@ struct SubjectDetailView: View {
 
     @ViewBuilder
     private var content: some View {
-        #if os(macOS)
-        SplitColumns(sideWidth: 350) {
-            header
-            periodPicker
-            chart
-            GoalCalculator(grades: grades, weighted: book.weighted)
-        } main: {
-            SectionHeader("Voti", subtitle: "\(grades.count) valutazioni")
-            gradeList
-        }
-        .animation(Motion.spatial, value: period)
-        #else
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
@@ -79,7 +67,6 @@ struct SubjectDetailView: View {
         }
         .tracksPageScroll()
         .themedBackground()
-        #endif
     }
 
     private var header: some View {

@@ -78,7 +78,6 @@ struct TimetableGeneratorSheet: View {
             }
         }
         .m3Sheet()
-        .sheetFrame(width: 520, height: 680)
     }
 
     private var hoursFooter: String {

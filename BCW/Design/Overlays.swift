@@ -127,7 +127,7 @@ private struct OverlayLayer: View {
                 if let toast = host.toast {
                     ToastView(toast: toast)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        .padding(.bottom, Platform.isMac ? 24 : 96)
+                        .padding(.bottom, 96)
                         .padding(.horizontal, 12)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .allowsHitTesting(false)

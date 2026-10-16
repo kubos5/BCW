@@ -1,7 +1,5 @@
 import SwiftUI
-#if os(iOS)
 import UIKit
-#endif
 
 /// Movimento di Material 3 Expressive: molle spaziali (posizione, forma) con un piccolo
 /// rimbalzo ed effetti (colore, opacità) senza. Seguono Impostazioni › Aspetto › Animazioni:
@@ -86,26 +84,18 @@ extension Label where Title == Text, Icon == Image {
 /// Vibrazioni dell'interfaccia (solo iPhone): tocco leggero, selezione, conferma.
 enum Haptics {
     static func tap() {
-        #if os(iOS)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        #endif
     }
 
     static func selection() {
-        #if os(iOS)
         UISelectionFeedbackGenerator().selectionChanged()
-        #endif
     }
 
     static func success() {
-        #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        #endif
     }
 
     static func soft() {
-        #if os(iOS)
         UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.7)
-        #endif
     }
 }

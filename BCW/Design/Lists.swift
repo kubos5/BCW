@@ -29,10 +29,13 @@ struct ListGroup<Content: View>: View {
                     ForEach(subviews.indices, id: \.self) { index in
                         let first = index == subviews.startIndex
                         let last = index == subviews.index(before: subviews.endIndex)
+                        let corners = ListCellCorners(top: first ? Theme.radii.li : Theme.radii.xs,
+                                                      bottom: last ? Theme.radii.li : Theme.radii.xs)
+                        // Gli angoli si passano anche direttamente: un modificatore applicato fuori da
+                        // `.environment` leggerebbe ancora quelli predefiniti.
                         subviews[index]
-                            .environment(\.listCellCorners, ListCellCorners(top: first ? Theme.radii.li : Theme.radii.xs,
-                                                                             bottom: last ? Theme.radii.li : Theme.radii.xs))
-                            .modifier(ListCellBackground(color: background))
+                            .environment(\.listCellCorners, corners)
+                            .modifier(ListCellBackground(color: background, corners: corners))
                     }
                 }
             }
@@ -62,7 +65,7 @@ extension EnvironmentValues {
 
 private struct ListCellBackground: ViewModifier {
     var color: Color?
-    @Environment(\.listCellCorners) private var corners
+    var corners: ListCellCorners
 
     func body(content: Content) -> some View {
         content
@@ -291,6 +294,8 @@ struct SelectButton<Value: Hashable>: View {
     var label: String = ""
     var fill: Color?
     var minHeight: CGFloat = 36
+    /// Occupa tutta la larghezza, con la freccia a destra (campi dei moduli, `.field .select-btn`).
+    var expands = false
 
     var body: some View {
         let current = options.first { $0.value == selection }?.title ?? ""
@@ -301,14 +306,16 @@ struct SelectButton<Value: Hashable>: View {
                 Text(current)
                     .lineLimit(1)
                     .foregroundStyle(Theme.ink)
+                if expands { Spacer(minLength: 0) }
                 Icon("chevronUpDown", size: 18)
                     .foregroundStyle(Theme.onSurfaceVariant)
             }
-            .font(.m3(14, weight: 550))
-            .padding(.leading, 14)
+            .font(.m3(expands ? 15 : 14, weight: 550))
+            .padding(.leading, expands ? 12 : 14)
             .padding(.trailing, 8)
-            .frame(minHeight: minHeight)
-            .background(fill ?? Theme.surfaceContainerHigh, in: .rect(cornerRadius: Theme.radii.m, style: .continuous))
+            .frame(maxWidth: expands ? .infinity : nil, minHeight: minHeight)
+            .background(fill ?? Theme.surfaceContainerHigh,
+                        in: .rect(cornerRadius: expands ? Theme.radii.l : Theme.radii.m, style: .continuous))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -316,6 +323,44 @@ struct SelectButton<Value: Hashable>: View {
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityLabel(label)
         .accessibilityValue(current)
+    }
+}
+
+/// Campo di un modulo con l'etichetta sopra (`.field`), come nei fogli della versione web.
+struct FormField<Content: View>: View {
+    let label: String
+    @ViewBuilder let content: () -> Content
+
+    init(_ label: String, @ViewBuilder content: @escaping () -> Content) {
+        self.label = label
+        self.content = content
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.m3(13, weight: 600))
+                .foregroundStyle(Theme.onSurfaceVariant)
+                .padding(.leading, 4)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Valore di sola lettura in un campo (`.field-value`).
+struct FormFieldValue: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(.m3(15).monospacedDigit())
+            .foregroundStyle(Theme.ink)
+            .lineLimit(1)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .background(Theme.surfaceContainer, in: .rect(cornerRadius: Theme.radii.l, style: .continuous))
     }
 }
 

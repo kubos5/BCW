@@ -1,5 +1,5 @@
 # BCW: Better ClasseViVa
-Un client nativo per iPhone, iPad e Mac per il registro elettronico [Classeviva](https://web.spaggiari.eu) di Gruppo Spaggiari Parma.
+Un client nativo per iPhone e iPad per il registro elettronico [Classeviva](https://web.spaggiari.eu) di Gruppo Spaggiari Parma.
 
 > BCW non è affiliato a Gruppo Spaggiari Parma S.p.A.
 
@@ -18,7 +18,6 @@ Altrimenti, puoi compilarla in Xcode:
    - oppure `git clone https://github.com/kubos5/BCW`, poi apri il progetto con Xcode
 4. in Signing & Capabilities scegli il tuo team / creane uno (è sufficiente un qualsiasi Apple ID)
 5. esegui sul simulatore o su un dispositivo collegato via USB
-6. per la versione Mac scegli "My Mac" come destinazione ed esegui
 
 Il progetto usa le cartelle sincronizzate di Xcode 16, quindi qualsiasi file aggiunto in `BCW/` entra automaticamente nel target.
 In alternativa è incluso un `project.yml` per [XcodeGen](https://github.com/yonaskolb/XcodeGen).
@@ -34,26 +33,26 @@ BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 - dato un obiettivo di media, puoi calcolare il voto necessario nelle prossime 1-5 prove
 - puoi vedere l'effetto di ogni voto sulla media della materia (▲/▼) e grafici dell'andamento
 - puoi scegliere se calcolare la media come media di tutti i voti o media delle medie, con o senza pesi
-- integrazione con il Calendario di iOS e macOS per compiti, verifiche ed eventi
-- puoi bloccare l'app con FaceID / TouchID (anche su Mac)
+- integrazione con il Calendario di iOS per compiti, verifiche ed eventi
+- puoi bloccare l'app con FaceID / TouchID
 - puoi consultare l'app anche offline, visualizzando i dati dell'ultima volta che era stata aperta
 - supporto agli account genitore con più figli
-- puoi aggiungere più account e passare dall'uno all'altro (su iPhone anche tenendo premuta la scheda Tu), con una dissolvenza tra i dati di un account e quelli dell'altro
+- puoi aggiungere più account e passare dall'uno all'altro (anche tenendo premuta la scheda Tu), con una dissolvenza tra i dati di un account e quelli dell'altro
 - bacheca con adesione, firma e risposta alle comunicazioni e apertura degli allegati con Quick Look
 - modalità Demo con dati di esempio, per provare l'app senza un account o anche con un account già collegato (uscendo si torna all'account)
 - toccando di nuovo la scheda Dashboard si torna in cima alla pagina e, se si è già in cima, alla giornata di domani
 - riepilogo per periodo con le insufficienze
 - conto alla rovescia alle prossime vacanze
-- notifiche per nuovi voti, comunicazioni, note, assenze e compiti, da attivare in Impostazioni › Notifiche (su iPhone anche con l'app chiusa)
-- su iPhone il calendario della Dashboard (settimana o mese) si riduce a una striscia come quello dell'Orario, e scorrendo di lato si passa al giorno prima o dopo
+- notifiche per nuovi voti, comunicazioni, note, assenze e compiti, da attivare in Impostazioni › Notifiche (anche con l'app chiusa)
+- il calendario della Dashboard (settimana o mese) si riduce a una striscia come quello dell'Orario, e scorrendo di lato si passa al giorno prima o dopo
 - in "Nei prossimi giorni" ogni giorno si comprime toccandone il titolo; toccando il resto si va a quel giorno
 
 ### Orario
 
 La scheda Orario contiene l'orario settimanale, che si compila a mano o si genera dalle lezioni registrate:
 
-- tre viste: Lista (la settimana in alto e gli eventi del giorno sotto), Calendario (il mese in alto e gli eventi del giorno sotto) e Giorno (le ore della giornata, come nell'app Calendario)
-- su iPhone la settimana (nelle viste Lista e Giorno) scatta tra intera e ridotta (una striscia di numeri) seguendo il dito, con un punto di resistenza a metà strada segnato da una vibrazione; lo scorrimento normale comincia da settimana ridotta e per riaprirla si tira giù da lì, oppure la si tocca; scorrendo di lato si passa al giorno prima o dopo
+- due viste: Lista (la settimana in alto e gli eventi del giorno sotto) e Giorno (le ore della giornata, come nell'app Calendario)
+- la settimana scatta tra intera e ridotta (una striscia di numeri) seguendo il dito, con un punto di resistenza a metà strada segnato da una vibrazione; lo scorrimento normale comincia da settimana ridotta e per riaprirla si tira giù da lì, oppure la si tocca; scorrendo di lato si passa al giorno prima o dopo
 - toccando un evento si vedono i dettagli e si aggiungono note, file e foto, per un solo giorno o per ogni settimana
 - le verifiche segnate dai docenti su Classeviva compaiono da sole sulla lezione della materia e si possono nascondere; altre verifiche si segnano a mano, per un giorno o per ogni settimana
 - Verifiche nascoste (dal menu dell'orario): l'elenco delle verifiche nascoste, con il motivo, da cui si possono mostrare di nuovo, e le regole per nasconderle in automatico (per docente, materia, giorno della settimana, periodo, parole nel testo o materie che quel giorno non sono in orario)
@@ -67,34 +66,16 @@ La scheda Orario contiene l'orario settimanale, che si compila a mano o si gener
 - generazione automatica di una bozza dell'orario dalle lezioni registrate, mostrata in anteprima con i bordi tratteggiati prima di applicarla
 - backup dell'orario da esportare e reimportare dalle Impostazioni (con file allegati); la sincronizzazione con iCloud è in lavorazione
 
-### Su Mac
-
-BCW è anche un'app nativa per macOS (non Catalyst), con le stesse funzioni e lo stesso design dell'app per iPhone, ma con un layout pensato per lo schermo grande:
-
-- barra laterale con tutte le sezioni (Dashboard, Voti, Tu, Bacheca, Note, Scrutini, Assenze, Didattica…) e i contatori delle cose da leggere o giustificare
-- ricerca sempre a portata di mano nel campo in alto a destra (⌘F), che diventa un'icona se la finestra è stretta
-- Dashboard a colonne: calendario e prossimi giorni a sinistra, il giorno scelto a destra, con le lezioni in una colonna a parte
-- Orario a colonne: calendario e riepilogo della settimana a sinistra, il giorno scelto a destra; la vista Giorno mostra l'intera settimana e, in Modifica orario, gli eventi si trascinano anche da un giorno all'altro
-- Voti con medie e andamento sempre visibili accanto all'elenco
-- Bacheca con elenco e comunicazione aperta affiancati, come in Mail
-- griglie di card per note, assenze, agenda, materiale, materie e libri
-- menu Vai e Account, scorciatoie da tastiera (⌘1…⌘9 per le sezioni, ⌘F per cercare, ⌘R per aggiornare, ⇧⌘T per andare a domani nella Dashboard, ⌘T per tornare a oggi e ⌘N per un nuovo evento nell'Orario)
-- finestra Impostazioni (⌘,) a schede, con le stesse sezioni delle Impostazioni su iPhone (Generale, Voti, Dashboard, Orario, Notifiche, Account)
-- barra della finestra trasparente finché il contenuto non le scorre sotto, poi chiara e sfocata come nelle app di Apple
-- nella ricerca un clic su un'area vuota toglie la selezione al campo
-- le pagine si adattano alla larghezza della finestra: se è stretta, le colonne si impilano
-
 ### Design
 
-L'app usa componenti nativi di iOS e macOS per barre, pulsanti e barra laterale.
-New York è il font usato, una typeface serif creata da Apple.
-Vengono usati colori morbidi (`#F7F2E8` per lo sfondo chiaro, `#1E1D1C` per lo sfondo scuro) in tutta l'interfaccia
+L'app segue Material 3 Expressive, come la [versione web](https://kubos5.github.io/BCW-web): stesso layout, font Google Sans Flex, icone Material Symbols e colori generati dal colore d'accento scelto in Impostazioni › Aspetto (con stile dei colori, contrasto, angoli e animazioni).
+Le forme usano angoli continui e su iPhone l'interfaccia ha il feedback aptico.
+In Impostazioni › Aspetto si può attivare Liquid Glass: barra di navigazione, barra delle schede e menu diventano quelli di sistema, in vetro.
 
 ### Requisiti
 
 - Xcode 26 o successivo
 - iOS / iPadOS 26 o successivo
-- macOS 26 o successivo
 
 ---
 
@@ -107,18 +88,19 @@ Le risposte vengono salvate nella cache dell'app per l'uso offline.
 L'orario è salvato solo sul dispositivo, separato per ogni account.
 
 Per gli anni precedenti l'app scarica le pagelle dall'archivio di Classeviva (`webYY.spaggiari.eu`, es. `web25` per il 2025/26).
-Voti, assenze e note degli anni passati non sono disponibili tramite le API, quindi l'app apre il sito di Classeviva in un browser integrato (su Mac nel browser predefinito).
+Voti, assenze e note degli anni passati non sono disponibili tramite le API, quindi l'app apre il sito di Classeviva in un browser integrato.
 
 ### Struttura del codice
 
 ```
 BCW/
-├── App/            Entry point, tab bar (iOS), finestra con barra laterale e menu (macOS), blocco biometrico
+├── App/            Entry point, barra delle schede, blocco biometrico
 ├── Networking/     Client Classeviva, cache su disco, Portachiavi
 ├── Models/         Modelli decodificati in modo tollerante
 ├── Store/          Stato dell'app, orario e sua generazione, calcolo medie, preferenze, promemoria, server demo
-├── Theme/          Colori, font e stili
-├── Utilities/      Date, decodifica e adattatori tra iOS e macOS
+├── Design/         Material 3 Expressive: aspetto, font, forme, controlli, elenchi, menu e pagine
+├── Theme/          Colori e stili
+├── Utilities/      Date, decodifica e piccoli adattatori
 ├── Components/     Componenti riutilizzabili (card, badge voto, anelli, righe agenda…)
 └── Features/       Dashboard, Orario, Voti, Tu (e sottosezioni), Cerca, Impostazioni, Login
 ```

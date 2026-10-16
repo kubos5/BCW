@@ -43,11 +43,7 @@ struct DidacticsView: View {
                 }
 
                 if !model.didactics.isEmpty {
-                    #if os(macOS)
-                    LocalSearchField(text: $search, prompt: Self.searchPrompt)
-                    #else
                     PageSearchBar(text: $search, prompt: Self.searchPrompt)
-                    #endif
                 }
 
                 if !model.didactics.isEmpty {
@@ -117,7 +113,6 @@ struct DidacticsView: View {
             }
             .m3Sheet()
             .presentationDetents([.medium, .large])
-            .sheetFrame(width: 560, height: 480)
         }
         .task {
             if model.didactics.isEmpty {

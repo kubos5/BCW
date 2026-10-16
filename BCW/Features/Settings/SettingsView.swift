@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Sottopagine delle Impostazioni (le schede della finestra Impostazioni del Mac).
+/// Sottopagine delle Impostazioni.
 enum SettingsPane: String, CaseIterable, Identifiable {
     case general, appearance, grades, dashboard, timetable, notifications, accounts
     var id: String { rawValue }
@@ -59,8 +59,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     }
 }
 
-/// Impostazioni su iPhone: un elenco di sottopagine, come le schede della finestra Impostazioni
-/// del Mac (`MacSettingsView`), con le stesse sezioni.
+/// Impostazioni: un elenco di sottopagine.
 struct SettingsView: View {
     var body: some View {
         ScrollView {
@@ -121,7 +120,7 @@ struct SettingsPaneView: View {
     }
 }
 
-// MARK: - Sezioni (condivise con la finestra Impostazioni di macOS)
+// MARK: - Sezioni
 
 struct SecuritySettingsSection: View {
     @Environment(AppModel.self) private var model
@@ -187,17 +186,13 @@ struct NotificationSettingsSection: View {
             .buttonStyle(.listRow)
         }
         .m3Dialog("Notifiche disattivate", isPresented: $notificationsDenied,
-                  message: Platform.isMac
-                    ? "Per ricevere i promemoria consenti le notifiche a BCW in Impostazioni di Sistema › Notifiche."
-                    : "Per ricevere i promemoria consenti le notifiche a BCW nelle Impostazioni di iOS.") {
-            [.cancel("OK"), DialogAction(title: Platform.isMac ? "Apri Impostazioni di Sistema" : "Apri Impostazioni", style: .strong) {
+                  message: "Per ricevere i promemoria consenti le notifiche a BCW nelle Impostazioni di iOS.") {
+            [.cancel("OK"), DialogAction(title: "Apri Impostazioni", style: .strong) {
                 Platform.openNotificationSettings()
             }]
         }
 
-        ListGroup("Novità", footer: Platform.isMac
-                  ? "Una notifica per ogni novità trovata aggiornando i dati mentre BCW è aperta."
-                  : "Una notifica per ogni novità trovata aggiornando i dati, anche con BCW chiusa: iOS sceglie quando aggiornare in background, in base a quanto usi l'app, quindi le notifiche possono arrivare con un po' di ritardo.") {
+        ListGroup("Novità", footer: "Una notifica per ogni novità trovata aggiornando i dati, anche con BCW chiusa: iOS sceglie quando aggiornare in background, in base a quanto usi l'app, quindi le notifiche possono arrivare con un po' di ritardo.") {
             ForEach(NewsKind.allCases) { kind in
                 ToggleRow(kind.title, icon: kind.icon, isOn: Binding {
                     preferences.newsNotifications.contains(kind)
@@ -207,9 +202,7 @@ struct NotificationSettingsSection: View {
             }
         }
         .onChange(of: preferences.newsNotifications) {
-            #if os(iOS)
             NewsNotifications.scheduleBackgroundRefresh(model: model)
-            #endif
         }
     }
 
@@ -231,17 +224,12 @@ struct DashboardSettingsSection: View {
     var body: some View {
         @Bindable var preferences = model.preferences
 
-        ListGroup("Dashboard", footer: Platform.isMac
-                  ? "La vista Calendario mostra il mese intero accanto al giorno scelto; la vista Lista la sola settimana."
-                  : "Il titolo abbreviato mostra la data in forma breve (es. \"Gio 1 ott\"). In automatico si abbrevia solo se il nome completo non entra.") {
+        ListGroup("Dashboard", footer: "Il titolo abbreviato mostra la data in forma breve (es. \"Gio 1 ott\"). In automatico si abbrevia solo se il nome completo non entra.") {
             SelectRow("Vista", selection: $preferences.dashboardMode,
                       options: DashboardMode.allCases.map { ($0, $0.title, $0.icon) })
             ToggleRow("Mostra \"Nei prossimi giorni\"", isOn: $preferences.showUpcomingDays)
-            // Su macOS il titolo sta nella barra della finestra, dove entra sempre per intero.
-            if !Platform.isMac {
-                SelectRow("Abbrevia il titolo", selection: $preferences.titleAbbreviation,
-                          options: TitleAbbreviation.allCases.map { ($0, $0.title, nil) })
-            }
+            SelectRow("Abbrevia il titolo", selection: $preferences.titleAbbreviation,
+                      options: TitleAbbreviation.allCases.map { ($0, $0.title, nil) })
         }
     }
 }
@@ -514,13 +502,8 @@ private struct SwatchButtonStyle: ButtonStyle {
 extension Color {
     /// Colore in esadecimale (`#rrggbb`), nello spazio sRGB.
     var hexString: String? {
-        #if os(macOS)
-        guard let color = NSColor(self).usingColorSpace(.sRGB) else { return nil }
-        let (r, g, b) = (color.redComponent, color.greenComponent, color.blueComponent)
-        #else
         var (r, g, b, a): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
         guard UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a) else { return nil }
-        #endif
         func channel(_ v: CGFloat) -> String { String(format: "%02x", Int((min(max(v, 0), 1) * 255).rounded())) }
         return "#" + channel(r) + channel(g) + channel(b)
     }
@@ -528,21 +511,14 @@ extension Color {
 
 // MARK: - Account
 
-/// Elenco degli account salvati (sottopagina Account, sul Mac nella finestra Impostazioni).
+/// Elenco degli account salvati (sottopagina Account).
 struct AccountsSettingsPane: View {
     @Environment(AppModel.self) private var model
-    #if os(macOS)
-    @Environment(MacNavigation.self) private var nav
-    #endif
     @State private var addingAccount = false
 
     var body: some View {
         AccountsSection {
-            #if os(macOS)
-            nav.addingAccount = true
-            #else
             addingAccount = true
-            #endif
         }
         if model.isDemo {
             ListGroup {
@@ -551,33 +527,6 @@ struct AccountsSettingsPane: View {
         }
     }
 }
-
-#if os(macOS)
-/// Finestra Impostazioni di macOS (⌘,): le stesse sezioni di iPhone, divise in schede.
-struct MacSettingsView: View {
-    @State private var pane: SettingsPane = .general
-
-    var body: some View {
-        TabView(selection: $pane) {
-            ForEach(SettingsPane.allCases) { pane in
-                Tab(pane.title, image: "m.\(pane.icon)", value: pane) {
-                    ScrollView {
-                        VStack(spacing: 24) {
-                            pane.content
-                        }
-                        .padding(24)
-                    }
-                    .themedBackground()
-                    .frame(minHeight: 300, idealHeight: 480)
-                }
-            }
-        }
-        .frame(width: 580)
-        .frame(minHeight: 300)
-        .overlayHost()
-    }
-}
-#endif
 
 struct AccountView: View {
     @Environment(AppModel.self) private var model
@@ -676,7 +625,6 @@ struct AddAccountSheet: View {
                 .sheetChrome("Aggiungi account", leading: .cancel(action: dismiss))
         }
         .m3Sheet()
-        .sheetFrame(width: 480, height: 640)
     }
 }
 
@@ -692,9 +640,7 @@ struct AccountsSection: View {
     var body: some View {
         ListGroup(showsHeader ? "Account" : nil,
                   footer: model.accounts.count > 1
-                  ? (Platform.isMac
-                     ? "Fai clic su un account per passare ad esso. Usa il cestino per rimuoverlo."
-                     : "Tocca un account per passare ad esso. Usa il cestino per rimuoverlo.")
+                  ? "Tocca un account per passare ad esso. Usa il cestino per rimuoverlo"
                   : "Puoi aggiungere altri account Classeviva (ad esempio quelli di fratelli o sorelle) e passare dall'uno all'altro.") {
             ForEach(model.accounts) { account in
                 let isActive = !model.isDemo && account.id == model.activeAccountID

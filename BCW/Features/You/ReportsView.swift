@@ -30,15 +30,6 @@ struct ReportsView: View {
 
     @ViewBuilder
     private var content: some View {
-        #if os(macOS)
-        // Riepilogo dei periodi a sinistra, documenti a destra.
-        SplitColumns(sideWidth: 360, spacing: 18) {
-            periodSummary
-        } main: {
-            errorBanner
-            documentsList
-        }
-        #else
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 errorBanner
@@ -50,7 +41,6 @@ struct ReportsView: View {
         }
         .tracksPageScroll()
         .themedBackground()
-        #endif
     }
 
     @ViewBuilder

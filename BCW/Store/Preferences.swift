@@ -40,9 +40,9 @@ enum TimetableMode: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Viste disponibili: su iPhone la Calendario non c'è (il mese è già nella Dashboard).
+    /// Viste disponibili: la Calendario non c'è (il mese è già nella Dashboard).
     static var available: [TimetableMode] {
-        Platform.isMac ? allCases : [.list, .day]
+        [.list, .day]
     }
 }
 

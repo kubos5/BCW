@@ -30,11 +30,7 @@ struct AgendaListView: View {
                 PageSearchBar(text: $search, prompt: Self.searchPrompt)
                 HStack(spacing: 12) {
                     SegmentedButtons(selection: $showPast, options: [(false, "In arrivo", nil), (true, "Passati", nil)],
-                                     compact: Platform.isMac)
-                    #if os(macOS)
-                    Spacer(minLength: 0)
-                    LocalSearchField(text: $search, prompt: Self.searchPrompt)
-                    #endif
+                                     compact: false)
                 }
 
                 ChipRow {

@@ -34,24 +34,6 @@ struct LessonsView: View {
 
     @ViewBuilder
     private var content: some View {
-        #if os(macOS)
-        // A sinistra la scelta (giorno o materia), a destra le lezioni.
-        SplitColumns(sideWidth: 320, spacing: 16) {
-            modePicker
-            switch mode {
-            case .day:
-                // Lo stesso calendario della Dashboard: grande e con i pallini di compiti e verifiche.
-                MonthCalendar(selectedDay: $day)
-            case .subject:
-                if !loadingAll { subjectChips }
-            }
-        } main: {
-            switch mode {
-            case .day: dayLessons
-            case .subject: subjectCards
-            }
-        }
-        #else
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 modePicker
@@ -70,7 +52,6 @@ struct LessonsView: View {
         }
         .tracksPageScroll()
         .themedBackground()
-        #endif
     }
 
     private var dayNavigator: some View {

@@ -5,17 +5,11 @@ struct SearchView: View {
     static let prompt = "Compiti, voti, altro…"
 
     @Environment(AppModel.self) private var model
-    /// Testo cercato: su macOS il campo sta nella barra della finestra (`MacRootView`),
-    /// quindi il testo appartiene a chi mostra la pagina.
+    /// Testo cercato (appartiene a chi mostra la pagina).
     @Binding var query: String
 
     private var trimmed: String { query.trimmingCharacters(in: .whitespaces) }
-    #if os(macOS)
-    /// Altezza visibile: il contenuto la riempie, così un clic sotto i risultati cade sullo sfondo.
-    @State private var viewportHeight: CGFloat = 0
-    #else
     @FocusState private var fieldFocused: Bool
-    #endif
 
     /// Risultati della ricerca, calcolati una volta per aggiornamento (a ogni lettera digitata):
     /// prima ogni elenco veniva rifiltrato e riordinato più volte, anche una per ogni riga.
@@ -53,14 +47,12 @@ struct SearchView: View {
         PlatformNavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    #if os(iOS)
                     if !ThemeStore.shared.liquidGlass {
                         PageLargeTitle()
                             .padding(.bottom, -4)
                         M3SearchBar(text: $query, prompt: Self.prompt, focus: $fieldFocused)
                             .padding(.bottom, 4)
                     }
-                    #endif
                     if trimmed.isEmpty {
                         suggestions
                     } else {
@@ -77,29 +69,12 @@ struct SearchView: View {
                 }
                 .pagePadding()
                 .padding(.bottom, 32)
-                #if os(macOS)
-                // Un clic su un'area vuota (non sui risultati o sui suggerimenti, che stanno
-                // davanti e lo coprono) toglie la selezione al campo di ricerca della barra.
-                .frame(maxWidth: .infinity, minHeight: viewportHeight, alignment: .topLeading)
-                .background {
-                    Color.clear
-                        .contentShape(.rect)
-                        .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) }
-                }
-                #endif
             }
-            #if os(macOS)
-            .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.height } action: { _, height in
-                viewportHeight = height
-            }
-            #endif
             .tracksPageScroll()
             .scrollDismissesKeyboard(.immediately)
             .themedBackground()
             .pageChrome("Cerca")
-            #if os(iOS)
             .modifier(SystemSearch(query: $query))
-            #endif
             .task { if model.didactics.isEmpty { await model.loadDidactics() } }
         }
     }
@@ -109,9 +84,7 @@ struct SearchView: View {
             SectionHeader("Suggerimenti")
             FlowChips(items: ["Verifica", "Interrogazione"] + Array(Set(model.grades.map(\.subjectName))).sorted().prefix(8)) {
                 query = $0
-                #if os(iOS)
                 fieldFocused = true
-                #endif
             }
         }
     }
@@ -154,7 +127,7 @@ struct SearchView: View {
                 ForEach(notices.prefix(10)) { notice in
                     NavigationLink {
                         NoticeDetailView(notice: notice)
-                            .pageChrome(Platform.isMac ? "Comunicazione" : "", style: .inline)
+                            .pageChrome("", style: .inline)
                     } label: {
                         HStack(spacing: 12) {
                             Text(notice.title)
@@ -228,7 +201,6 @@ struct SearchView: View {
     }
 }
 
-#if os(iOS)
 /// Con Liquid Glass il campo di ricerca è quello di sistema (nella barra delle schede);
 /// altrimenti è la barra di ricerca di Material 3 nel contenuto.
 private struct SystemSearch: ViewModifier {
@@ -245,7 +217,6 @@ private struct SystemSearch: ViewModifier {
         }
     }
 }
-#endif
 
 /// Chip che vanno a capo automaticamente.
 struct FlowChips: View {

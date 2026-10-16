@@ -1,7 +1,5 @@
 import EventKit
-#if os(iOS)
 import EventKitUI
-#endif
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -17,8 +15,6 @@ struct AgendaEventRow: View {
     @State private var shown: CGFloat = 0
     @State private var full: CGFloat = 0
     @State private var exportingToCalendar = false
-    /// Esito dell'aggiunta al Calendario (solo macOS, dove non c'è l'editor di sistema).
-    @State private var calendarResult: CalendarExport.Result?
 
     private var isDone: Bool { model.preferences.isCompleted(event) }
 
@@ -78,25 +74,13 @@ struct AgendaEventRow: View {
             ShareLink(item: shareText) { Label("Condividi", icon: "share") }
             Button { Platform.copy(event.notes) } label: { Label("Copia testo", icon: "copy") }
         }
-        #if os(iOS)
         .sheet(isPresented: $exportingToCalendar) {
             EventEditor(event: event).ignoresSafeArea()
         }
-        #else
-        .m3Dialog(calendarResult?.title ?? "", isPresented: Binding(get: { calendarResult != nil },
-                                                                    set: { if !$0 { calendarResult = nil } }),
-                  message: calendarResult?.message) {
-            [.cancel("OK")]
-        }
-        #endif
     }
 
     private func addToCalendar() {
-        #if os(iOS)
         exportingToCalendar = true
-        #else
-        Task { calendarResult = await CalendarExport.add(event) }
-        #endif
     }
 
     @ViewBuilder
@@ -178,7 +162,6 @@ extension AgendaEvent {
     }
 }
 
-#if os(iOS)
 /// Editor nativo di Calendario: dal iOS 17 non richiede permessi di accesso.
 struct EventEditor: UIViewControllerRepresentable {
     let event: AgendaEvent
@@ -204,32 +187,6 @@ struct EventEditor: UIViewControllerRepresentable {
         func eventEditViewController(_ controller: EKEventEditViewController,
                                      didCompleteWith action: EKEventEditViewAction) {
             dismiss()
-        }
-    }
-}
-#endif
-
-/// Su macOS non esiste l'editor di EventKitUI: l'evento viene salvato direttamente nel
-/// calendario predefinito, chiedendo solo l'accesso in scrittura.
-enum CalendarExport {
-    struct Result {
-        let title: String
-        let message: String
-    }
-
-    static func add(_ event: AgendaEvent) async -> Result {
-        let store = EKEventStore()
-        do {
-            guard try await store.requestWriteOnlyAccessToEvents() else {
-                return Result(title: "Accesso negato",
-                              message: "Consenti a BCW di aggiungere eventi in Impostazioni di Sistema › Privacy e sicurezza › Calendari.")
-            }
-            let ekEvent = event.calendarEvent(in: store)
-            ekEvent.calendar = store.defaultCalendarForNewEvents
-            try store.save(ekEvent, span: .thisEvent)
-            return Result(title: "Aggiunto al Calendario", message: "\"\(ekEvent.title ?? event.title)\" è nel tuo calendario predefinito.")
-        } catch {
-            return Result(title: "Impossibile aggiungere l'evento", message: error.localizedDescription)
         }
     }
 }

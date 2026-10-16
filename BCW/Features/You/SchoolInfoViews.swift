@@ -20,30 +20,6 @@ struct SubjectsView: View {
 
     @ViewBuilder
     private var content: some View {
-        #if os(macOS)
-        ScrollView {
-            // Le card della stessa riga hanno tutte l'altezza della più alta (es. una materia
-            // con molti docenti), con il contenuto sempre centrato in verticale.
-            CardGrid(minWidth: 320, equalRowHeights: true) {
-                ForEach(sortedSubjects) { subject in
-                    NavigationLink {
-                        SubjectDetailView(subjectId: subject.id, book: model.gradeBook, subjects: model.subjects)
-                    } label: {
-                        SubjectListRow(subject: subject, average: average(of: subject))
-                            .frame(maxHeight: .infinity)
-                            .card(padding: 0)
-                    }
-                    .buttonStyle(.pressable)
-                }
-            }
-            .pagePadding()
-            .padding(.bottom, Theme.bottomInset)
-        }
-        .tracksPageScroll()
-        // A tutta pagina, così il messaggio "Nessuna materia" sta al centro della finestra.
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .themedBackground()
-        #else
         ScrollView {
             ListGroup {
                 ForEach(sortedSubjects) { subject in
@@ -60,7 +36,6 @@ struct SubjectsView: View {
         }
         .tracksPageScroll()
         .themedBackground()
-        #endif
     }
 
     private func average(of subject: Subject) -> Double? {
@@ -130,31 +105,6 @@ struct SchoolbooksView: View {
 
     @ViewBuilder
     private var content: some View {
-        #if os(macOS)
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                ForEach(model.schoolbooks) { course in
-                    VStack(alignment: .leading, spacing: 10) {
-                        SectionHeader(course.name)
-                        CardGrid(minWidth: 380, equalRowHeights: true) {
-                            ForEach(course.books) { book in
-                                BookRow(book: book)
-                                    .frame(maxHeight: .infinity, alignment: .top)
-                                    .card(padding: 14)
-                            }
-                        }
-                    }
-                }
-            }
-            .pagePadding()
-            .padding(.bottom, Theme.bottomInset)
-        }
-        .tracksPageScroll()
-        // A tutta pagina: altrimenti, senza libri, la pagina è larga quanto il suo contenuto
-        // (cioè nulla) e il messaggio o la rotella restano schiacciati in una colonna.
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .themedBackground()
-        #else
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 ForEach(model.schoolbooks) { course in
@@ -175,7 +125,6 @@ struct SchoolbooksView: View {
         }
         .tracksPageScroll()
         .themedBackground()
-        #endif
     }
 }
 
@@ -253,19 +202,8 @@ struct SchoolCalendarView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                #if os(macOS)
-                // Su macOS i due riepiloghi stanno affiancati; la prossima vacanza ha meno
-                // contenuto, quindi la sua card è più stretta.
-                HStack(alignment: .top, spacing: 14) {
-                    yearProgress
-                    nextHoliday
-                        .frame(width: 300)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                #else
                 yearProgress
                 nextHoliday
-                #endif
                 holidayList
             }
             .pagePadding()
@@ -306,8 +244,7 @@ struct SchoolCalendarView: View {
             let daysLeft = CVDate.calendar.dateComponents([.day], from: Date().startOfDay, to: next.start).day ?? 0
             VStack(alignment: .leading, spacing: 8) {
                 Eyebrow(text: "Prossima vacanza", color: Theme.primary)
-                // Su macOS data e giorni mancanti stanno al centro dello spazio sotto l'occhiello.
-                VStack(alignment: Platform.isMac ? .center : .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text(range(next))
                         .font(.m3(22, weight: 500, rounded: true))
                         .foregroundStyle(Theme.ink)
@@ -315,9 +252,6 @@ struct SchoolCalendarView: View {
                         .font(.m3(16))
                         .foregroundStyle(Theme.secondaryInk)
                 }
-                .multilineTextAlignment(Platform.isMac ? .center : .leading)
-                .frame(maxWidth: Platform.isMac ? .infinity : nil,
-                       maxHeight: Platform.isMac ? .infinity : nil)
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .card()

@@ -95,41 +95,11 @@ struct GradeBookView: View {
 
     private var sectionPicker: some View {
         SegmentedButtons(selection: $section, options: Section.allCases.map { ($0, $0.title, nil) },
-                         compact: Platform.isMac)
+                         compact: false)
     }
 
     @ViewBuilder
     private var content: some View {
-        #if os(macOS)
-        if book.grades.isEmpty {
-            ScrollView {
-                VStack(spacing: 20) {
-                    banner
-                    emptyBook
-                }
-                .pagePadding()
-            }
-            .tracksPageScroll()
-            .themedBackground()
-        } else {
-            // Medie e andamento restano a sinistra; a destra l'elenco, a griglia se c'è spazio.
-            SplitColumns(sideWidth: 350) {
-                AverageHero(book: book, selectedPeriod: $period)
-                TrendCard(book: book, period: period, subjectId: subjectFilter)
-            } main: {
-                banner
-                sectionPicker
-                filters
-                switch section {
-                case .recent: recentList
-                case .subjects: subjectList
-                }
-            }
-            .animation(Motion.spatial, value: period)
-            .animation(Motion.spatial, value: subjectFilter)
-            .animation(Motion.spatial, value: section)
-        }
-        #else
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 PageLargeTitle()
@@ -161,7 +131,6 @@ struct GradeBookView: View {
         .tracksPageScroll()
         .scrollsToTopOnReselect()
         .themedBackground()
-        #endif
     }
 
     @ViewBuilder
@@ -389,7 +358,7 @@ private struct TrendCard: View {
                         AxisValueLabel(format: .dateTime.month(.abbreviated)).font(.m3(11)).foregroundStyle(Theme.secondaryInk)
                     }
                 }
-                .frame(height: Platform.isMac ? 190 : 150)
+                .frame(height: 150)
             }
             .card()
         }

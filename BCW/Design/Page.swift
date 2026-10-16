@@ -84,9 +84,6 @@ extension View {
     /// Titolo e pulsanti della pagina. Con Liquid Glass sono la barra di navigazione di
     /// sistema; altrimenti la barra superiore di Material 3 (piccola, 64 punti, con il titolo
     /// grande nel contenuto e lo sfondo che cambia scorrendo).
-    ///
-    /// Su macOS con Liquid Glass la barra mette prima gli elementi dei modificatori più esterni:
-    /// qui il titolo (e Aggiorna) sta dentro ai pulsanti della pagina, così Aggiorna resta l'ultimo.
     func pageChrome<Actions: View>(_ title: String, subtitle: String? = nil, style: PageTitleStyle = .large,
                                    showsBack: Bool? = nil,
                                    @ViewBuilder actions: @escaping () -> Actions) -> some View {
@@ -113,13 +110,6 @@ private struct PageChrome<Actions: View>: ViewModifier {
 
     func body(content: Content) -> some View {
         if ThemeStore.shared.liquidGlass {
-            #if os(macOS)
-            content
-                .screenTitle(title, subtitle: subtitle)
-                .toolbar {
-                    ToolbarItemGroup(placement: .trailingBar) { actions() }
-                }
-            #else
             // Le pagine principali delle schede hanno il titolo grande nella riga dei pulsanti
             // (`.inlineLarge`): solo così toccando di nuovo la scheda il sistema torna in cima con il
             // titolo per intero. Le pagine aperte da un'altra hanno il titolo piccolo al centro.
@@ -130,23 +120,18 @@ private struct PageChrome<Actions: View>: ViewModifier {
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) { actions() }
                 }
-            #endif
         } else {
             let back = showsBack ?? !isRootPage
             content
                 .environment(\.pageScroll, scroll)
-                .environment(\.pageLargeTitle, style == .large && !Platform.isMac ? title : nil)
-                #if os(iOS)
+                .environment(\.pageLargeTitle, style == .large ? title : nil)
                 .toolbar(.hidden, for: .navigationBar)
-                #else
-                .navigationTitle(title)
-                #endif
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     Color.clear.frame(height: bottomBarInset)
                 }
                 .safeAreaInset(edge: .top, spacing: 0) {
                     TopAppBar(title: title, subtitle: subtitle,
-                              titleShown: style == .inline || Platform.isMac || scroll.titleShown,
+                              titleShown: style == .inline || scroll.titleShown,
                               scrolled: scroll.scrolled,
                               back: back ? { dismiss() } : nil,
                               actions: actions)
@@ -172,7 +157,7 @@ struct TopAppBar<Actions: View>: View {
             }
             VStack(alignment: .leading, spacing: 0) {
                 Text(title)
-                    .font(.m3(Platform.isMac ? 24 : 22, weight: 500, rounded: true))
+                    .font(.m3(22, weight: 500, rounded: true))
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
                     .contentTransition(.opacity)
@@ -183,7 +168,7 @@ struct TopAppBar<Actions: View>: View {
                         .lineLimit(1)
                 }
             }
-            .padding(.leading, back == nil ? (Platform.isMac ? 20 : 12) : 4)
+            .padding(.leading, back == nil ? 12 : 4)
             .opacity(titleShown ? 1 : 0)
             .offset(y: titleShown ? 0 : 6)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -195,25 +180,14 @@ struct TopAppBar<Actions: View>: View {
             .labelStyle(.iconOnly)
             .menuStyle(.button)
             .menuIndicator(.hidden)
-            #if os(macOS)
-            RefreshButton()
-                .buttonStyle(.m3Icon())
-            #endif
         }
-        .padding(.leading, 4)
-        .padding(.trailing, Platform.isMac ? MacChrome.searchReserve : 4)
-        .frame(height: Platform.isMac ? 72 : 64)
-        .padding(.top, Platform.isMac ? 8 : 0)
+        .padding(.horizontal, 4)
+        .frame(height: 64)
         .background {
-            (scrolled ? (Platform.isMac ? Theme.surfaceContainerLow : Theme.surfaceContainer) : Theme.surface)
+            (scrolled ? Theme.surfaceContainer : Theme.surface)
                 .ignoresSafeArea(edges: .top)
         }
     }
-}
-
-/// Misure della finestra del Mac senza Liquid Glass (spazio per la ricerca generale a destra).
-enum MacChrome {
-    static var searchReserve: CGFloat = 340
 }
 
 /// Pulsante di una barra superiore con icona di Material Symbols.
@@ -343,9 +317,7 @@ private struct SheetChrome: ViewModifier {
                 }
         } else {
             content
-                #if os(iOS)
                 .toolbar(.hidden, for: .navigationBar)
-                #endif
                 .safeAreaInset(edge: .top, spacing: 0) {
                     SheetBar(title: title, leading: leading, trailing: trailing)
                 }
@@ -401,7 +373,7 @@ struct SheetBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
         .frame(minHeight: 64)
-        .padding(.top, Platform.isMac ? 4 : 10)
+        .padding(.top, 10)
         .background(Theme.surfaceContainerLow)
     }
 
@@ -449,32 +421,94 @@ private struct M3SheetPresentation: ViewModifier {
             .background(Theme.surfaceContainerLow.ignoresSafeArea())
             .environment(\.bottomBarInset, 0)
             .overlayHost()
-            #if os(iOS)
             .presentationBackground(Theme.surfaceContainerLow)
             .presentationCornerRadius(ThemeStore.shared.liquidGlass ? nil : Theme.radii.xl)
             .presentationDragIndicator(.visible)
-            #endif
     }
 }
 
-// MARK: - Indietro con lo scorrimento dal bordo
+// MARK: - Indietro con lo scorrimento
 
-#if os(iOS)
 import UIKit
 
-/// Senza la barra di navigazione di sistema (Material 3) il gesto per tornare indietro dal bordo
-/// sinistro resterebbe disattivato: lo si riattiva per tutte le pile di navigazione.
+/// Senza la barra di navigazione di sistema (Material 3) UIKit disattiva i gesti per tornare
+/// indietro: quello dal bordo sinistro e quello che parte da qualsiasi punto del contenuto
+/// (iOS 26). Il primo si riattiva con il delegato; il secondo resta spento anche così, quindi
+/// con la barra nascosta lo sostituisce un gesto uguale (`ContentPopGesture`) che guida la
+/// stessa transizione interattiva di sistema.
 extension UINavigationController: @retroactive UIGestureRecognizerDelegate {
     override open func viewDidLoad() {
         super.viewDidLoad()
         interactivePopGestureRecognizer?.delegate = self
+        ContentPopGesture.install(on: self)
     }
 
     public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         viewControllers.count > 1
     }
 }
-#endif
+
+/// Scorrimento verso destra da qualsiasi punto della pagina per tornare indietro, attivo solo
+/// con la barra di navigazione nascosta (con Liquid Glass c'è già quello di sistema).
+private final class ContentPopGesture: NSObject, UIGestureRecognizerDelegate {
+    nonisolated(unsafe) private static var key: UInt8 = 0
+    private weak var navigation: UINavigationController?
+
+    private init(navigation: UINavigationController) {
+        self.navigation = navigation
+    }
+
+    static func install(on navigation: UINavigationController) {
+        // Il gesto di sistema ha come bersaglio l'oggetto che gestisce la transizione, che è
+        // anche il suo delegato.
+        guard let system = navigation.interactiveContentPopGestureRecognizer ?? navigation.interactivePopGestureRecognizer,
+              let transition = system.delegate else { return }
+        let action = NSSelectorFromString("handleNavigationTransition:")
+        guard transition.responds(to: action) else { return }
+        let handler = ContentPopGesture(navigation: navigation)
+        objc_setAssociatedObject(navigation, &key, handler, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        let pan = UIPanGestureRecognizer(target: transition, action: action)
+        pan.name = "BCW.contentPop"
+        pan.delegate = handler
+        navigation.view.addGestureRecognizer(pan)
+    }
+
+    private var isActive: Bool {
+        guard let navigation else { return false }
+        return navigation.isNavigationBarHidden && navigation.viewControllers.count > 1
+            && navigation.transitionCoordinator == nil
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        isActive
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard isActive, let pan = gestureRecognizer as? UIPanGestureRecognizer else { return false }
+        let velocity = pan.velocity(in: pan.view)
+        guard velocity.x > 0, abs(velocity.x) > abs(velocity.y) * 1.5 else { return false }
+        // Precedenza agli scorrimenti orizzontali che possono ancora andare verso sinistra.
+        let location = pan.location(in: pan.view)
+        var view = pan.view?.hitTest(location, with: nil)
+        while let current = view {
+            if let scroll = current as? UIScrollView, scroll.isScrollEnabled,
+               scroll.contentSize.width > scroll.bounds.width + 1,
+               scroll.contentOffset.x > -scroll.adjustedContentInset.left + 1 {
+                return false
+            }
+            view = current.superview
+        }
+        return true
+    }
+
+    /// Gli scorrimenti orizzontali aspettano che questo gesto rinunci (subito, se non può
+    /// cominciare), così non partono entrambi.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+        guard let scroll = other.view as? UIScrollView, other === scroll.panGestureRecognizer else { return false }
+        return scroll.contentSize.width > scroll.bounds.width + 1
+    }
+}
 
 // MARK: - Ritorno in cima
 
@@ -501,23 +535,18 @@ private struct ScrollToTopOnReselect: ViewModifier {
 
 // MARK: - Ricerca nelle pagine
 
-/// Ricerca dentro una singola pagina (Bacheca, Agenda, Materiale): con Liquid Glass su iPhone è il
-/// campo di sistema nella barra; altrimenti la pagina mostra la barra di ricerca di Material 3 nel
-/// contenuto (su Mac `LocalSearchField`, perché nella barra c'è già la ricerca generale).
+/// Ricerca dentro una singola pagina (Bacheca, Agenda, Materiale): con Liquid Glass è il campo di
+/// sistema nella barra; altrimenti la pagina mostra la barra di ricerca di Material 3 nel contenuto.
 struct GlassLocalSearch: ViewModifier {
     @Binding var text: String
     let prompt: String
 
     func body(content: Content) -> some View {
-        #if os(iOS)
         if ThemeStore.shared.liquidGlass {
             content.searchable(text: $text, prompt: prompt)
         } else {
             content
         }
-        #else
-        content
-        #endif
     }
 }
 
@@ -527,10 +556,8 @@ struct PageSearchBar: View {
     let prompt: String
 
     var body: some View {
-        #if os(iOS)
         if !ThemeStore.shared.liquidGlass {
             M3SearchBar(text: $text, prompt: prompt)
         }
-        #endif
     }
 }

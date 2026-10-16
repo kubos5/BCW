@@ -20,52 +20,22 @@ struct NoticeboardView: View {
         }
     }
 
-    /// Su macOS, comunicazione aperta nel pannello di destra.
-    @State private var selection: Notice.ID?
-    /// Solo il passaggio conta (la larghezza cambierebbe a ogni fotogramma).
-    @State private var isWide = true
-
-    /// Elenco e dettaglio affiancati, come in Mail (solo su macOS e se c'è spazio).
-    private var isSplit: Bool { Platform.isMac && isWide }
-
     var body: some View {
-        Group {
-            if isSplit {
-                splitView
-            } else {
-                ScrollView {
-                    list
-                        .pagePadding()
-                        .padding(.bottom, 32)
-                }
-                .tracksPageScroll()
-            }
+        ScrollView {
+            list
+                .pagePadding()
+                .padding(.bottom, 32)
         }
+        .tracksPageScroll()
         .themedBackground()
-        .onGeometryChange(for: Bool.self) { $0.size.width >= 820 } action: { isWide = $0 }
-        #if DEBUG
-        .onAppear {
-            // Per gli screenshot di sviluppo: `-BCWOpenNotice YES` apre la prima comunicazione.
-            if UserDefaults.standard.bool(forKey: "BCWOpenNotice") { selection = model.notices.first?.id }
-        }
-        #endif
-        .pageChrome("Bacheca", subtitle: Platform.isMac ? unreadSubtitle : nil, style: .inline)
+        .pageChrome("Bacheca", subtitle: nil, style: .inline)
         .localSearchable(text: $search, prompt: Self.searchPrompt)
         .refreshable { await model.loadNotices() }
     }
 
-    private var unreadSubtitle: String? {
-        let unread = model.unreadNoticesCount
-        return unread == 0 ? nil : (unread == 1 ? "1 da leggere" : "\(unread) da leggere")
-    }
-
     private var list: some View {
         VStack(alignment: .leading, spacing: 16) {
-            #if os(macOS)
-            LocalSearchField(text: $search, prompt: Self.searchPrompt)
-            #else
             PageSearchBar(text: $search, prompt: Self.searchPrompt)
-            #endif
             ChipRow {
                 FilterChip(title: "Da leggere", icon: "circleFill", isSelected: onlyUnread) {
                     onlyUnread.toggle()
@@ -84,61 +54,23 @@ struct NoticeboardView: View {
             } else {
                 LazyVStack(spacing: 10) {
                     ForEach(filtered) { notice in
-                        if isSplit {
-                            Button {
-                                selection = notice.id
-                            } label: {
-                                NoticeRow(notice: notice, isSelected: selection == notice.id)
-                            }
-                            .buttonStyle(.pressable(radius: selection == notice.id ? Theme.radii.xl : Theme.radii.li))
-                        } else {
-                            NavigationLink {
-                                NoticeDetailView(notice: notice)
-                                    .pageChrome(Platform.isMac ? "Comunicazione" : "", style: .inline)
-                            } label: {
-                                NoticeRow(notice: notice)
-                            }
-                            .buttonStyle(.pressable)
+                        NavigationLink {
+                            NoticeDetailView(notice: notice)
+                                .pageChrome("", style: .inline)
+                        } label: {
+                            NoticeRow(notice: notice)
                         }
+                        .buttonStyle(.pressable)
                     }
                 }
             }
         }
         .animation(Motion.spatial, value: filtered)
     }
-
-    private var splitView: some View {
-        HStack(spacing: 0) {
-            ScrollView {
-                list
-                    .padding(.leading, 28)
-                    .padding(.trailing, 12)
-                    .padding(.top, 8)
-                    .padding(.bottom, Theme.bottomInset)
-            }
-            .frame(width: 420)
-
-            Group {
-                if let notice = model.notices.first(where: { $0.id == selection }) {
-                    NoticeDetailView(notice: notice)
-                        .id(notice.id)
-                } else {
-                    EmptyState("Nessuna comunicazione aperta", icon: "megaphone",
-                               description: "Scegli una comunicazione dall'elenco per leggerla.")
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.surfaceContainerLow, in: .rect(cornerRadius: Theme.radii.xl, style: .continuous))
-            .padding(.leading, 4)
-            .padding(.trailing, 16)
-            .padding(.bottom, 16)
-        }
-    }
 }
 
 private struct NoticeRow: View {
     let notice: Notice
-    var isSelected = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -149,7 +81,7 @@ private struct NoticeRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(notice.title)
                     .font(.m3(15, weight: notice.isRead ? 500 : 700))
-                    .foregroundStyle(isSelected ? Theme.onSecondaryContainer : Theme.ink)
+                    .foregroundStyle(Theme.ink)
                     .multilineTextAlignment(.leading)
                     .lineLimit(3)
                 HStack(spacing: 8) {
@@ -174,8 +106,7 @@ private struct NoticeRow: View {
                 }
             }
         }
-        .card(padding: 14, color: isSelected ? Theme.secondaryContainer : nil,
-              radius: isSelected ? Theme.radii.xl : nil)
+        .card(padding: 14)
     }
 }
 
@@ -258,8 +189,8 @@ struct NoticeDetailView: View {
 
                 actions
             }
-            .padding(.horizontal, Platform.isMac ? 28 : 16)
-            .padding(.top, Platform.isMac ? 24 : 4)
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
             .padding(.bottom, 32)
             .frame(maxWidth: 780, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)

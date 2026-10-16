@@ -1,9 +1,5 @@
 import SwiftUI
-#if os(macOS)
-import AppKit
-#else
 import UIKit
-#endif
 
 /// Design system di BCW: Material 3 Expressive, come la versione web (`css/bcw.css`).
 /// I ruoli dei colori vengono da `ThemeStore` (generati dal colore d'accento scelto); stati,
@@ -87,15 +83,10 @@ enum Theme {
     /// Angoli delle card (`--r-li`).
     static var corner: CGFloat { radii.li }
 
-    #if os(macOS)
-    /// Su macOS non c'è la barra di navigazione in basso: basta un normale margine in fondo.
-    static let bottomInset: CGFloat = 40
-    #else
     /// Spazio in fondo alle pagine lunghe: con Liquid Glass stacca l'ultimo elemento dalla barra
     /// delle schede (che sta sopra il contenuto) e rende la pagina abbastanza lunga perché iOS la
     /// rimpicciolisca scorrendo; con la barra di Material 3 il contenuto finisce già sopra la barra.
     static var bottomInset: CGFloat { ThemeStore.shared.liquidGlass ? 120 : 40 }
-    #endif
 
     // MARK: Materie e voti
 
@@ -180,22 +171,14 @@ enum Theme {
     // MARK: Colori dinamici
 
     static func dynamic(light: Int, dark: Int, lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
-        #if os(macOS)
-        Color(nsColor: NSColor(name: nil) { appearance in
-            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            return NSColor(hex: isDark ? dark : light).withAlphaComponent(isDark ? darkAlpha : lightAlpha)
-        })
-        #else
         Color(uiColor: UIColor { traits in
             let isDark = traits.userInterfaceStyle == .dark
             return UIColor(hex: isDark ? dark : light).withAlphaComponent(isDark ? darkAlpha : lightAlpha)
         })
-        #endif
     }
 
     /// Font e colori delle barre native di UIKit (usate con Liquid Glass).
     static func configureAppearance() {
-        #if os(iOS)
         let nav = UINavigationBar.appearance()
         nav.largeTitleTextAttributes = [.font: Typography.platformFont(size: 34, weight: 500, rounded: true)]
         nav.titleTextAttributes = [.font: Typography.platformFont(size: 18, weight: 550, rounded: true)]
@@ -203,7 +186,18 @@ enum Theme {
         item.setTitleTextAttributes([.font: Typography.platformFont(size: 10, weight: 600)], for: .normal)
         UISegmentedControl.appearance().setTitleTextAttributes(
             [.font: Typography.platformFont(size: 13, weight: 550)], for: .normal)
-        #endif
+        applyTint()
+    }
+
+    /// Colore d'accento dei componenti di UIKit (barra delle schede, pulsanti e menu di sistema,
+    /// avvisi): non vedono il `.tint` di SwiftUI e userebbero il colore d'accento del catalogo.
+    /// Si aggiorna a ogni cambio del colore d'accento, anche nelle finestre già aperte.
+    static func applyTint() {
+        let tint = UIColor(primary)
+        UIWindow.appearance().tintColor = tint
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            for window in scene.windows { window.tintColor = tint }
+        }
     }
 }
 
@@ -217,20 +211,6 @@ extension Color {
 extension PlatformColor {
     /// Colore dinamico che mescola `a` (per `amount`) con `b`, risolto nel tema in uso.
     static func mixing(_ a: Color, _ b: Color, _ amount: Double) -> PlatformColor {
-        #if os(macOS)
-        NSColor(name: nil) { appearance in
-            var result = NSColor.clear
-            appearance.performAsCurrentDrawingAppearance {
-                let ca = NSColor(a).usingColorSpace(.sRGB) ?? .gray
-                let cb = NSColor(b).usingColorSpace(.sRGB) ?? .gray
-                result = NSColor(srgbRed: ca.redComponent * amount + cb.redComponent * (1 - amount),
-                                 green: ca.greenComponent * amount + cb.greenComponent * (1 - amount),
-                                 blue: ca.blueComponent * amount + cb.blueComponent * (1 - amount),
-                                 alpha: ca.alphaComponent * amount + cb.alphaComponent * (1 - amount))
-            }
-            return result
-        }
-        #else
         UIColor { traits in
             let ca = UIColor(a).resolvedColor(with: traits)
             let cb = UIColor(b).resolvedColor(with: traits)
@@ -241,7 +221,6 @@ extension PlatformColor {
             return UIColor(red: r1 * amount + r2 * (1 - amount), green: g1 * amount + g2 * (1 - amount),
                            blue: b1 * amount + b2 * (1 - amount), alpha: a1 * amount + a2 * (1 - amount))
         }
-        #endif
     }
 }
 

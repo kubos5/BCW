@@ -387,10 +387,6 @@ final class ColorEngine {
 
 extension Color {
     init(platformColor: PlatformColor) {
-        #if os(macOS)
-        self.init(nsColor: platformColor)
-        #else
         self.init(uiColor: platformColor)
-        #endif
     }
 }

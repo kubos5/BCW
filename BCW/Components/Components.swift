@@ -366,7 +366,7 @@ struct StatTile: View {
     var icon: String
     var tint: Color = Theme.accent
     var shape: MaterialShapeName = .cookie4Sided
-    /// Riempie l'altezza disponibile (su macOS, accanto alla card del profilo).
+    /// Riempie l'altezza disponibile.
     var fillsHeight = false
 
     var body: some View {
@@ -644,26 +644,5 @@ extension EmptyState {
         self.icon = icon
         self.description = description
         self.actions = actions
-    }
-}
-
-/// Contatore con titolo e valore in una riga (per i moduli che usano ancora `Form`).
-struct LabeledStepper<Value: Strideable & Comparable>: View {
-    let title: String
-    let value: String
-    @Binding var number: Value
-    let range: ClosedRange<Value>
-    var step: Value.Stride = 1
-
-    init(_ title: String, value: String, number: Binding<Value>, in range: ClosedRange<Value>, step: Value.Stride = 1) {
-        self.title = title
-        self.value = value
-        _number = number
-        self.range = range
-        self.step = step
-    }
-
-    var body: some View {
-        StepperRow(title: title, value: $number, range: range, step: step) { _ in value }
     }
 }
