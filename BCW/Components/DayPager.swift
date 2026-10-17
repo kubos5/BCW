@@ -89,6 +89,8 @@ struct DaySwipeGesture: UIViewRepresentable {
         let swipe: DaySwipe
         weak var scrollView: UIScrollView?
         let pan = UIPanGestureRecognizer()
+        /// Scorrimenti fermati mentre il dito sposta il giorno (sempre o orizzontale o verticale).
+        private var locked: [UIScrollView] = []
 
         init(swipe: DaySwipe) {
             self.swipe = swipe
@@ -112,19 +114,55 @@ struct DaySwipeGesture: UIViewRepresentable {
 
         func detach() {
             if [.began, .changed].contains(pan.state) { swipe.dragEnded(translation: 0, velocity: 0) }
+            unlock()
             pan.view?.removeGestureRecognizer(pan)
             scrollView = nil
+        }
+
+        /// Gli scorrimenti verticali che contengono il punto toccato: quello del contenuto e quelli
+        /// annidati o esterni (dopo un cambio di tema il gesto poteva stare su uno diverso da quello
+        /// che scorreva, e si scorreva in diagonale).
+        private func verticalScrollViews(at point: CGPoint, in view: UIView) -> [UIScrollView] {
+            var found: [UIScrollView] = []
+            var current: UIView? = view.hitTest(point, with: nil)
+            while let candidate = current {
+                if let scroll = candidate as? UIScrollView, scroll.contentSize.width <= scroll.bounds.width + 1 {
+                    found.append(scroll)
+                }
+                current = candidate.superview
+            }
+            return found
+        }
+
+        private func lock(_ scrollViews: [UIScrollView]) {
+            unlock()
+            for scroll in scrollViews where scroll.isScrollEnabled {
+                // Spegnerlo annulla anche uno scorrimento appena partito.
+                scroll.isScrollEnabled = false
+                locked.append(scroll)
+            }
+        }
+
+        private func unlock() {
+            for scroll in locked { scroll.isScrollEnabled = true }
+            locked = []
         }
 
         @objc private func handle(_ recognizer: UIPanGestureRecognizer) {
             let window = recognizer.view?.window
             switch recognizer.state {
+            case .began:
+                if let view = recognizer.view {
+                    lock(verticalScrollViews(at: recognizer.location(in: view), in: view))
+                }
             case .changed:
                 swipe.dragChanged(recognizer.translation(in: window).x)
             case .ended:
+                unlock()
                 swipe.dragEnded(translation: recognizer.translation(in: window).x,
                                 velocity: recognizer.velocity(in: window).x)
             case .cancelled, .failed:
+                unlock()
                 swipe.dragEnded(translation: 0, velocity: 0)
             default:
                 break
@@ -135,8 +173,13 @@ struct DaySwipeGesture: UIViewRepresentable {
             guard swipe.isEnabled, swipe.onSwipe != nil, let view = pan.view else { return false }
             let velocity = pan.velocity(in: view)
             guard abs(velocity.x) > abs(velocity.y) * 1.3 else { return false }
+            // Se uno scorrimento verticale è già partito, resta verticale.
+            let point = pan.location(in: view)
+            if verticalScrollViews(at: point, in: view).contains(where: { $0.isDragging || $0.isDecelerating }) {
+                return false
+            }
             // Gli elementi che scorrono di lato (filtri) hanno la precedenza.
-            var hit = view.hitTest(pan.location(in: view), with: nil)
+            var hit = view.hitTest(point, with: nil)
             while let current = hit, current !== view {
                 if let scroll = current as? UIScrollView, scroll.contentSize.width > scroll.bounds.width + 1 { return false }
                 hit = current.superview

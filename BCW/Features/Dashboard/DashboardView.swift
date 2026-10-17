@@ -16,10 +16,6 @@ struct DashboardView: View {
     @State private var barWidth: CGFloat = 0
     /// "Domani" nella barra (vedi `onChange` del giorno scelto).
     @State private var showsTomorrow = false
-    /// Vista Calendario: il mese si chiude nella settimana scorrendo e si riapre in cima.
-    @State private var monthClosed = false
-    /// Il mese è stato chiuso con il pulsante: non si riapre da solo.
-    @State private var monthClosedByHand = false
     /// Ricerca aperta dalla barra in alto (senza Liquid Glass).
     @State private var searching = false
     @State private var searchQuery = ""
@@ -116,11 +112,7 @@ struct DashboardView: View {
     private var viewMenu: some View {
         BarMenu(icon: mode == .list ? "viewAgenda" : "calendarMonth", label: "Vista e filtri") {
             MenuPicker(title: "Vista", selection: Binding(get: { mode }, set: { new in
-                withAnimation(Motion.spatial) {
-                    model.preferences.dashboardMode = new
-                    monthClosed = false
-                    monthClosedByHand = false
-                }
+                model.preferences.dashboardMode = new
             }), options: DashboardMode.allCases.map { ($0, $0.title, $0.icon) })
             MenuDivider()
             MenuItem("Vai a oggi", icon: "sun") {
@@ -148,19 +140,14 @@ struct DashboardView: View {
         Binding { selectedDay } set: { select($0) }
     }
 
-    private var showsMonth: Bool { mode == .calendar && !monthClosed }
+    /// Vista Calendario: sempre il mese; vista Lista: sempre la settimana.
+    private var showsMonth: Bool { mode == .calendar }
 
     @ViewBuilder
     private var content: some View {
         // In alto la settimana (o il mese), ferma; sotto il giorno, che scorre.
         VStack(spacing: 0) {
             CalendarBar(selectedDay: daySelection, showsMonth: showsMonth,
-                        monthToggle: mode == .calendar ? {
-                            withAnimation(Motion.spatial) {
-                                monthClosed.toggle()
-                                monthClosedByHand = monthClosed
-                            }
-                        } : nil,
                         pickDate: { pickingDate = true })
 
             ScrollView {
@@ -187,17 +174,10 @@ struct DashboardView: View {
             }
             .refreshable { await model.refreshAll() }
             .scrollPosition($scrollPosition)
-            .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                geometry.contentOffset.y + geometry.contentInsets.top
-            } action: { _, offset in
-                isAtTop = offset <= 1
-                // Vista Calendario: scorrendo il mese lascia il posto alla settimana, in cima torna.
-                guard mode == .calendar else { return }
-                if offset > 40, !monthClosed {
-                    withAnimation(Motion.spatial) { monthClosed = true }
-                } else if offset <= 0, monthClosed, !monthClosedByHand {
-                    withAnimation(Motion.spatial) { monthClosed = false }
-                }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top <= 1
+            } action: { _, atTop in
+                isAtTop = atTop
             }
         }
         .onAppear {

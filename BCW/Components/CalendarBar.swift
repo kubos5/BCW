@@ -3,16 +3,13 @@ import SwiftUI
 /// Settimana o mese di Dashboard e Orario come gruppo di pulsanti di M3 Expressive. Nella
 /// settimana c'è un pulsante per giorno (iniziali e numero): quello scelto è pieno nel colore
 /// primario, tutto arrotondato e più largo degli altri, che si stringono (come i gruppi di
-/// pulsanti standard). Nel mese gli stessi pulsanti, più bassi, in una griglia; passando dalla
-/// settimana al mese la settimana del giorno scelto resta e le altre compaiono con una molla.
-/// Sopra: il periodo (apre il selettore della data), l'eventuale pulsante del mese e le frecce;
-/// scorrendo di lato sui giorni si cambia settimana (o mese).
+/// pulsanti standard). Nel mese (vista Calendario della Dashboard) gli stessi pulsanti, più bassi,
+/// in una griglia. Sopra: il periodo (apre il selettore della data) e le frecce; scorrendo di
+/// lato sui giorni si cambia settimana (o mese).
 struct CalendarBar: View {
     @Binding var selectedDay: Date
     /// Il mese intero; altrimenti la settimana del giorno scelto.
     var showsMonth = false
-    /// Pulsante per aprire o chiudere il mese (vista Calendario della Dashboard).
-    var monthToggle: (() -> Void)?
     let pickDate: () -> Void
 
     private static let weekdaySymbols = ["L", "M", "M", "G", "V", "S", "D"]
@@ -32,13 +29,11 @@ struct CalendarBar: View {
                     }
                 }
                 .frame(height: 20)
-                .transition(.opacity)
             }
             VStack(spacing: 4) {
                 ForEach(weeks, id: \.self) { week in
                     row(week, month: showsMonth ? month : nil)
-                        .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: -10)),
-                                                removal: .opacity))
+                        .transition(.opacity)
                 }
             }
             .contentShape(.rect)
@@ -72,10 +67,6 @@ struct CalendarBar: View {
             .padding(.leading, -12)
             .accessibilityHint("Sceglie una data")
             Spacer()
-            if let monthToggle {
-                IconButton(showsMonth ? "viewAgenda" : "calendarMonth",
-                           label: showsMonth ? "Mostra la settimana" : "Mostra il mese", action: monthToggle)
-            }
             IconButton("chevronLeft", label: showsMonth ? "Mese precedente" : "Settimana precedente") { shift(-1) }
             IconButton("chevronRight", label: showsMonth ? "Mese successivo" : "Settimana successiva") { shift(1) }
                 .padding(.trailing, -8)

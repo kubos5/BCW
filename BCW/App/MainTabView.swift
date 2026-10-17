@@ -120,6 +120,7 @@ struct MainTabView: View {
         .background {
             if glass {
                 TabBarItemLongPress(index: 3) { switchingAccount = true }
+                TabBarSelectedImages(names: AppTab.allCases.map(\.selectedIcon))
             }
         }
         .sheet(isPresented: $switchingAccount) {
@@ -131,12 +132,14 @@ struct MainTabView: View {
         }
     }
 
-    /// Etichetta della scheda per la barra di sistema: come sul web, la scheda aperta ha l'icona piena.
+    /// Etichetta della scheda per la barra di sistema: sempre l'icona vuota; quella piena (la scheda
+    /// aperta, come sul web) è la `selectedImage` dell'elemento, che segue la bolla
+    /// (`TabBarSelectedImages`).
     private func tabLabel(_ tab: AppTab) -> some View {
         Label {
             Text(tab.title)
         } icon: {
-            Image("m." + (selection == tab ? tab.selectedIcon : tab.icon))
+            Image("m." + tab.icon)
         }
     }
 

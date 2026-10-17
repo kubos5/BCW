@@ -236,43 +236,47 @@ struct FlowChips: View {
     }
 }
 
+/// Elementi su più righe, andando a capo quando non ci stanno. Le righe si calcolano allo stesso
+/// modo nelle due fasi (dalla larghezza proposta, partendo da 0, con mezzo punto di tolleranza):
+/// prima `placeSubviews` usava le coordinate assolute e la larghezza restituita, e con una fila
+/// piena al punto l'ultimo elemento saltava tra la riga e una riga a capo durante lo scorrimento.
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? .infinity
+    /// Posizione di ogni elemento rispetto all'angolo in alto a sinistra, e misura totale.
+    private func arrange(_ subviews: Subviews, width: CGFloat) -> (origins: [CGPoint], sizes: [CGSize], size: CGSize) {
+        var origins: [CGPoint] = []
+        var sizes: [CGSize] = []
         var x: CGFloat = 0
         var y: CGFloat = 0
         var rowHeight: CGFloat = 0
         var maxX: CGFloat = 0
         for view in subviews {
             let size = view.sizeThatFits(.unspecified)
-            if x + size.width > width, x > 0 {
+            if x > 0, x + size.width > width + 0.5 {
                 x = 0
                 y += rowHeight + spacing
                 rowHeight = 0
             }
+            origins.append(CGPoint(x: x, y: y))
+            sizes.append(size)
+            maxX = max(maxX, x + size.width)
             x += size.width + spacing
-            maxX = max(maxX, x - spacing)
             rowHeight = max(rowHeight, size.height)
         }
-        return CGSize(width: maxX, height: y + rowHeight)
+        return (origins, sizes, CGSize(width: maxX, height: y + rowHeight))
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(subviews, width: proposal.width ?? .infinity).size
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-        for view in subviews {
-            let size = view.sizeThatFits(.unspecified)
-            if x + size.width > bounds.maxX, x > bounds.minX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
+        let layout = arrange(subviews, width: proposal.width ?? bounds.width)
+        for (index, view) in subviews.enumerated() {
+            let origin = layout.origins[index]
+            view.place(at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
+                       proposal: ProposedViewSize(layout.sizes[index]))
         }
     }
 }

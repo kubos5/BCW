@@ -184,11 +184,10 @@ struct FABMenu: View {
     }
 }
 
-/// Menu del FAB con Liquid Glass: un pulsante di vetro tinto e interattivo (si allunga seguendo
-/// il dito, come gli altri elementi di vetro) da cui, toccandolo, si staccano le voci, pillole di
-/// vetro che escono dal pulsante e ci rientrano (stesso `GlassEffectContainer`). Non è un `Menu`
-/// di sistema: il trascinamento lo avrebbe aperto invece di allungare il pulsante, e chiudendosi
-/// il suo vetro scuro rientrava nel pulsante senza tinta (nero fino alla fine dell'animazione).
+/// Menu del FAB con Liquid Glass: un pulsante di vetro tinto e interattivo da cui, toccandolo, si
+/// staccano le voci, pillole di vetro che escono dal pulsante e ci rientrano (stesso
+/// `GlassEffectContainer`). Non è un `Menu` di sistema: chiudendosi il suo vetro scuro rientrava
+/// nel pulsante senza tinta (nero fino alla fine dell'animazione).
 /// Della misura del pulsante di ricerca della barra delle schede, allineato sopra di esso.
 private struct GlassFABMenu: View {
     let icon: String
@@ -196,23 +195,6 @@ private struct GlassFABMenu: View {
     let items: [FABMenuItem]
     @Binding var isExpanded: Bool
     @Namespace private var glass
-    /// Spostamento del dito sul pulsante (solo questa piccola vista si ricalcola).
-    @State private var drag: CGSize = .zero
-
-    private static let size: CGFloat = 60
-
-    /// Frenato: cresce sempre meno allontanandosi, al massimo 22 punti per lato.
-    private func rubber(_ value: CGFloat) -> CGFloat { 22 * tanh(value / 110) }
-
-    /// Allungamento nel verso del dito; l'altro lato si stringe appena, come il vetro di sistema.
-    private var stretch: CGSize {
-        let x = abs(rubber(drag.width)), y = abs(rubber(drag.height))
-        return CGSize(width: x - y * 0.25, height: y - x * 0.25)
-    }
-
-    private var shift: CGSize {
-        CGSize(width: rubber(drag.width) * 0.5, height: rubber(drag.height) * 0.5)
-    }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -252,20 +234,12 @@ private struct GlassFABMenu: View {
                         Icon(isExpanded ? "x" : icon, size: 24)
                             .rotationEffect(.degrees(isExpanded ? 90 : 0))
                             .foregroundStyle(Theme.onPrimary)
-                            // Il vetro si allunga verso il dito (capsula), il posto resta di 60 punti.
-                            .frame(width: Self.size + stretch.width, height: Self.size + stretch.height)
-                            .glassEffect(.regular.tint(Theme.primary).interactive(), in: .capsule)
-                            .glassEffectID("fab", in: glass)
-                            .offset(shift)
-                            .frame(width: Self.size, height: Self.size)
+                            .frame(width: 60, height: 60)
                             .contentShape(.circle)
                     }
-                    .buttonStyle(PressReportingStyle(pressed: .constant(false)))
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { drag = $0.translation }
-                            .onEnded { _ in withAnimation(Motion.spatialFast) { drag = .zero } }
-                    )
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.tint(Theme.primary).interactive(), in: .circle)
+                    .glassEffectID("fab", in: glass)
                     .accessibilityLabel(isExpanded ? "Chiudi il menu" : label)
                 }
             }

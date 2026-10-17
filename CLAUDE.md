@@ -42,7 +42,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   separatori).
 
 ## Stato attuale
-- Il progetto compila e gira sul simulatore. `xcode-select` punta ai Command Line Tools, quindi per compilare da
+- Il progetto compila e gira sul simulatore. Se dopo una build riuscita l'app non cambia, controllare la data di
+  `BCW.app/BCW.debug.dylib` in DerivedData: a volte xcodebuild compila ma non ricollega più (nessun passo `Ld`);
+  `clean build` lo risolve. `xcode-select` punta ai Command Line Tools, quindi per compilare da
   terminale serve `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`:
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project BCW.xcodeproj -scheme BCW -destination 'platform=iOS Simulator,name=iPhone 17' build`
 - macOS non è più supportato in modo nativo (scelta dell'utente, ottobre 2026): niente codice, impostazioni o
@@ -173,9 +175,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `.fadeThrough`.
 - Settimana e mese di Dashboard e Orario (`Components/CalendarBar.swift`): gruppo di pulsanti di M3 Expressive, fermo
   sopra l'area che scorre (in un `VStack`, non sovrapposto). Settimana: il giorno scelto pieno, tutto arrotondato e
-  più largo (`WeightedRow`); mese (vista Calendario della Dashboard): gli stessi pulsanti più bassi in griglia. Il
-  passaggio settimana ↔ mese è una molla spaziale (la settimana scelta resta, le altre compaiono); nella Dashboard il
-  mese si chiude da solo scorrendo (oltre 40 punti) e si riapre in cima, a meno che lo si chiuda con il pulsante.
+  più largo (`WeightedRow`); mese (vista Calendario della Dashboard): gli stessi pulsanti più bassi in griglia. Vista
+  Calendario = sempre il mese, vista Lista = sempre la settimana (scelta dell'utente, ottobre 2026: niente passaggio
+  tra i due scorrendo né pulsante per chiudere il mese).
   Frecce e scorrimento di lato sulla barra cambiano settimana (o mese); il titolo apre `M3DatePickerSheet`.
   La settimana sta alla stessa altezza nelle due schede (verificato al pixel): con Material la barra di ricerca della
   Dashboard è 4 punti più alta del titolo grande dell'Orario, che per questo ha 4 punti in più sopra la barra.
@@ -191,7 +193,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   dito e quella nuova entra dal lato opposto (sul contenitore entrava dalla parte sbagliata). Il gesto è un pan di UIKit
   aggiunto allo `UIScrollView` (trovato da una vista `Anchor` sullo sfondo del contenuto, a ogni spostamento nella
   gerarchia), che lo scorrimento aspetta (`shouldBeRequiredToFailBy`) e che non parte sopra elementi che scorrono di
-  lato. Tutte le selezioni di un giorno (barra, selettore, "Domani"/"Oggi") passano da `select`, che usa `go`.
+  lato. Lo scorrimento è sempre o orizzontale o verticale: il gesto non parte se uno scorrimento sotto il dito è già in
+  corso e, partito, spegne `isScrollEnabled` degli scorrimenti verticali sotto il dito fino al rilascio (dopo un cambio
+  di Liquid Glass nell'Orario si scorreva anche in diagonale: il gesto poteva stare su uno scorrimento diverso). Tutte le selezioni di un giorno (barra, selettore, "Domani"/"Oggi") passano da `select`, che usa `go`.
   Le registrazioni del simulatore salvano fotogrammi solo quando lo schermo cambia (le pause spariscono): per misurare
   un'animazione stampare i valori con l'ora (`CACurrentMediaTime`).
 - Impostazioni: elenco di sottopagine (Generale, Aspetto, Voti, Dashboard, Orario, Notifiche, Account).
@@ -211,7 +215,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (`Timetable.testRules`, `TestHidingRules`: docenti, materie, giorni, periodi, parole, senza lezione in orario);
   mostrandone a mano una nascosta da una regola finisce in `shownTests` (eccezione), nascondendola di nuovo l'eccezione
   si toglie. Il motivo viene da `TimetableStore.hiddenReason(for:unmatched:)`; la Dashboard non ne è toccata.
-- Elenchi in liste segmentate (`ListGroup`); filtri in `ChipRow` (scorrono in orizzontale).
+- Elenchi in liste segmentate (`ListGroup`); filtri in `ChipRow` (scorrono in orizzontale). Chip su più righe:
+  `FlowLayout`, che calcola le righe allo stesso modo nelle due fasi (larghezza proposta, mezzo punto di tolleranza):
+  prima, con una fila piena al punto, l'ultimo chip sotto il giorno saltava tra la riga e una riga a capo.
 - Rotelle in pulsanti e righe: `InlineProgress`.
 
 ## Prestazioni
@@ -251,11 +257,10 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Componenti propri di M3 Expressive (`Expressive.swift`): `SearchAppBar`, `AccountAvatarButton`, `FABMenu` (con
   Liquid Glass `GlassFABMenu`: pulsante di vetro tinto di 60 punti, come il pulsante di ricerca della barra delle
   schede e allineato sopra di esso, da cui escono le voci come pillole di vetro con `glassEffectID` nello stesso
-  `GlassEffectContainer`. Non un `Menu` di sistema: il trascinamento apriva il menu invece di allungare il pulsante e,
-  chiudendosi, il vetro scuro del menu rientrava senza tinta (nero fino alla fine). Né `glassEffect(.interactive())`
-  né `.buttonStyle(.glassProminent)` si allungano trascinando in SwiftUI (crescono soltanto): l'allungamento verso il
-  dito è fatto a mano (capsula frenata con `tanh`, ritorno con `Motion.spatialFast`). Non può fondersi con la barra
-  delle schede di sistema, il cui vetro non sta nello stesso `GlassEffectContainer` delle viste dell'app), `FloatingToolbar` (vivace = modalità temporanea; con Liquid Glass
+  `GlassEffectContainer`. Non un `Menu` di sistema: chiudendosi, il vetro scuro del menu rientrava senza tinta (nero
+  fino alla fine). Né `glassEffect(.interactive())` né `.buttonStyle(.glassProminent)` si allungano trascinando in
+  SwiftUI (crescono soltanto): limite accettato dall'utente, niente allungamento fatto a mano. Non può fondersi con la
+  barra delle schede di sistema, il cui vetro non sta nello stesso `GlassEffectContainer` delle viste dell'app), `FloatingToolbar` (vivace = modalità temporanea; con Liquid Glass
   in vetro) con `ToolbarIconButton`/`ToolbarTextButton`, `PrimaryTabs`, `ConnectedButtonGroup` (etichette libere),
   `SegmentedSection` (intestazione comprimibile + `ListGroup`) con `SegmentCell`, `StatusChip`, `DateBadge`, `TabChrome`
   (una pagina nasconde la barra delle schede: modifica dell'orario, ricerca; va rimesso a `false` in `onDisappear`).
@@ -272,8 +277,10 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Colore d'accento dei componenti UIKit (barra delle schede, pulsanti e menu di sistema, avvisi): `Theme.applyTint()`
   dà alle finestre il `primary` del tema, a ogni cambio di aspetto e all'avvio (`RootView.task`). Nel catalogo non c'è
   più `AccentColor` (era il vecchio rosso-arancio, che compariva con Liquid Glass): non rimetterlo.
-- Barra delle schede di sistema (Liquid Glass): etichette con `Tab(value:content:label:)` e icona piena per la scheda
-  aperta (`AppTab.selectedIcon`), come la barra Material.
+- Barra delle schede di sistema (Liquid Glass): etichette con `Tab(value:content:label:)` e sempre l'icona vuota;
+  quella piena (`AppTab.selectedIcon`) è la `selectedImage` degli elementi della `UITabBar` (`TabBarSelectedImages`),
+  così segue la bolla mentre la si trascina, come nelle app di sistema (verificato). Scegliendo l'icona
+  nell'etichetta in base alla scheda aperta cambiava solo a selezione avvenuta.
 - Indietro scorrendo: con Liquid Glass c'è il gesto di sistema da qualsiasi punto del contenuto (iOS 26). Con la barra
   nascosta (Material) UIKit spegne sia quello dal bordo (riattivato dal delegato in `Page.swift`) sia quello dal
   contenuto (che resta spento anche cambiandone il delegato: non viene nemmeno interpellato). Lo sostituisce

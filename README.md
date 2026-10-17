@@ -46,7 +46,7 @@ BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 - riepilogo per periodo con le insufficienze
 - conto alla rovescia alle prossime vacanze
 - notifiche per nuovi voti, comunicazioni, note, assenze e compiti, da attivare in Impostazioni › Notifiche (anche con l'app chiusa)
-- in cima alla Dashboard la settimana (o il mese, che scorrendo si chiude nella settimana) come fila di pulsanti; toccando il periodo si sceglie una data qualsiasi e scorrendo di lato si passa al giorno prima o dopo
+- in cima alla Dashboard la settimana (vista Lista) o il mese (vista Calendario) come fila di pulsanti; toccando il periodo si sceglie una data qualsiasi e scorrendo di lato si passa al giorno prima o dopo
 - in "Nei prossimi giorni" ogni giorno si comprime toccandone il titolo; toccando la data o il resto si va a quel giorno
 
 ### Orario
