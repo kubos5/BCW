@@ -1,7 +1,4 @@
 import SwiftUI
-#if os(macOS)
-import AppKit
-#endif
 
 // MARK: - Colore di un evento
 
@@ -19,110 +16,111 @@ struct EntryColorPicker: View {
     private let columns = [GridItem(.adaptive(minimum: 40, maximum: 52), spacing: 10)]
 
     var body: some View {
-        Form {
-            Section {
-                Button {
-                    color = nil
-                } label: {
-                    HStack(spacing: 12) {
-                        Swatch(color: Theme.defaultTimetableColor(entry), isSelected: color == nil)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Automatico")
-                                .foregroundStyle(Theme.ink)
-                            Text(entry.isBreak ? "Il colore degli intervalli" : "Il colore della materia nella sezione Lezioni")
-                                .font(.caption)
-                                .foregroundStyle(Theme.secondaryInk)
-                        }
+        ScrollView {
+            VStack(spacing: 20) {
+                ListGroup(footer: seriesNote) {
+                    Button {
+                        color = nil
+                    } label: {
+                        ListRow("Automatico",
+                                subtitle: entry.isBreak ? "Il colore degli intervalli" : "Il colore della materia nella sezione Lezioni",
+                                leading: { Swatch(color: Theme.defaultTimetableColor(entry), isSelected: color == nil, size: 32) },
+                                trailing: { EmptyView() })
                     }
+                    .buttonStyle(.listRow)
                 }
-                .buttonStyle(.plain)
-                if case let .series(id, _, _)? = color {
-                    Label("Colorato con la palette «\(store.palette(id: id)?.name ?? "")» insieme alla sua giornata. Scegliendo un altro colore l'evento esce dalla serie.",
-                          systemImage: "paintpalette")
-                        .font(.footnote)
-                        .foregroundStyle(Theme.secondaryInk)
-                }
-            }
-            .listRowBackground(Theme.surface)
 
-            Section("Suggeriti") {
-                LazyVGrid(columns: columns, spacing: 10) {
-                    ForEach(0..<12, id: \.self) { index in
-                        Button { color = .pastel(index) } label: {
-                            Swatch(color: Theme.subjectColor(index), isSelected: color == .pastel(index))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Colore suggerito \(index + 1)")
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-            .listRowBackground(Theme.surface)
-
-            Section {
-                if !store.timetable.customColors.isEmpty {
-                    LazyVGrid(columns: columns, spacing: 10) {
-                        ForEach(store.timetable.customColors, id: \.self) { hex in
-                            Button { color = .custom(hex) } label: {
-                                Swatch(color: Theme.timetableHex(hex), isSelected: color == .custom(hex))
+                ListGroup("Suggeriti") {
+                    LazyVGrid(columns: columns, spacing: 12) {
+                        ForEach(0..<12, id: \.self) { index in
+                            Button { color = .pastel(index) } label: {
+                                Swatch(color: Theme.subjectColor(index), isSelected: color == .pastel(index))
                             }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                Button("Elimina colore", systemImage: "trash", role: .destructive) {
-                                    withAnimation { store.deleteCustomColor(hex) }
+                            .buttonStyle(SwatchStyle())
+                            .accessibilityLabel("Colore suggerito \(index + 1)")
+                        }
+                    }
+                    .padding(16)
+                }
+
+                ListGroup("Personalizzati", footer: "I colori salvati restano disponibili per tutti gli eventi. Tieni premuto su un colore per eliminarlo.") {
+                    if !store.timetable.customColors.isEmpty {
+                        LazyVGrid(columns: columns, spacing: 12) {
+                            ForEach(store.timetable.customColors, id: \.self) { hex in
+                                Button { color = .custom(hex) } label: {
+                                    Swatch(color: Theme.timetableHex(hex), isSelected: color == .custom(hex))
                                 }
+                                .buttonStyle(SwatchStyle())
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        withAnimation(Motion.spatial) { store.deleteCustomColor(hex) }
+                                    } label: { Label("Elimina colore", icon: "trash") }
+                                }
+                                .accessibilityLabel(String(format: "Colore personalizzato %06X", hex))
                             }
-                            .accessibilityLabel(String(format: "Colore personalizzato %06X", hex))
                         }
+                        .padding(16)
                     }
-                    .padding(.vertical, 4)
-                }
-                ColorPicker("Scegli un colore", selection: $customColor, supportsOpacity: false)
-                HStack {
-                    Button("Usa questo colore") {
-                        if let hex = customColor.rgbHex { color = .custom(hex) }
-                    }
-                    Spacer()
-                    Button("Salva colore", systemImage: "plus.circle") {
-                        if let hex = customColor.rgbHex {
-                            withAnimation { store.saveCustomColor(hex) }
-                            color = .custom(hex)
+                    ListRow("Scegli un colore", leading: { FormIcon("colorize") }, trailing: {
+                        ColorPicker("Scegli un colore", selection: $customColor, supportsOpacity: false)
+                            .labelsHidden()
+                    })
+                    HStack(spacing: 8) {
+                        Button("Usa questo colore") {
+                            if let hex = customColor.rgbHex { color = .custom(hex) }
                         }
+                        .buttonStyle(.m3(.text, size: .xs))
+                        Spacer()
+                        Button {
+                            if let hex = customColor.rgbHex {
+                                withAnimation(Motion.spatial) { store.saveCustomColor(hex) }
+                                color = .custom(hex)
+                            }
+                        } label: {
+                            Label { Text("Salva colore") } icon: { Icon("add") }
+                        }
+                        .buttonStyle(.m3(.tonal, size: .xs))
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
                 }
-                .buttonStyle(.borderless)
-            } header: {
-                Text("Personalizzati")
-            } footer: {
-                Text("I colori salvati restano disponibili per tutti gli eventi. \(Platform.isMac ? "Fai clic con il tasto destro" : "Tieni premuto") su un colore per eliminarlo.")
-            }
-            .listRowBackground(Theme.surface)
 
-            Section {
-                ForEach(store.allPalettes) { palette in
-                    PaletteSwatchRow(palette: palette, selected: color) { picked in
-                        color = picked
-                    } onEdit: {
-                        editingPalette = palette
+                ListGroup("Dalle palette", footer: "Tocca un colore per usarlo. Per colorare un'intera giornata con una sfumatura usa \"Colora una giornata\" nel menu ⋯ dell'orario o nella barra della modifica.") {
+                    ForEach(store.allPalettes) { palette in
+                        PaletteSwatchRow(palette: palette, selected: color) { picked in
+                            color = picked
+                        } onEdit: {
+                            editingPalette = palette
+                        }
+                    }
+                    ButtonRow("Nuova palette", icon: "plus") {
+                        editingPalette = ColorPalette(name: "", colors: [0xA6D8F2, 0x2F6FB5])
                     }
                 }
-                Button("Nuova palette", systemImage: "plus") {
-                    editingPalette = ColorPalette(name: "", colors: [0xA6D8F2, 0x2F6FB5])
-                }
-            } header: {
-                Text("Dalle palette")
-            } footer: {
-                Text("Tocca un colore per usarlo. Per colorare un'intera giornata con una sfumatura usa \"Colora una giornata\" nel menu dell'orario.")
             }
-            .listRowBackground(Theme.surface)
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
         }
-        .formStyle(.grouped)
-        .themedList()
-        .navigationTitle("Colore")
-        .inlineTitleDisplay()
+        .themedBackground()
+        .pageChrome("Colore", style: .inline, showsBack: true)
         .sheet(item: $editingPalette) { palette in
             PaletteEditor(palette: palette)
         }
+    }
+
+    private var seriesNote: String? {
+        guard case let .series(id, _, _)? = color else { return nil }
+        return "Colorato con la palette «\(store.palette(id: id)?.name ?? "")» insieme alla sua giornata. Scegliendo un altro colore l'evento esce dalla serie."
+    }
+}
+
+/// Campioni che si rimpiccioliscono alla pressione.
+private struct SwatchStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .animation(Motion.spatialFast, value: configuration.isPressed)
     }
 }
 
@@ -137,15 +135,15 @@ private struct PaletteSwatchRow: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(palette.name)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.m3(14, weight: 600))
                     .foregroundStyle(Theme.ink)
                 Spacer()
                 if !palette.isBuiltIn {
                     Button("Modifica", action: onEdit)
-                        .font(.caption)
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.m3(.text, size: .xs))
                 }
             }
+            .frame(minHeight: 32)
             // A capo se i colori non stanno su una riga (la palette Pastello ne ha 12).
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 34, maximum: 40), spacing: 6)], alignment: .leading, spacing: 6) {
                 let samples = palette.samples(6)
@@ -155,11 +153,12 @@ private struct PaletteSwatchRow: View {
                         Swatch(color: palette.id == ColorPalette.pastelID ? Theme.subjectColor(index) : Theme.timetableHex(hex),
                                isSelected: selected == value, size: 30)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SwatchStyle())
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 }
 
@@ -169,21 +168,26 @@ struct Swatch: View {
     var size: CGFloat = 36
 
     var body: some View {
-        Circle()
-            .fill(color.gradient)
+        let radius = isSelected ? size * 0.3 : size / 2
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .fill(color)
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .strokeBorder(Theme.shadow.opacity(0.1), lineWidth: 1))
             .frame(width: size, height: size)
             .overlay {
                 if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: size * 0.4, weight: .bold))
-                        .foregroundStyle(.white)
+                    Icon("check", size: size * 0.6)
+                        .foregroundStyle(Theme.surfaceContainerLowest)
+                        .shadow(color: .black.opacity(0.3), radius: 1, y: 1)
                 }
             }
             .padding(3)
             .overlay {
-                Circle().strokeBorder(isSelected ? Theme.ink : Color.clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
+                    .strokeBorder(isSelected ? Theme.ink : Color.clear, lineWidth: 2)
             }
-            .contentShape(.circle)
+            .contentShape(.rect)
+            .animation(Motion.spatialFast, value: isSelected)
             .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -202,7 +206,7 @@ struct PaletteStrip: View {
             }
         }
         .frame(height: height)
-        .clipShape(.capsule)
+        .clipShape(.capsule(style: .continuous))
     }
 }
 
@@ -234,81 +238,70 @@ struct PaletteEditor: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextField("Nome della palette", text: $palette.name)
-                    Toggle("Sfumatura", isOn: $palette.isGradient)
-                    PaletteStrip(palette: resolved, height: 22)
-                        .padding(.vertical, 4)
-                } footer: {
-                    Text(palette.isGradient
-                         ? "Con la sfumatura, applicando la palette a una serie di eventi i colori intermedi vengono calcolati in base al numero di eventi."
-                         : "Senza sfumatura gli eventi di una serie prendono i colori uno dopo l'altro.")
-                }
-                .listRowBackground(Theme.surface)
+            ScrollView {
+                VStack(spacing: 20) {
+                    ListGroup(footer: palette.isGradient
+                              ? "Con la sfumatura, applicando la palette a una serie di eventi i colori intermedi vengono calcolati in base al numero di eventi."
+                              : "Senza sfumatura gli eventi di una serie prendono i colori uno dopo l'altro.") {
+                        TextFieldRow("Nome della palette", text: $palette.name, icon: "edit")
+                        ToggleRow("Sfumatura", icon: "colorStyle", isOn: $palette.isGradient)
+                        PaletteStrip(palette: resolved, height: 22)
+                            .padding(16)
+                    }
 
-                Section("Colori") {
-                    ForEach(colors.indices, id: \.self) { index in
-                        HStack {
-                            ColorPicker("Colore \(index + 1)", selection: $colors[index], supportsOpacity: false)
-                            if colors.count > 2 {
-                                Button {
-                                    colors.remove(at: index)
-                                } label: {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundStyle(Theme.poor)
+                    ListGroup("Colori") {
+                        ForEach(colors.indices, id: \.self) { index in
+                            HStack(spacing: 16) {
+                                Circle().fill(colors[index]).frame(width: 24, height: 24)
+                                Text("Colore \(index + 1)")
+                                    .font(.m3(16, weight: 500))
+                                    .foregroundStyle(Theme.ink)
+                                Spacer()
+                                ColorPicker("Colore \(index + 1)", selection: $colors[index], supportsOpacity: false)
+                                    .labelsHidden()
+                                if colors.count > 2 {
+                                    IconButton("minusCircle", label: "Rimuovi colore \(index + 1)", kind: .danger, size: 32) {
+                                        withAnimation(Motion.spatial) { _ = colors.remove(at: index) }
+                                    }
                                 }
-                                .buttonStyle(.borderless)
-                                .accessibilityLabel("Rimuovi colore \(index + 1)")
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .frame(minHeight: 56)
+                        }
+                        if colors.count < 12 {
+                            ButtonRow("Aggiungi colore", icon: "plus") {
+                                withAnimation(Motion.spatial) { colors.append(colors.last ?? Color(hex: 0x8FA3B8)) }
                             }
                         }
                     }
-                    .onMove { colors.move(fromOffsets: $0, toOffset: $1) }
-                    if colors.count < 12 {
-                        Button("Aggiungi colore", systemImage: "plus") {
-                            colors.append(colors.last ?? Color(hex: 0x8FA3B8))
+
+                    if !isNew && !palette.isBuiltIn {
+                        ListGroup {
+                            ButtonRow("Elimina palette", icon: "trash", destructive: true) { confirmingDelete = true }
                         }
                     }
                 }
-                .listRowBackground(Theme.surface)
-
-                if !isNew && !palette.isBuiltIn {
-                    Section {
-                        Button("Elimina palette", systemImage: "trash", role: .destructive) { confirmingDelete = true }
-                            .foregroundStyle(Theme.poor)
-                    }
-                    .listRowBackground(Theme.surface)
-                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
             }
-            .formStyle(.grouped)
-            .themedList()
-            .navigationTitle(isNew ? "Nuova palette" : "Modifica palette")
-            .inlineTitleDisplay()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Annulla", systemImage: "xmark") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Salva", systemImage: "checkmark") {
-                        var saved = resolved
-                        if saved.name.isEmpty { saved.name = "La mia palette" }
-                        model.timetable.savePalette(saved)
-                        dismiss()
-                    }
-                    .disabled(resolved.colors.count < 2)
-                }
-            }
-            .confirmationDialog("Eliminare la palette «\(palette.name)»?", isPresented: $confirmingDelete,
-                                titleVisibility: .visible) {
-                Button("Elimina", role: .destructive) {
+            .sheetChrome(isNew ? "Nuova palette" : "Modifica palette", leading: .cancel { dismiss() },
+                         trailing: [.confirm("Salva", disabled: resolved.colors.count < 2) {
+                             var saved = resolved
+                             if saved.name.isEmpty { saved.name = "La mia palette" }
+                             model.timetable.savePalette(saved)
+                             dismiss()
+                         }])
+            .m3Dialog("Eliminare la palette «\(palette.name)»?", isPresented: $confirmingDelete,
+                      message: "Gli eventi colorati con questa palette torneranno al colore automatico.") {
+                [.cancel(), DialogAction(title: "Elimina", style: .destructive) {
                     model.timetable.deletePalette(palette.id)
                     dismiss()
-                }
-            } message: {
-                Text("Gli eventi colorati con questa palette torneranno al colore automatico.")
+                }]
             }
         }
-        .sheetFrame(width: 440, height: 560)
+        .m3Sheet()
     }
 }
 
@@ -324,7 +317,6 @@ struct PaletteSeriesSheet: View {
     @State private var paletteID: String = "builtin.lagoon"
     @State private var editingPalette: ColorPalette?
     /// Primo evento toccato per la selezione di un intervallo.
-    @State private var rangeAnchor: UUID?
 
     init(weekday: Int) {
         _weekday = State(initialValue: weekday)
@@ -339,136 +331,129 @@ struct PaletteSeriesSheet: View {
         let chosen = lessons.filter { selection.contains($0.id) }
         let positions = TimetableStore.seriesPositions(chosen)
         NavigationStack {
-            Form {
-                Section {
-                    Picker("Giorno", selection: $weekday) {
-                        ForEach(1...7, id: \.self) { Text(Weekday.name($0)).tag($0) }
+            ScrollView {
+                VStack(spacing: 20) {
+                    ListGroup {
+                        SelectRow("Giorno", icon: "calendar", selection: $weekday,
+                                  options: (1...7).map { ($0, Weekday.name($0), nil) })
                     }
-                }
-                .listRowBackground(Theme.surface)
 
-                Section {
-                    ScrollViewReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(store.allPalettes) { item in
-                                Button { paletteID = item.id } label: {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        PaletteStrip(palette: item, height: 18)
-                                            .frame(width: 96)
-                                        Text(item.name)
-                                            .font(.caption.weight(item.id == paletteID ? .semibold : .regular))
-                                            .foregroundStyle(Theme.ink)
-                                            .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 0) {
+                        ListHeader("Palette")
+                        ScrollViewReader { proxy in
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 10) {
+                                    ForEach(store.allPalettes) { item in
+                                        let selected = item.id == paletteID
+                                        Button { paletteID = item.id } label: {
+                                            VStack(alignment: .leading, spacing: 6) {
+                                                PaletteStrip(palette: item, height: 18)
+                                                Text(item.name)
+                                                    .font(.m3(12, weight: selected ? 700 : 400))
+                                                    .foregroundStyle(Theme.ink)
+                                                    .lineLimit(1)
+                                            }
+                                            .padding(8)
+                                            .frame(width: 112, alignment: .leading)
+                                            .background(Theme.surfaceContainer,
+                                                        in: .rect(cornerRadius: selected ? 22 : Theme.radii.l, style: .continuous))
+                                            .overlay {
+                                                RoundedRectangle(cornerRadius: selected ? 22 : Theme.radii.l, style: .continuous)
+                                                    .strokeBorder(selected ? Theme.primary : Theme.outlineVariant, lineWidth: selected ? 2 : 1)
+                                            }
+                                            .contentShape(.rect)
+                                        }
+                                        .buttonStyle(SwatchStyle())
+                                        .id(item.id)
+                                        .contextMenu {
+                                            if !item.isBuiltIn {
+                                                Button { editingPalette = item } label: { Label("Modifica", icon: "edit") }
+                                            }
+                                        }
                                     }
-                                    .padding(8)
-                                    .background {
-                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .strokeBorder(item.id == paletteID ? Theme.accent : Theme.separator,
-                                                          lineWidth: item.id == paletteID ? 2 : 0.5)
+                                    Button {
+                                        editingPalette = ColorPalette(name: "", colors: [0x8BCF7E, 0x2B5C9E])
+                                    } label: {
+                                        VStack(spacing: 4) {
+                                            Icon("plus")
+                                            Text("Nuova").font(.m3(12, weight: 600))
+                                        }
+                                        .foregroundStyle(Theme.primary)
+                                        .frame(width: 112, height: 58)
+                                        .background(Theme.surfaceContainer, in: .rect(cornerRadius: Theme.radii.l, style: .continuous))
+                                        .overlay(RoundedRectangle(cornerRadius: Theme.radii.l, style: .continuous)
+                                            .strokeBorder(Theme.outlineVariant, lineWidth: 1))
                                     }
-                                    .contentShape(.rect)
+                                    .buttonStyle(SwatchStyle())
                                 }
-                                .buttonStyle(.plain)
-                                .id(item.id)
-                                .contextMenu {
-                                    if !item.isBuiltIn {
-                                        Button("Modifica", systemImage: "pencil") { editingPalette = item }
-                                    }
-                                }
+                                .padding(2)
+                                .padding(.bottom, 6)
                             }
-                            Button {
-                                editingPalette = ColorPalette(name: "", colors: [0x8BCF7E, 0x2B5C9E])
-                            } label: {
-                                Label("Nuova", systemImage: "plus")
-                                    .font(.caption.weight(.semibold))
-                                    .padding(12)
-                            }
-                            .glassButton()
+                            // La palette scelta resta in vista.
+                            .onAppear { proxy.scrollTo(paletteID, anchor: .center) }
+                            .onChange(of: paletteID) { _, id in withAnimation(Motion.spatial) { proxy.scrollTo(id, anchor: .center) } }
                         }
-                        .padding(.vertical, 4)
                     }
-                    // La palette scelta resta in vista.
-                    .onAppear { proxy.scrollTo(paletteID, anchor: .center) }
-                    .onChange(of: paletteID) { _, id in withAnimation { proxy.scrollTo(id, anchor: .center) } }
-                    }
-                } header: {
-                    Text("Palette")
-                }
-                .listRowBackground(Theme.surface)
 
-                Section {
-                    if lessons.isEmpty {
-                        Text("Nessuna lezione il \(Weekday.name(weekday).lowercased()).")
-                            .foregroundStyle(Theme.secondaryInk)
-                    }
-                    ForEach(lessons) { entry in
-                        let offset = chosen.firstIndex { $0.id == entry.id }
-                        let previewColor: Color = offset.map { index in
-                            palette.id == ColorPalette.pastelID
-                                ? Theme.subjectColor(positions.index[index])
-                                : Theme.timetableHex(palette.color(at: positions.index[index], of: positions.count))
-                        } ?? Theme.timetableColor(entry, store: store)
-                        Button { toggle(entry, in: lessons) } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: selection.contains(entry.id) ? "checkmark.circle.fill" : "circle")
-                                    .font(.title3)
-                                    .foregroundStyle(selection.contains(entry.id) ? Theme.accent : Theme.secondaryInk)
-                                RoundedRectangle(cornerRadius: 3).fill(previewColor).frame(width: 6, height: 30)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(entry.displayTitle).foregroundStyle(Theme.ink)
-                                    Text(entry.timeRange)
-                                        .font(.caption.monospacedDigit())
-                                        .foregroundStyle(Theme.secondaryInk)
-                                }
-                                Spacer()
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack {
+                            ListHeader("Eventi")
+                            Spacer()
+                            HStack(spacing: 4) {
+                                Button("Tutti") { selection = Set(lessons.map(\.id)) }
+                                Button("Nessuno") { selection = [] }
                             }
-                            .contentShape(.rect)
+                            .buttonStyle(.m3(.text, size: .xs))
+                            .padding(.bottom, 6)
                         }
-                        .buttonStyle(.plain)
+                        ListGroup(footer: "Tocca gli eventi per sceglierli: una serie di seguito o tutta la giornata. Gli eventi uguali accostati prendono lo stesso colore. La palette vale solo per il \(Weekday.name(weekday).lowercased()): gli eventi con lo stesso nome negli altri giorni restano come sono.") {
+                            if lessons.isEmpty {
+                                ListRow("Nessuna lezione il \(Weekday.name(weekday).lowercased()).", titleColor: Theme.secondaryInk)
+                            }
+                            ForEach(lessons) { entry in
+                                let offset = chosen.firstIndex { $0.id == entry.id }
+                                let previewColor: Color = offset.map { index in
+                                    palette.id == ColorPalette.pastelID
+                                        ? Theme.subjectColor(positions.index[index])
+                                        : Theme.timetableHex(palette.color(at: positions.index[index], of: positions.count))
+                                } ?? Theme.timetableColor(entry, store: store)
+                                let isSelected = selection.contains(entry.id)
+                                Button { toggle(entry, in: lessons) } label: {
+                                    ListRow(entry.displayTitle, subtitle: entry.timeRange, leading: {
+                                        HStack(spacing: 12) {
+                                            Icon(isSelected ? "checkCircleFill" : "circle")
+                                                .foregroundStyle(isSelected ? Theme.primary : Theme.secondaryInk)
+                                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                                .fill(previewColor)
+                                                .frame(width: 6, height: 30)
+                                        }
+                                    }, trailing: { EmptyView() })
+                                }
+                                .buttonStyle(.listRow)
+                            }
+                        }
                     }
-                } header: {
-                    HStack {
-                        Text("Eventi")
-                        Spacer()
-                        Button("Tutti") { selection = Set(lessons.map(\.id)) }
-                        Button("Nessuno") { selection = []; rangeAnchor = nil }
+
+                    ListGroup {
+                        ButtonRow("Togli i colori", icon: "x", destructive: true) {
+                            withAnimation(Motion.spatial) { store.applyPalette(nil, to: chosen.map(\.id)) }
+                            dismiss()
+                        }
+                        .disabled(chosen.isEmpty)
+                        .help("Riporta gli eventi scelti al colore automatico")
                     }
-                    .buttonStyle(.borderless)
-                    .font(.caption)
-                    .textCase(nil)
-                } footer: {
-                    Text("\(Platform.isMac ? "Fai clic sugli eventi per sceglierli (con ⇧ prendi tutti quelli di seguito)." : "Tocca gli eventi per sceglierli: una serie di seguito o tutta la giornata.") Gli eventi uguali accostati prendono lo stesso colore. La palette vale solo per il \(Weekday.name(weekday).lowercased()): gli eventi con lo stesso nome negli altri giorni restano come sono.")
                 }
-                .listRowBackground(Theme.surface)
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
             }
-            .formStyle(.grouped)
-            .themedList()
-            .navigationTitle("Colora una giornata")
-            .inlineTitleDisplay()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Annulla", systemImage: "xmark") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Applica", systemImage: "checkmark") {
-                        withAnimation(.snappy) { store.applyPalette(paletteID, to: chosen.map(\.id)) }
-                        dismiss()
-                    }
-                    .disabled(chosen.isEmpty)
-                }
-                ToolbarItem(placement: .destructiveActionPlacement) {
-                    Button("Togli i colori") {
-                        withAnimation(.snappy) { store.applyPalette(nil, to: chosen.map(\.id)) }
-                        dismiss()
-                    }
-                    .disabled(chosen.isEmpty)
-                    .help("Riporta gli eventi scelti al colore automatico")
-                }
-            }
+            .sheetChrome("Colora una giornata", leading: .cancel { dismiss() },
+                         trailing: [.confirm("Applica", disabled: chosen.isEmpty) {
+                             withAnimation(Motion.spatial) { store.applyPalette(paletteID, to: chosen.map(\.id)) }
+                             dismiss()
+                         }])
             .onChange(of: weekday) {
                 selection = []
-                rangeAnchor = nil
             }
             .onAppear {
                 // Di partenza tutta la giornata; se è già colorata con una palette, quella.
@@ -479,41 +464,16 @@ struct PaletteSeriesSheet: View {
                 PaletteEditor(palette: palette)
             }
         }
-        .sheetFrame(width: 500, height: 640)
+        .m3Sheet()
     }
 
-    /// Un clic aggiunge o toglie un evento; su Mac con ⇧ sceglie tutti quelli tra l'ultimo
-    /// scelto e questo.
+    /// Un tocco aggiunge o toglie un evento.
     private func toggle(_ entry: TimetableEntry, in lessons: [TimetableEntry]) {
-        #if os(macOS)
-        if NSEvent.modifierFlags.contains(.shift), let anchor = rangeAnchor {
-            selectRange(from: anchor, to: entry.id, in: lessons)
-            rangeAnchor = entry.id
-            return
-        }
-        #endif
         if selection.contains(entry.id) {
             selection.remove(entry.id)
         } else {
             selection.insert(entry.id)
-            rangeAnchor = entry.id
         }
     }
-
-    private func selectRange(from anchor: UUID, to id: UUID, in lessons: [TimetableEntry]) {
-        guard let a = lessons.firstIndex(where: { $0.id == anchor }),
-              let b = lessons.firstIndex(where: { $0.id == id }) else { return }
-        selection.formUnion(lessons[min(a, b)...max(a, b)].map(\.id))
-    }
 }
 
-extension ToolbarItemPlacement {
-    /// Azione distruttiva in fondo al foglio (su Mac a sinistra dei pulsanti).
-    static var destructiveActionPlacement: ToolbarItemPlacement {
-        #if os(macOS)
-        .destructiveAction
-        #else
-        .bottomBar
-        #endif
-    }
-}

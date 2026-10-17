@@ -125,6 +125,16 @@ struct DisciplinaryNote: Identifiable, Hashable {
             }
         }
 
+        /// Icona di Material Symbols.
+        var icon: String {
+            switch self {
+            case .annotation: "stickyNote"
+            case .disciplinary: "messageAlert"
+            case .warning: "hand"
+            case .sanction: "octagonAlert"
+            }
+        }
+
         var symbol: String {
             switch self {
             case .annotation: "note.text"
@@ -211,6 +221,25 @@ struct DidacticContent: Decodable, Identifiable, Hashable {
         case "link": .link
         case "text": .text
         default: .file
+        }
+    }
+
+    /// Icona di Material Symbols.
+    var icon: String {
+        switch kind {
+        case .link: return "link"
+        case .text: return "alignLeft"
+        case .file:
+            switch (name as NSString).pathExtension.lowercased() {
+            case "pdf": return "fileText"
+            case "jpg", "jpeg", "png", "heic", "gif": return "image"
+            case "ppt", "pptx", "key": return "presentation"
+            case "xls", "xlsx", "csv", "numbers": return "table"
+            case "mp3", "m4a", "wav": return "audio"
+            case "mp4", "mov": return "film"
+            case "zip", "rar": return "archive"
+            default: return "file"
+            }
         }
     }
 

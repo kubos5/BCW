@@ -43,28 +43,13 @@ struct TimetableEntryDetail: View {
                 if let entry {
                     content(entry)
                 } else {
-                    ContentUnavailableView("Evento eliminato", systemImage: "calendar.badge.minus")
+                    EmptyState("Evento eliminato", icon: "calendarMinus")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .themedBackground()
-            .navigationTitle(entry?.displayTitle ?? "Evento")
-            .inlineTitleDisplay()
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Fine", systemImage: "checkmark") { finish() }
-                }
-                if let entry, !isDraft {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button("Modifica", systemImage: "pencil") {
-                            dismiss()
-                            onEdit(entry)
-                        }
-                    }
-                }
-            }
+            .sheetChrome(entry?.displayTitle ?? "Evento", leading: .close { finish() }, trailing: trailingActions)
         }
-        .sheetFrame(width: 520, height: 660)
+        .m3Sheet()
         .interactiveDismissDisabled(hasRecurringChanges && !sameName.isEmpty)
         .onAppear {
             guard original == nil, let entry else { return }
@@ -105,22 +90,33 @@ struct TimetableEntryDetail: View {
             }
         }
         .quickLookPreview($previewURL)
-        .alert("Errore", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "")
+        .m3Dialog("Errore", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }),
+                  message: errorMessage) {
+            [.cancel("OK")]
         }
-        .confirmationDialog("Applicare le modifiche anche agli altri eventi «\(entry?.displayTitle ?? "")»?",
-                            isPresented: $askingPropagation, titleVisibility: .visible) {
-            Button("Applica a tutti (\(sameName.count + 1))") {
+        .m3Dialog("Applicare le modifiche anche agli altri eventi «\(entry?.displayTitle ?? "")»?",
+                  isPresented: $askingPropagation,
+                  message: "Nota, file e verifica di ogni settimana verranno aggiornati in tutti gli eventi con lo stesso nome. Le modifiche dei singoli giorni restano solo a questo evento.",
+                  stacked: true) {
+            [DialogAction(title: "Applica a tutti (\(sameName.count + 1))", style: .strong) {
                 propagateRecurringChanges()
                 dismiss()
-            }
-            Button("Solo a questo evento") { dismiss() }
-            Button("Annulla", role: .cancel) {}
-        } message: {
-            Text("Nota, file e verifica di ogni settimana verranno aggiornati in tutti gli eventi con lo stesso nome. Le modifiche dei singoli giorni restano solo a questo evento.")
+            },
+             DialogAction(title: "Solo a questo evento") { dismiss() },
+             .cancel()]
         }
+    }
+
+    private var trailingActions: [SheetAction] {
+        var actions: [SheetAction] = []
+        if let entry, !isDraft {
+            actions.append(SheetAction(title: "Modifica", icon: "edit") {
+                dismiss()
+                onEdit(entry)
+            })
+        }
+        actions.append(.confirm("Fine") { finish() })
+        return actions
     }
 
     private var isDraft: Bool { store.isDraftEntry(request.entryID) }
@@ -164,30 +160,35 @@ struct TimetableEntryDetail: View {
     private func content(_ entry: TimetableEntry) -> some View {
         let dayContent = TimetableDayContent(day: day, model: model)
         let tint = Theme.timetableColor(entry, store: store)
-        return Form {
-            Section {
+        return ScrollView {
+            VStack(spacing: 16) {
                 header(entry, tint: tint)
-            }
-            .listRowBackground(Color.clear)
 
-            if isDraft {
-                Section {
-                    Label("Questo evento fa parte della bozza generata dalle lezioni registrate. Applica la bozza per modificarlo o aggiungere note e file.",
-                          systemImage: "wand.and.stars")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.secondaryInk)
+                if isDraft {
+                    HStack(alignment: .top, spacing: 12) {
+                        Icon("wand")
+                        Text("Questo evento fa parte della bozza generata dalle lezioni registrate. Applica la bozza per modificarlo o aggiungere note e file.")
+                            .font(.m3(14))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .foregroundStyle(Theme.onSecondaryContainer)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.secondaryContainer, in: .rect(cornerRadius: Theme.radii.li, style: .continuous))
+                } else {
+                    if !entry.isBreak {
+                        testSection(entry, content: dayContent)
+                    }
+                    daySection(entry)
+                    weeklySection(entry)
                 }
-                .listRowBackground(Theme.surface)
-            } else {
-                if !entry.isBreak {
-                    testSection(entry, content: dayContent)
-                }
-                daySection(entry)
-                weeklySection(entry)
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
         }
-        .formStyle(.grouped)
-        .themedList()
+        .scrollDismissesKeyboard(.interactively)
     }
 
     private func header(_ entry: TimetableEntry, tint: Color) -> some View {
@@ -195,65 +196,61 @@ struct TimetableEntryDetail: View {
             RoundedRectangle(cornerRadius: 3, style: .continuous)
                 .fill(tint)
                 .frame(width: 6)
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(entry.displayTitle)
-                    .font(.title2.weight(.semibold))
+                    .font(.m3(24, weight: 500, rounded: true))
                     .foregroundStyle(Theme.ink)
                 Text("\(day.longDay) · \(entry.timeRange)")
-                    .font(.subheadline.monospacedDigit())
+                    .font(.m3(14).monospacedDigit())
                     .foregroundStyle(Theme.ink)
                 Text("Ogni \(Weekday.name(entry.weekday).lowercased()) · \(TimeOfDay.duration(entry.duration))"
                      + (entry.isBreak ? " · Intervallo" : ""))
-                    .font(.subheadline)
+                    .font(.m3(14))
                     .foregroundStyle(Theme.secondaryInk)
                 let details = [entry.teacher, entry.room.isEmpty ? "" : "Aula \(entry.room)"].filter { !$0.isEmpty }
                 if !details.isEmpty {
                     Text(details.joined(separator: " · "))
-                        .font(.subheadline)
+                        .font(.m3(14))
                         .foregroundStyle(Theme.secondaryInk)
                 }
                 if !sameName.isEmpty {
                     Text(sameName.count == 1 ? "C'è un altro evento «\(entry.displayTitle)» nell'orario."
                          : "Ci sono altri \(sameName.count) eventi «\(entry.displayTitle)» nell'orario.")
-                        .font(.caption)
+                        .font(.m3(12))
                         .foregroundStyle(Theme.secondaryInk)
+                        .padding(.top, 2)
                 }
             }
             Spacer(minLength: 0)
         }
         .fixedSize(horizontal: false, vertical: true)
         .padding(16)
-        .modifier(EntryFill(tint: tint, isDraft: isDraft))
-        .clipShape(.rect(cornerRadius: Theme.corner, style: .continuous))
-        .listRowInsets(EdgeInsets())
+        .background(tint.mix(Theme.surfaceContainerHigh, 0.2), in: .rect(cornerRadius: Theme.radii.li, style: .continuous))
     }
 
     private func testSection(_ entry: TimetableEntry, content: TimetableDayContent) -> some View {
         let registerTests = content.registerTests[entry.id] ?? []
         let hiddenTests = content.hiddenTests[entry.id] ?? []
         let dayOverride = store.occurrence(entry.id, on: day).isTest
-        return Section {
+        return ListGroup("Verifiche", footer: testFooter(registerTests: registerTests, hiddenTests: hiddenTests,
+                                                         dayOverride: dayOverride, entry: entry)) {
             ForEach(registerTests) { test in
                 RegisterTestRow(test: test, isHidden: false)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
             }
             ForEach(hiddenTests) { test in
                 RegisterTestRow(test: test, isHidden: true)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
             }
-            Toggle(isOn: Binding(get: { store.isManualTest(entry, on: day) },
-                                 set: { store.setTest($0, for: entry, scope: .day(day)) })) {
-                Label("Verifica \(day.isToday ? "oggi" : (day.isTomorrow ? "domani" : "il \(day.it("dMMMM"))"))",
-                      systemImage: "pencil.and.list.clipboard")
-            }
-            Toggle(isOn: Binding(get: { entry.isWeeklyTest },
-                                 set: { store.setTest($0, for: entry, scope: .everyWeek) })) {
-                Label("Verifica ogni \(Weekday.name(entry.weekday).lowercased())", systemImage: "repeat")
-            }
-        } header: {
-            Text("Verifiche")
-        } footer: {
-            Text(testFooter(registerTests: registerTests, hiddenTests: hiddenTests, dayOverride: dayOverride, entry: entry))
+            ToggleRow("Verifica \(day.isToday ? "oggi" : (day.isTomorrow ? "domani" : "il \(day.it("dMMMM"))"))", icon: "test",
+                      isOn: Binding(get: { store.isManualTest(entry, on: day) },
+                                    set: { store.setTest($0, for: entry, scope: .day(day)) }))
+            ToggleRow("Verifica ogni \(Weekday.name(entry.weekday).lowercased())", icon: "repeat",
+                      isOn: Binding(get: { entry.isWeeklyTest },
+                                    set: { store.setTest($0, for: entry, scope: .everyWeek) }))
         }
-        .listRowBackground(Theme.surface)
     }
 
     private func testFooter(registerTests: [AgendaEvent], hiddenTests: [AgendaEvent], dayOverride: Bool?,
@@ -262,7 +259,7 @@ struct TimetableEntryDetail: View {
         if !registerTests.isEmpty {
             parts.append("Le verifiche segnate dai docenti su Classeviva compaiono da sole. Se sono sbagliate puoi nasconderle dall'orario.")
         } else if !hiddenTests.isEmpty {
-            parts.append("Le verifiche di Classeviva di questo giorno sono nascoste (le trovi anche in Verifiche nascoste, nel menu dell'orario).")
+            parts.append("Le verifiche di Classeviva di questo giorno sono nascoste (le trovi anche in Verifiche nascoste, nel menu ⋯ dell'orario).")
         } else {
             parts.append("Le verifiche segnate dai docenti su Classeviva compaiono da sole; qui puoi segnarne altre a mano.")
         }
@@ -274,95 +271,87 @@ struct TimetableEntryDetail: View {
 
     private func daySection(_ entry: TimetableEntry) -> some View {
         let info = store.occurrence(entry.id, on: day)
-        return Section {
-            TextField("Nota solo per questo giorno", text: $dayNote, axis: .vertical)
-                .lineLimit(2...8)
+        return ListGroup(day.longDay) {
+            NoteField(text: $dayNote, prompt: "Nota solo per questo giorno")
                 .onChange(of: dayNote) { _, note in
                     store.setNote(note, for: entry, scope: .day(day))
                 }
             attachmentRows(info.attachments, entry: entry, scope: .day(day))
             addFileMenu(scope: .day(day))
-        } header: {
-            Text(day.longDay)
         }
-        .listRowBackground(Theme.surface)
     }
 
     private func weeklySection(_ entry: TimetableEntry) -> some View {
-        Section {
-            TextField("Nota per ogni settimana", text: $weeklyNote, axis: .vertical)
-                .lineLimit(2...8)
+        ListGroup("Ogni \(Weekday.name(entry.weekday).lowercased())",
+                  footer: sameName.isEmpty ? nil
+                  : "Premendo Fine potrai applicare nota, file e verifica di ogni settimana anche agli altri eventi «\(entry.displayTitle)».") {
+            NoteField(text: $weeklyNote, prompt: "Nota per ogni settimana")
                 .onChange(of: weeklyNote) { _, note in
                     store.setNote(note, for: entry, scope: .everyWeek)
                 }
             attachmentRows(entry.attachments, entry: entry, scope: .everyWeek)
             addFileMenu(scope: .everyWeek)
-        } header: {
-            Text("Ogni \(Weekday.name(entry.weekday).lowercased())")
-        } footer: {
-            if !sameName.isEmpty {
-                Text("Premendo Fine potrai applicare nota, file e verifica di ogni settimana anche agli altri eventi «\(entry.displayTitle)».")
-            }
         }
-        .listRowBackground(Theme.surface)
     }
 
     @ViewBuilder
     private func attachmentRows(_ attachments: [TimetableAttachment], entry: TimetableEntry,
                                 scope: TimetableStore.Scope) -> some View {
         ForEach(attachments) { attachment in
-            Button {
-                previewURL = store.shareableURL(for: attachment)
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: Self.symbol(for: attachment.name))
-                        .foregroundStyle(Theme.accent)
-                        .frame(width: 24)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(attachment.name)
-                            .foregroundStyle(Theme.ink)
-                            .lineLimit(1)
-                        Text(ByteCountFormatter.string(fromByteCount: Int64(attachment.size), countStyle: .file))
-                            .font(.caption)
-                            .foregroundStyle(Theme.secondaryInk)
+            HStack(spacing: 4) {
+                Button {
+                    previewURL = store.shareableURL(for: attachment)
+                } label: {
+                    ListRow(attachment.name,
+                            subtitle: ByteCountFormatter.string(fromByteCount: Int64(attachment.size), countStyle: .file),
+                            leading: { FormIcon(Self.icon(for: attachment.name)) }, trailing: { EmptyView() })
+                }
+                .buttonStyle(.listRow)
+                if let url = store.shareableURL(for: attachment) {
+                    ShareLink(item: url) {
+                        Icon("share")
                     }
-                    Spacer(minLength: 4)
-                    if let url = store.shareableURL(for: attachment) {
-                        ShareLink(item: url) {
-                            Image(systemName: "square.and.arrow.up")
-                        }
-                        .buttonStyle(.borderless)
-                    }
+                    .buttonStyle(.m3Icon())
+                    .help("Condividi")
                 }
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .contextMenu {
-                Button("Rimuovi", systemImage: "trash", role: .destructive) {
-                    withAnimation { store.removeAttachment(attachment, from: entry, scope: scope) }
+                IconButton("trash", label: "Rimuovi", kind: .danger) {
+                    withAnimation(Motion.spatial) { store.removeAttachment(attachment, from: entry, scope: scope) }
                 }
-            }
-            .swipeActions {
-                Button("Rimuovi", systemImage: "trash", role: .destructive) {
-                    withAnimation { store.removeAttachment(attachment, from: entry, scope: scope) }
-                }
+                .padding(.trailing, 8)
             }
         }
     }
 
     private func addFileMenu(scope: TimetableStore.Scope) -> some View {
-        Menu {
-            Button("Scegli un file…", systemImage: "doc") {
+        AppMenu(alignment: .leading) {
+            MenuItem("Scegli un file…", icon: "file") {
                 importScope = scope
                 showingFileImporter = true
             }
-            Button("Scegli una foto…", systemImage: "photo") {
+            MenuItem("Scegli una foto…", icon: "photo") {
                 photoScope = scope
                 showingPhotoPicker = true
             }
         } label: {
-            Label("Allega un file", systemImage: "paperclip")
+            ListRow("Allega un file", titleColor: Theme.primary, leading: {
+                FormIcon("paperclip", color: Theme.primary)
+            }, trailing: { EmptyView() })
         }
+        .buttonStyle(.listRow)
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+    }
+
+    /// Icona di Material Symbols per il tipo di file.
+    static func icon(for name: String) -> String {
+        guard let type = UTType(filenameExtension: (name as NSString).pathExtension) else { return "file" }
+        if type.conforms(to: .image) { return "image" }
+        if type.conforms(to: .pdf) { return "fileText" }
+        if type.conforms(to: .audiovisualContent) { return "film" }
+        if type.conforms(to: .presentation) { return "presentation" }
+        if type.conforms(to: .spreadsheet) { return "table" }
+        if type.conforms(to: .text) { return "alignLeft" }
+        return "file"
     }
 
     static func symbol(for name: String) -> String {
@@ -374,5 +363,27 @@ struct TimetableEntryDetail: View {
         if type.conforms(to: .spreadsheet) { return "tablecells" }
         if type.conforms(to: .text) { return "doc.text" }
         return "doc"
+    }
+}
+
+/// Campo per una nota, dentro una voce di una lista (trasparente, pieno quando è attivo).
+struct NoteField: View {
+    @Binding var text: String
+    let prompt: String
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField(prompt, text: $text, axis: .vertical)
+            .lineLimit(2...8)
+            .textFieldStyle(.plain)
+            .font(.m3(16))
+            .foregroundStyle(Theme.ink)
+            .focused($focused)
+            .padding(16)
+            .frame(minHeight: 64, alignment: .topLeading)
+            .background(focused ? Theme.surfaceContainerHighest : .clear,
+                        in: .rect(cornerRadius: Theme.radii.l, style: .continuous))
+            .padding(8)
+            .animation(Motion.effects, value: focused)
     }
 }

@@ -40,6 +40,15 @@ struct AgendaEvent: Decodable, Identifiable, Hashable {
             }
         }
 
+        /// Icona di Material Symbols.
+        var icon: String {
+            switch self {
+            case .homework: "book"
+            case .test: "clipboardPen"
+            case .event: "calendar"
+            }
+        }
+
         var symbol: String {
             switch self {
             case .homework: "book.closed"
@@ -169,6 +178,16 @@ struct AbsenceEvent: Decodable, Identifiable, Hashable {
             case .late: "Ritardi"
             case .shortLate: "Ritardi brevi"
             case .earlyExit: "Uscite"
+            }
+        }
+
+        /// Icona di Material Symbols.
+        var icon: String {
+            switch self {
+            case .absence: "userX"
+            case .late: "clockAlert"
+            case .shortLate: "clock"
+            case .earlyExit: "doorOpen"
             }
         }
 

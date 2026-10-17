@@ -26,27 +26,28 @@ struct SubjectDetailView: View {
 
     var body: some View {
         content
-            .screenTitle(name)
-            .inlineTitleDisplay()
+            .pageChrome(name, style: .inline)
     }
 
     @ViewBuilder
     private var periodPicker: some View {
         if book.activePeriods.count > 1 {
-            Picker("Periodo", selection: $period) {
-                Text("Anno").tag(Int?.none)
-                ForEach(book.activePeriods) { Text($0.name).tag(Optional($0.position)) }
+            ConnectedButtonGroup(selection: $period, values: [nil] + book.activePeriods.map { Optional($0.position) },
+                                 height: 48) { period, _ in
+                Text(period.flatMap { p in book.activePeriods.first { $0.position == p }?.name } ?? "Anno")
+                    .font(.m3(14, weight: 600))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .padding(.horizontal, 6)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
         }
     }
 
     private var gradeList: some View {
-        CardGrid(minWidth: 340) {
+        ListGroup {
             ForEach(grades) { grade in
                 GradeCard(grade: grade, book: book, isExpanded: expanded.contains(grade.id)) {
-                    withAnimation(.snappy) {
+                    withAnimation(Motion.spatial) {
                         if expanded.contains(grade.id) { expanded.remove(grade.id) } else { expanded.insert(grade.id) }
                     }
                 }
@@ -56,18 +57,6 @@ struct SubjectDetailView: View {
 
     @ViewBuilder
     private var content: some View {
-        #if os(macOS)
-        SplitColumns(sideWidth: 350) {
-            header
-            periodPicker
-            chart
-            GoalCalculator(grades: grades, weighted: book.weighted)
-        } main: {
-            SectionHeader("Voti", subtitle: "\(grades.count) valutazioni")
-            gradeList
-        }
-        .animation(.snappy, value: period)
-        #else
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
@@ -75,44 +64,46 @@ struct SubjectDetailView: View {
                 chart
                 GoalCalculator(grades: grades, weighted: book.weighted)
 
-                SectionHeader("Voti", subtitle: "\(grades.count) valutazioni")
+                SectionHeader("Voti", subtitle: grades.count == 1 ? "1 valutazione" : "\(grades.count) valutazioni")
+                    .padding(.bottom, -8)
                 gradeList
             }
             .pagePadding()
-            .padding(.bottom, 24)
-            .animation(.snappy, value: period)
+            .padding(.bottom, 32)
+            .animation(Motion.spatial, value: period)
         }
+        .tracksPageScroll()
         .themedBackground()
-        #endif
     }
 
+    /// La media della materia in primo piano, al centro, con docenti e voto migliore e peggiore.
     private var header: some View {
-        HStack(spacing: 18) {
-            AverageRing(value: GradeBook.average(of: grades, weighted: book.weighted), size: 96, lineWidth: 9)
-            VStack(alignment: .leading, spacing: 6) {
-                Eyebrow(text: "Media di materia", color: Theme.subjectColor(subjectId))
+        VStack(spacing: 14) {
+            AverageRing(value: GradeBook.average(of: grades, weighted: book.weighted), size: 156, lineWidth: 12)
+            VStack(spacing: 4) {
                 Text(name)
-                    .font(.title3.weight(.semibold))
+                    .font(.m3(24, weight: 500, rounded: true))
                     .foregroundStyle(Theme.ink)
+                    .multilineTextAlignment(.center)
                 if !teachers.isEmpty {
                     Text(teachers.joined(separator: ", "))
-                        .font(.footnote)
+                        .font(.m3(14))
                         .foregroundStyle(Theme.secondaryInk)
-                }
-                let values = grades.filter(\.countsTowardAverage).compactMap(\.value)
-                if let best = values.max(), let worst = values.min() {
-                    HStack(spacing: 12) {
-                        Label(GradeFormat.short(best), systemImage: "arrow.up")
-                            .foregroundStyle(Theme.good)
-                        Label(GradeFormat.short(worst), systemImage: "arrow.down")
-                            .foregroundStyle(Theme.poor)
-                    }
-                    .font(.footnote.weight(.semibold))
+                        .multilineTextAlignment(.center)
                 }
             }
-            Spacer(minLength: 0)
+            let values = grades.filter(\.countsTowardAverage).compactMap(\.value)
+            if let best = values.max(), let worst = values.min() {
+                HStack(spacing: 8) {
+                    StatusChip(text: "Migliore \(GradeFormat.short(best))", icon: "arrowUp",
+                               container: Theme.goodContainer, foreground: Theme.onGoodContainer)
+                    StatusChip(text: "Peggiore \(GradeFormat.short(worst))", icon: "arrowDown",
+                               container: Theme.poorContainer, foreground: Theme.onPoorContainer)
+                }
+            }
         }
-        .card(padding: 18)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 4)
     }
 
     @ViewBuilder
@@ -121,33 +112,38 @@ struct SubjectDetailView: View {
         let running = book.runningAverage(for: subjectId, period: period)
         if sorted.count >= 2 {
             VStack(alignment: .leading, spacing: 12) {
-                Eyebrow(text: "Voti e media")
+                Text("Voti e media")
+                    .font(.m3(18, weight: 550))
+                    .foregroundStyle(Theme.ink)
                 Chart {
-                    RuleMark(y: .value("Sufficienza", 6))
-                        .foregroundStyle(Theme.secondaryInk.opacity(0.4))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    RectangleMark(yStart: .value("Base", 2), yEnd: .value("Sufficienza", 6))
+                        .foregroundStyle(Theme.poorContainer.opacity(0.15))
                     ForEach(running.indices, id: \.self) { i in
                         LineMark(x: .value("Data", running[i].date), y: .value("Media", running[i].value))
                             .foregroundStyle(Theme.subjectColor(subjectId))
                             .interpolationMethod(.monotone)
-                            .lineStyle(StrokeStyle(lineWidth: 2))
+                            .lineStyle(StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
                     }
                     ForEach(sorted) { grade in
                         PointMark(x: .value("Data", grade.date.startOfDay), y: .value("Voto", grade.value ?? 0))
-                            .foregroundStyle(Theme.gradeColor(grade))
-                            .symbolSize(60)
+                            .symbol {
+                                Circle()
+                                    .fill(Theme.gradeColor(grade))
+                                    .frame(width: 12, height: 12)
+                                    .overlay(Circle().stroke(Theme.surfaceContainerLow, lineWidth: 2.5))
+                            }
                     }
                 }
                 .chartYScale(domain: 2...10)
                 .chartYAxis {
-                    AxisMarks(values: [2, 4, 6, 8, 10]) { _ in
-                        AxisGridLine().foregroundStyle(Theme.separator)
-                        AxisValueLabel().font(.caption2)
+                    AxisMarks(position: .trailing, values: [2, 4, 6, 8, 10]) { _ in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 1, dash: [2, 4])).foregroundStyle(Theme.outlineVariant)
+                        AxisValueLabel().font(.m3(11, weight: 500)).foregroundStyle(Theme.onSurfaceVariant)
                     }
                 }
                 .frame(height: 170)
             }
-            .card()
+            .card(padding: 18, color: Theme.surfaceContainerLow, radius: Theme.radii.xl)
         }
     }
 }
@@ -165,62 +161,59 @@ struct GoalCalculator: View {
                                            count: upcoming, weighted: weighted)
 
         VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Shaped(shape: .cookie9Sided, fill: Theme.tertiaryContainer, size: 40) {
+                    Icon("target", size: 22)
+                        .foregroundStyle(Theme.onTertiaryContainer)
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Obiettivo")
+                        .font(.m3(18, weight: 550))
+                    Text("Quanto ti serve per arrivarci")
+                        .font(.m3(13))
+                        .foregroundStyle(Theme.secondaryInk)
+                }
+            }
+
             HStack {
-                Eyebrow(text: "Obiettivo")
+                Text("Media desiderata")
                 Spacer()
-                Image(systemName: "target")
-                    .foregroundStyle(Theme.accent)
+                M3Stepper(value: $preferences.targetAverage, range: 4...10, step: 0.25) { GradeFormat.short($0) }
             }
+            .frame(minHeight: 40)
 
-            Stepper(value: $preferences.targetAverage, in: 4...10, step: 0.25) {
-                HStack {
-                    Text("Media desiderata")
-                    Spacer()
-                    Text(GradeFormat.short(preferences.targetAverage))
-                        .font(.numeral(20, weight: .bold))
-                        .contentTransition(.numericText())
-                }
+            HStack {
+                Text("Prossime prove")
+                Spacer()
+                M3Stepper(value: $upcoming, range: 1...5, step: 1) { "\($0)" }
             }
+            .frame(minHeight: 40)
 
-            Stepper(value: $upcoming, in: 1...5) {
-                HStack {
-                    Text("Prossime prove")
-                    Spacer()
-                    Text("\(upcoming)")
-                        .font(.numeral(20, weight: .bold))
-                        .contentTransition(.numericText())
-                }
-            }
+            M3Divider()
 
-            Divider().overlay(Theme.separator)
-
-            Group {
-                if let needed {
-                    if needed <= 1 {
-                        Label("Hai già raggiunto l'obiettivo, qualunque voto prenderai.", systemImage: "checkmark.seal.fill")
-                            .foregroundStyle(Theme.good)
-                    } else if needed > 10 {
-                        Label("Obiettivo non raggiungibile con \(upcoming == 1 ? "una prova" : "\(upcoming) prove").",
-                              systemImage: "xmark.octagon.fill")
-                            .foregroundStyle(Theme.poor)
-                    } else {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(upcoming == 1 ? "Ti serve almeno" : "Ti serve in media almeno")
-                                .foregroundStyle(Theme.secondaryInk)
-                            Spacer()
-                            Text(GradeFormat.average(needed))
-                                .font(.numeral(28, weight: .bold))
-                                .foregroundStyle(Theme.gradeColor(value: needed))
-                                .contentTransition(.numericText())
-                        }
+            if let needed {
+                if needed <= 1 {
+                    StatusLine(text: "Hai già raggiunto l'obiettivo, qualunque voto prenderai.", icon: "checkSealFill", color: Theme.good)
+                } else if needed > 10 {
+                    StatusLine(text: "Obiettivo non raggiungibile con \(upcoming == 1 ? "una prova" : "\(upcoming) prove").",
+                               icon: "octagonX", color: Theme.poor)
+                } else {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(upcoming == 1 ? "Ti serve almeno" : "Ti serve in media almeno")
+                            .foregroundStyle(Theme.secondaryInk)
+                        Spacer()
+                        Text(GradeFormat.average(needed))
+                            .font(.numeral(32))
+                            .foregroundStyle(Theme.gradeColor(value: needed))
+                            .contentTransition(.numericText())
                     }
                 }
             }
-            .font(.subheadline.weight(.medium))
         }
-        .font(.subheadline)
-        .card()
-        .animation(.snappy, value: preferences.targetAverage)
-        .animation(.snappy, value: upcoming)
+        .font(.m3(16))
+        .foregroundStyle(Theme.ink)
+        .card(padding: 18, color: Theme.surfaceContainerLow, radius: Theme.radii.xl)
+        .animation(Motion.spatial, value: preferences.targetAverage)
+        .animation(Motion.spatial, value: upcoming)
     }
 }

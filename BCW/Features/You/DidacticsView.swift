@@ -39,14 +39,12 @@ struct DidacticsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 if let error {
-                    StatusBanner(message: error, symbol: "exclamationmark.triangle")
+                    StatusBanner(message: error, icon: "alertTriangle")
                 }
 
-                #if os(macOS)
                 if !model.didactics.isEmpty {
-                    LocalSearchField(text: $search, prompt: Self.searchPrompt)
+                    PageSearchBar(text: $search, prompt: Self.searchPrompt)
                 }
-                #endif
 
                 if !model.didactics.isEmpty {
                     ChipRow {
@@ -62,29 +60,28 @@ struct DidacticsView: View {
                 if loading && model.didactics.isEmpty {
                     LoadingCard()
                 } else if model.didactics.isEmpty {
-                    ContentUnavailableView("Nessun materiale", systemImage: "folder",
-                                           description: Text("I file condivisi dai docenti appariranno qui."))
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 40)
+                    EmptyState("Nessun materiale", icon: "folder", description: "I file condivisi dai docenti appariranno qui.")
                 }
 
                 ForEach(teachers) { teacher in
                     let list = folders(of: teacher)
                     if !list.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
-                            HStack(spacing: 10) {
+                            HStack(spacing: 12) {
                                 Text(String(teacher.name.prefix(1)))
-                                    .font(.numeral(15, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 30, height: 30)
-                                    .background(Theme.subjectColor(StableID.make(teacher.id)), in: .circle)
+                                    .font(.numeral(16))
+                                    .foregroundStyle(Theme.surface)
+                                    .frame(width: 36, height: 36)
+                                    .background(Theme.subjectColor(StableID.make(teacher.id)),
+                                                in: .rect(cornerRadius: Theme.radii.m, style: .continuous))
                                 Text(teacher.name)
-                                    .font(.headline)
+                                    .font(.m3(18, weight: 550))
                                     .foregroundStyle(Theme.ink)
                             }
                             .padding(.leading, 4)
 
-                            CardGrid(minWidth: 360) {
+                            // Le cartelle di un docente formano una lista segmentata.
+                            ListGroup {
                                 ForEach(list) { folder in
                                     folderCard(folder, teacher: teacher)
                                 }
@@ -94,32 +91,29 @@ struct DidacticsView: View {
                 }
             }
             .pagePadding()
-            .padding(.bottom, 24)
-            .animation(.snappy, value: teacherFilter)
+            .padding(.bottom, 32)
+            .animation(Motion.spatial, value: teacherFilter)
         }
+        .tracksPageScroll()
         .themedBackground()
-        .screenTitle("Materiale didattico")
+        .pageChrome("Materiale didattico", style: .inline)
         .localSearchable(text: $search, prompt: Self.searchPrompt)
         .quickLookPreview($previewURL)
         .sheet(item: $textItem) { item in
             NavigationStack {
                 ScrollView {
                     Text(item.text)
+                        .font(.m3(15))
+                        .lineSpacing(4)
                         .textSelection(.enabled)
-                        .padding()
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 4)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .themedBackground()
-                .navigationTitle(item.title)
-                .inlineTitleDisplay()
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Fine") { textItem = nil }
-                    }
-                }
+                .sheetChrome(item.title, trailing: [.confirm("Fine") { textItem = nil }])
             }
+            .m3Sheet()
             .presentationDetents([.medium, .large])
-            .sheetFrame(width: 560, height: 480)
         }
         .task {
             if model.didactics.isEmpty {
@@ -139,31 +133,27 @@ struct DidacticsView: View {
         }
         return VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.snappy) {
+                withAnimation(Motion.spatial) {
                     if expandedFolders.contains(key) { expandedFolders.remove(key) } else { expandedFolders.insert(key) }
                 }
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: isExpanded ? "folder.fill" : "folder")
-                        .font(.title3)
-                        .foregroundStyle(Theme.accent)
-                        .frame(width: 30)
-                    VStack(alignment: .leading, spacing: 2) {
+                    Icon(isExpanded ? "folderFill" : "folder")
+                        .foregroundStyle(Theme.subject(3))
+                    VStack(alignment: .leading, spacing: 1) {
                         Text(folder.name)
-                            .font(.body.weight(.semibold))
+                            .font(.m3(15, weight: 600))
                             .foregroundStyle(Theme.ink)
                             .multilineTextAlignment(.leading)
                         Text("\(folder.contents.count) elementi\(folder.lastShare.map { " · \($0.shortDayWithYear)" } ?? "")")
-                            .font(.caption)
+                            .font(.m3(12))
                             .foregroundStyle(Theme.secondaryInk)
                     }
                     Spacer()
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Theme.secondaryInk)
-                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    Chevron(collapsed: !isExpanded, rotateUp: true)
                 }
-                .padding(14)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
                 .contentShape(.rect)
             }
             .buttonStyle(HeaderButtonStyle())
@@ -171,22 +161,21 @@ struct DidacticsView: View {
             CollapsibleContent(isExpanded: isExpanded) {
                 VStack(spacing: 0) {
                     ForEach(contents) { content in
-                        Divider().overlay(Theme.separator).padding(.leading, 56)
+                        M3Divider(inset: 56)
                         Button {
                             Task { await open(content) }
                         } label: {
                             HStack(spacing: 12) {
-                                Image(systemName: content.symbol)
-                                    .foregroundStyle(Theme.secondaryInk)
-                                    .frame(width: 30)
-                                VStack(alignment: .leading, spacing: 2) {
+                                Icon(content.icon)
+                                    .foregroundStyle(Theme.primary)
+                                VStack(alignment: .leading, spacing: 1) {
                                     Text(content.name)
-                                        .font(.subheadline)
+                                        .font(.m3(15))
                                         .foregroundStyle(Theme.ink)
                                         .multilineTextAlignment(.leading)
                                     if let date = content.sharedAt {
                                         Text(date.shortDayWithYear)
-                                            .font(.caption2)
+                                            .font(.m3(12))
                                             .foregroundStyle(Theme.secondaryInk)
                                     }
                                 }
@@ -194,23 +183,18 @@ struct DidacticsView: View {
                                 if openingContent == content.id {
                                     InlineProgress()
                                 } else {
-                                    Image(systemName: content.kind == .link ? "arrow.up.right.square" : "arrow.down.circle")
-                                        .foregroundStyle(Theme.accent)
+                                    Icon(content.kind == .link ? "externalLink" : "download")
+                                        .foregroundStyle(Theme.primary)
                                 }
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
                             .contentShape(.rect)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.listRow)
                     }
                 }
             }
-        }
-        .background(Theme.surface, in: .rect(cornerRadius: Theme.corner, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
-                .strokeBorder(Theme.separator.opacity(0.7), lineWidth: 0.5)
         }
     }
 

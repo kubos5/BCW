@@ -168,7 +168,7 @@ final class AppModel {
         let alreadyFading = pendingSessionChange != nil
         pendingSessionChange = change
         guard !alreadyFading else { return }
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(Motion.effects) {
             isChangingSession = true
         } completion: {
             guard let change = self.pendingSessionChange else { return }

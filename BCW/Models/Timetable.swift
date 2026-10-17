@@ -27,6 +27,8 @@ enum TimetableAlignment: String, Codable, CaseIterable, Identifiable {
     var shortTitle: String { self == .automatic ? "Automatico" : "Libero" }
 
     var symbol: String { self == .automatic ? "rectangle.split.1x2" : "slider.horizontal.below.rectangle" }
+    /// Icona di Material Symbols.
+    var icon: String { self == .automatic ? "alignAuto" : "alignFree" }
 
     /// Passo con cui si spostano gli eventi trascinandoli.
     var dragStep: Int { self == .automatic ? 30 : 5 }
@@ -74,6 +76,8 @@ nonisolated struct TimetableEntry: Codable, Identifiable, Hashable {
         var id: String { rawValue }
         var title: String { self == .lesson ? "Lezione" : "Intervallo" }
         var symbol: String { self == .lesson ? "book.closed" : "cup.and.saucer" }
+        /// Icona di Material Symbols.
+        var icon: String { self == .lesson ? "book" : "coffee" }
     }
 
     var id: UUID
@@ -461,6 +465,17 @@ nonisolated enum TimeOfDay {
     @MainActor static func minutes(of date: Date) -> Int {
         let c = CVDate.calendar.dateComponents([.hour, .minute], from: date)
         return (c.hour ?? 0) * 60 + (c.minute ?? 0)
+    }
+
+    /// Minuto attuale del giorno, per l'evento in corso e la linea dell'ora.
+    @MainActor static func nowMinutes(of date: Date) -> Int {
+        #if DEBUG
+        // Per le prove: `-BCWNowMinute 610` fa come se fossero le 10:10.
+        if UserDefaults.standard.object(forKey: "BCWNowMinute") != nil {
+            return UserDefaults.standard.integer(forKey: "BCWNowMinute")
+        }
+        #endif
+        return minutes(of: date)
     }
 
     /// Data di oggi all'ora indicata (per i `DatePicker` delle ore).

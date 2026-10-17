@@ -13,78 +13,58 @@ struct TimetableGeneratorSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    DatePicker("Inizio della prima ora", selection: minuteBinding(\.firstHourStart),
-                               displayedComponents: .hourAndMinute)
-                    LabeledStepper("Durata di un'ora", value: "\(settings.hourLength) min",
-                                   number: $settings.hourLength, in: 30...120, step: 5)
-                    Picker("Lezioni da esaminare", selection: $settings.weeks) {
-                        Text("Ultime 2 settimane").tag(2)
-                        Text("Ultime 4 settimane").tag(4)
-                        Text("Ultime 6 settimane").tag(6)
-                        Text("Ultime 10 settimane").tag(10)
-                        Text("Tutto l'anno").tag(0)
+            ScrollView {
+                VStack(spacing: 20) {
+                    ListGroup("Ore di lezione", footer: hoursFooter) {
+                        ListRow("Inizio della prima ora") {
+                            TimeField(minutes: $settings.firstHourStart)
+                        }
+                        StepperRow(title: "Durata di un'ora", value: $settings.hourLength, range: 30...120, step: 5) { "\($0) min" }
+                        SelectRow("Lezioni da esaminare", selection: $settings.weeks,
+                                  options: [(2, "Ultime 2 settimane", nil), (4, "Ultime 4 settimane", nil), (6, "Ultime 6 settimane", nil),
+                                            (10, "Ultime 10 settimane", nil), (0, "Tutto l'anno", nil)])
                     }
-                } header: {
-                    Text("Ore di lezione")
-                } footer: {
-                    Text(hoursFooter)
-                }
-                .listRowBackground(Theme.surface)
 
-                Section {
-                    ForEach($settings.breaks) { $rule in
-                        breakRow($rule)
-                    }
-                    .onDelete { settings.breaks.remove(atOffsets: $0) }
-                    Button("Aggiungi intervallo", systemImage: "cup.and.saucer") {
-                        let after = settings.breaks.last.map { $0.start + 120 }
-                            ?? (settings.firstHourStart + settings.hourLength * 3 - 10)
-                        settings.breaks.append(.init(start: min(after, 23 * 60), duration: 10))
-                    }
-                    if !settings.breaks.isEmpty {
-                        Button("Rimuovi gli intervalli", role: .destructive) { settings.breaks = [] }
-                            .foregroundStyle(Theme.poor)
-                    }
-                } header: {
-                    Text("Intervalli")
-                } footer: {
-                    Text("Facoltativi: compaiono sopra le lezioni nei giorni in cui c'è scuola a quell'ora, senza cambiarne la durata. "
-                         + (Platform.isMac ? "Per toglierne uno fai clic sul pulsante rosso accanto." : "Per toglierne uno scorri verso sinistra."))
-                }
-                .listRowBackground(Theme.surface)
-
-                Section {
-                    Button {
-                        Task { await generate() }
-                    } label: {
-                        HStack {
-                            Label("Crea l'anteprima", systemImage: "wand.and.stars")
-                            Spacer()
-                            if isGenerating { InlineProgress() }
+                    ListGroup("Intervalli", footer: "Facoltativi: compaiono sopra le lezioni nei giorni in cui c'è scuola a quell'ora, senza cambiarne la durata. Per toglierne uno usa il pulsante rosso accanto.") {
+                        ForEach($settings.breaks) { $rule in
+                            breakRow($rule)
+                        }
+                        ButtonRow("Aggiungi intervallo", icon: "coffee") {
+                            let after = settings.breaks.last.map { $0.start + 120 }
+                                ?? (settings.firstHourStart + settings.hourLength * 3 - 10)
+                            withAnimation(Motion.spatial) { settings.breaks.append(.init(start: min(after, 23 * 60), duration: 10)) }
+                        }
+                        if !settings.breaks.isEmpty {
+                            ButtonRow("Rimuovi gli intervalli", icon: "trash", destructive: true) {
+                                withAnimation(Motion.spatial) { settings.breaks = [] }
+                            }
                         }
                     }
-                    .disabled(isGenerating)
-                } footer: {
-                    Text("BCW guarda in quale ora della giornata si è svolta ogni materia, settimana per settimana, e tiene quelle che si ripetono (le settimane recenti contano di più, supplenze e recuperi isolati vengono ignorati). Vedrai l'orario in anteprima, con i bordi tratteggiati, prima di applicarlo.")
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Button {
+                            Task { await generate() }
+                        } label: {
+                            Label {
+                                Text("Crea l'anteprima")
+                            } icon: {
+                                if isGenerating { InlineProgress(tint: Theme.onPrimary) } else { Icon("wand") }
+                            }
+                        }
+                        .buttonStyle(.m3(.filled, size: .m, wide: true))
+                        .disabled(isGenerating)
+                        ListFooter("BCW guarda in quale ora della giornata si è svolta ogni materia, settimana per settimana, e tiene quelle che si ripetono (le settimane recenti contano di più, supplenze e recuperi isolati vengono ignorati). Vedrai l'orario in anteprima, con i bordi tratteggiati, prima di applicarlo.")
+                    }
                 }
-                .listRowBackground(Theme.surface)
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
             }
-            .formStyle(.grouped)
-            .themedList()
-            .navigationTitle("Genera l'orario")
-            .inlineTitleDisplay()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Annulla", systemImage: "xmark") { dismiss() }
-                }
-            }
-            .alert("Impossibile creare l'orario", isPresented: Binding(get: { errorMessage != nil },
-                                                                     set: { if !$0 { errorMessage = nil } })) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "")
+            .sheetChrome("Genera l'orario", leading: .close { dismiss() })
+            .m3Dialog("Impossibile creare l'orario", isPresented: Binding(get: { errorMessage != nil },
+                                                                        set: { if !$0 { errorMessage = nil } }),
+                      message: errorMessage) {
+                [.cancel("OK")]
             }
             .onAppear {
                 guard !loaded else { return }
@@ -97,7 +77,7 @@ struct TimetableGeneratorSheet: View {
                 #endif
             }
         }
-        .sheetFrame(width: 480, height: 620)
+        .m3Sheet()
     }
 
     private var hoursFooter: String {
@@ -108,44 +88,31 @@ struct TimetableGeneratorSheet: View {
         return "Classeviva registra solo in quale ora della giornata si svolge una lezione: l'orario si ricava da qui."
     }
 
-    private func minuteBinding(_ keyPath: WritableKeyPath<GenerationSettings, Int>) -> Binding<Date> {
-        Binding { TimeOfDay.date(settings[keyPath: keyPath]) } set: { settings[keyPath: keyPath] = TimeOfDay.minutes(of: $0) }
-    }
-
-    /// Un intervallo: inizio e durata a destra del titolo (in un'unica riga di controlli, che su
-    /// macOS altrimenti finirebbero uno sopra l'altro, tagliati); su Mac anche il pulsante per
-    /// toglierlo, che su iPhone è lo scorrimento verso sinistra.
+    /// Un intervallo: inizio, durata e il pulsante per toglierlo.
     private func breakRow(_ rule: Binding<GenerationSettings.BreakRule>) -> some View {
         let id = rule.wrappedValue.id
         let number = (settings.breaks.firstIndex { $0.id == id } ?? 0) + 1
-        return LabeledContent {
-            HStack(spacing: 10) {
-                DatePicker("Inizio", selection: breakStartBinding(rule), displayedComponents: .hourAndMinute)
-                    .labelsHidden()
-                Text("\(rule.wrappedValue.duration) min")
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.secondaryInk)
-                Stepper("Durata", value: rule.duration, in: 5...60, step: 5)
-                    .labelsHidden()
-                #if os(macOS)
-                Button("Rimuovi l'intervallo", systemImage: "minus.circle.fill", role: .destructive) {
-                    withAnimation(.snappy) { settings.breaks.removeAll { $0.id == id } }
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 16) {
+                FormIcon("coffee")
+                Text("Intervallo \(number)")
+                    .font(.m3(16, weight: 500))
+                    .foregroundStyle(Theme.ink)
+                Spacer(minLength: 0)
+                IconButton("minusCircle", label: "Rimuovi l'intervallo", kind: .danger, size: 32) {
+                    withAnimation(Motion.spatial) { settings.breaks.removeAll { $0.id == id } }
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.borderless)
-                .foregroundStyle(Theme.poor)
                 .help("Rimuovi questo intervallo")
-                #endif
             }
-            .fixedSize()
-        } label: {
-            Label("Intervallo \(number)", systemImage: "cup.and.saucer")
-                .lineLimit(1)
+            HStack(spacing: 12) {
+                TimeField(minutes: rule.start)
+                Spacer(minLength: 0)
+                M3Stepper(value: rule.duration, range: 5...60, step: 5) { "\($0) min" }
+            }
+            .padding(.leading, 40)
         }
-    }
-
-    private func breakStartBinding(_ rule: Binding<GenerationSettings.BreakRule>) -> Binding<Date> {
-        Binding { TimeOfDay.date(rule.wrappedValue.start) } set: { rule.wrappedValue.start = TimeOfDay.minutes(of: $0) }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     private func generate() async {
@@ -170,7 +137,7 @@ struct TimetableGeneratorSheet: View {
                 : "Le lezioni registrate sono troppo poche o troppo irregolari per ricavare un orario. Prova a esaminare un periodo più lungo."
             return
         }
-        withAnimation(.snappy) {
+        withAnimation(Motion.spatial) {
             store.draft = TimetableDraft(entries: result.entries, settings: settings, analyzedDays: result.analyzedDays,
                                          from: range.from, to: range.to)
         }
@@ -178,7 +145,7 @@ struct TimetableGeneratorSheet: View {
     }
 }
 
-/// Banner dell'anteprima: applica o scarta l'orario generato.
+/// Banner dell'anteprima: applica o scarta l'orario generato (bordo tratteggiato, come la bozza).
 struct TimetableDraftBanner: View {
     @Environment(AppModel.self) private var model
     let onSettings: () -> Void
@@ -186,64 +153,61 @@ struct TimetableDraftBanner: View {
 
     var body: some View {
         if let draft = model.timetable.draft {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "wand.and.stars")
-                        .font(.title3)
-                        .foregroundStyle(Theme.accent)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    Icon("wand")
+                        .foregroundStyle(Theme.primary)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Anteprima dell'orario generato")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.m3(15, weight: 650))
                             .foregroundStyle(Theme.ink)
                         Text("\(lessonCount(draft)) lezioni ricavate da \(draft.analyzedDays) giorni di registro (\(draft.from.shortDay) – \(draft.to.shortDay)). Controllale prima di applicarle.")
-                            .font(.caption)
+                            .font(.m3(12))
                             .foregroundStyle(Theme.secondaryInk)
                             .lineLimit(4)
                     }
                 }
                 HStack(spacing: 8) {
-                    Button("Applica", systemImage: "checkmark") {
+                    Button {
                         if model.timetable.timetable.isEmpty {
-                            withAnimation(.snappy) { model.timetable.applyDraft(replacing: true) }
+                            withAnimation(Motion.spatial) { model.timetable.applyDraft(replacing: true) }
                         } else {
                             confirmingApply = true
                         }
+                    } label: {
+                        Label { Text("Applica") } icon: { Icon("check") }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .confirmationDialog("Hai già un orario", isPresented: $confirmingApply, titleVisibility: .visible) {
-                        Button("Sostituisci l'orario attuale", role: .destructive) {
-                            withAnimation(.snappy) { model.timetable.applyDraft(replacing: true) }
-                        }
-                        Button("Aggiungi solo dove è libero") {
-                            withAnimation(.snappy) { model.timetable.applyDraft(replacing: false) }
-                        }
-                        Button("Annulla", role: .cancel) {}
-                    } message: {
-                        Text("Sostituendolo, eventi, note, file e verifiche segnate a mano dell'orario attuale verranno eliminati.")
+                    .buttonStyle(.m3(.filled, size: .xs))
+                    Button {
+                        withAnimation(Motion.spatial) { model.timetable.draft = nil }
+                    } label: {
+                        Label { Text("Scarta") } icon: { Icon("x") }
                     }
-                    Button("Scarta", systemImage: "xmark") {
-                        withAnimation(.snappy) { model.timetable.draft = nil }
-                    }
-                    .glassButton()
+                    .buttonStyle(.m3(.tonal, size: .xs))
                     Spacer(minLength: 0)
-                    Button("Impostazioni", systemImage: "slider.horizontal.3", action: onSettings)
-                        .labelStyle(.iconOnly)
-                        .glassButton()
-                        .help("Cambia le impostazioni e rigenera")
+                    IconButton("tune", label: "Cambia le impostazioni e rigenera", kind: .tonal, size: 32, action: onSettings)
                 }
-                .controlSize(.small)
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Theme.accentSoft.opacity(0.55))
-            }
+            .background(Theme.secondaryContainer.mix(Theme.surfaceContainerLow, 0.6),
+                        in: .rect(cornerRadius: Theme.radii.li, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Theme.accent.opacity(0.6), style: StrokeStyle(lineWidth: 1.2, dash: [6, 4]))
+                RoundedRectangle(cornerRadius: Theme.radii.li, style: .continuous)
+                    .strokeBorder(Theme.primary.opacity(0.6), style: StrokeStyle(lineWidth: 1.2, dash: [6, 4]))
             }
             .transition(.opacity.combined(with: .move(edge: .top)))
+            .m3Dialog("Hai già un orario", isPresented: $confirmingApply,
+                      message: "Sostituendolo, eventi, note, file e verifiche segnate a mano dell'orario attuale verranno eliminati.",
+                      stacked: true) {
+                [DialogAction(title: "Sostituisci l'orario attuale", style: .destructive) {
+                    withAnimation(Motion.spatial) { model.timetable.applyDraft(replacing: true) }
+                },
+                 DialogAction(title: "Aggiungi solo dove è libero") {
+                    withAnimation(Motion.spatial) { model.timetable.applyDraft(replacing: false) }
+                },
+                 .cancel()]
+            }
         }
     }
 
@@ -268,97 +232,86 @@ struct TimetableSettingsSection: View {
     private var store: TimetableStore { model.timetable }
 
     var body: some View {
-        Section {
+        ListGroup("Vista e allineamento", footer: "Con \"Mostra le verifiche\" la vista Lista segna le verifiche di Classeviva e quelle segnate a mano; si vedono sempre nel dettaglio dell'evento e nella vista Giorno. Quelle nascoste, e le regole per nasconderle in automatico, sono in Verifiche nascoste (menu ⋯ dell'orario). L'allineamento vale per tutto l'orario e per la modalità di modifica (pulsante + dell'orario › Modifica orario). Automatico: gli eventi iniziano all'ora o alla mezz'ora e durano 30 minuti o un'ora; passando all'automatico gli eventi non allineati vengono allineati, dopo una conferma. Libero: qualsiasi orario e durata. Gli intervalli si posizionano sempre liberamente.") {
             TimetableAlignmentPicker()
-            Toggle("Mostra le verifiche nella lista", isOn: Bindable(model.preferences).timetableShowsTests)
-        } header: {
-            Text("Vista e allineamento")
-        } footer: {
-            Text("Con \"Mostra le verifiche\" la vista Lista segna le verifiche di Classeviva e quelle segnate a mano; si vedono sempre nel dettaglio dell'evento e nella vista Giorno. Quelle nascoste, e le regole per nasconderle in automatico, sono in Verifiche nascoste (menu dell'orario). L'allineamento vale per tutto l'orario e per la modalità di modifica (menu dell'orario › Modifica orario). Automatico: gli eventi iniziano all'ora o alla mezz'ora e durano 30 minuti o un'ora; passando all'automatico gli eventi non allineati vengono allineati, dopo una conferma. Libero: qualsiasi orario e durata. Gli intervalli si posizionano sempre liberamente.")
+            ToggleRow("Mostra le verifiche nella lista", icon: "test", isOn: Bindable(model.preferences).timetableShowsTests)
         }
-        .listRowBackground(Theme.surface)
 
-        Section {
-            Button("Esporta un backup dell'orario", systemImage: "square.and.arrow.up") { export() }
+        ListGroup("Backup dell'orario", footer: "L'orario è salvato solo su questo dispositivo, separato per ogni account. Il backup contiene eventi, colori, palette, note, verifiche segnate e file allegati; importandolo sostituisce l'orario attuale. È compatibile con la versione web di BCW.") {
+            ButtonRow("Esporta un backup dell'orario", icon: "upload") { export() }
                 .disabled(store.owner == nil)
-            Button("Importa un backup…", systemImage: "square.and.arrow.down") { importing = true }
+            ButtonRow("Importa un backup…", icon: "download") { importing = true }
                 .disabled(store.owner == nil)
-                // Le finestre di esportazione, importazione e conferma partono da questa riga.
-                .fileExporter(isPresented: Binding(get: { exportDocument != nil }, set: { if !$0 { exportDocument = nil } }),
-                              document: exportDocument, contentType: .json,
-                              defaultFilename: TimetableBackupDocument.defaultFilename) { outcome in
-                    switch outcome {
-                    case .success:
-                        result = ("Backup esportato", "Potrai importarlo da qui in qualsiasi momento, anche su un altro dispositivo.")
-                    case let .failure(error):
-                        result = ("Esportazione non riuscita", error.localizedDescription)
-                    }
-                    exportDocument = nil
-                }
-                .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { outcome in
-                    switch outcome {
-                    case let .success(url):
-                        read(url)
-                    case let .failure(error):
-                        result = ("Importazione non riuscita", error.localizedDescription)
-                    }
-                }
-                // Prima conferma: cosa c'è nel backup e cosa verrà sostituito.
-                .alert("Importare questo orario?", isPresented: $firstConfirmation, presenting: pendingBackup) { _ in
-                    Button("Continua") {
-                        Task {
-                            // La seconda conferma arriva dopo che la prima si è chiusa.
-                            try? await Task.sleep(for: .milliseconds(350))
-                            secondConfirmation = true
-                        }
-                    }
-                    Button("Annulla", role: .cancel) { pendingBackup = nil }
-                } message: { backup in
-                    Text(firstMessage(backup))
-                }
-                // Seconda conferma: l'operazione non si può annullare.
-                .alert("Sostituire l'orario attuale?", isPresented: $secondConfirmation, presenting: pendingBackup) { backup in
-                    Button("Sostituisci", role: .destructive) { restore(backup) }
-                    Button("Annulla", role: .cancel) { pendingBackup = nil }
-                } message: { _ in
-                    Text(store.timetable.isEmpty
-                         ? "Colori, palette e impostazioni dell'orario di questo account verranno sostituiti da quelli del backup."
-                         : "L'orario attuale, con le sue note, i file, le verifiche segnate, i colori e le palette salvati, verrà eliminato definitivamente e non potrà essere recuperato. Se vuoi conservarlo, annulla ed esportane prima un backup.")
-                }
-                .alert(result?.title ?? "", isPresented: Binding(get: { result != nil }, set: { if !$0 { result = nil } })) {
-                    Button("OK", role: .cancel) {}
-                } message: {
-                    Text(result?.message ?? "")
-                }
-            Button("Elimina l'orario", systemImage: "trash", role: .destructive) { confirmingDeleteAll = true }
-                .foregroundStyle(Theme.poor)
+            ButtonRow("Elimina l'orario", icon: "trash", destructive: true) { confirmingDeleteAll = true }
                 .disabled(store.timetable.isEmpty)
-                .confirmationDialog("Eliminare l'orario?", isPresented: $confirmingDeleteAll, titleVisibility: .visible) {
-                    Button("Elimina l'orario", role: .destructive) { store.deleteAll() }
-                } message: {
-                    Text("Verranno eliminati tutti gli eventi con note, file e verifiche segnate. Colori e palette salvati restano.")
-                }
-        } header: {
-            Text("Backup dell'orario")
-        } footer: {
-            Text("L'orario è salvato solo su questo dispositivo, separato per ogni account. Il backup contiene eventi, colori, palette, note, verifiche segnate e file allegati; importandolo sostituisce l'orario attuale.")
         }
-        .listRowBackground(Theme.surface)
+        // Le finestre di esportazione e importazione.
+        .fileExporter(isPresented: Binding(get: { exportDocument != nil }, set: { if !$0 { exportDocument = nil } }),
+                      document: exportDocument, contentType: .json,
+                      defaultFilename: TimetableBackupDocument.defaultFilename) { outcome in
+            switch outcome {
+            case .success:
+                result = ("Backup esportato", "Potrai importarlo da qui in qualsiasi momento, anche su un altro dispositivo.")
+            case let .failure(error):
+                result = ("Esportazione non riuscita", error.localizedDescription)
+            }
+            exportDocument = nil
+        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { outcome in
+            switch outcome {
+            case let .success(url):
+                read(url)
+            case let .failure(error):
+                result = ("Importazione non riuscita", error.localizedDescription)
+            }
+        }
+        // Prima conferma: cosa c'è nel backup e cosa verrà sostituito.
+        .m3Dialog("Importare questo orario?", isPresented: $firstConfirmation,
+                  message: pendingBackup.map(firstMessage)) {
+            [DialogAction.cancel { pendingBackup = nil },
+             DialogAction(title: "Continua", style: .strong) {
+                Task {
+                    // La seconda conferma arriva dopo che la prima si è chiusa.
+                    try? await Task.sleep(for: .milliseconds(350))
+                    secondConfirmation = true
+                }
+            }]
+        }
+        // Seconda conferma: l'operazione non si può annullare.
+        .m3Dialog("Sostituire l'orario attuale?", isPresented: $secondConfirmation,
+                  message: store.timetable.isEmpty
+                  ? "Colori, palette e impostazioni dell'orario di questo account verranno sostituiti da quelli del backup."
+                  : "L'orario attuale, con le sue note, i file, le verifiche segnate, i colori e le palette salvati, verrà eliminato definitivamente e non potrà essere recuperato. Se vuoi conservarlo, annulla ed esportane prima un backup.") {
+            [DialogAction.cancel { pendingBackup = nil },
+             DialogAction(title: "Sostituisci", style: .destructive) {
+                if let backup = pendingBackup { restore(backup) }
+            }]
+        }
+        .m3Dialog(result?.title ?? "", isPresented: Binding(get: { result != nil }, set: { if !$0 { result = nil } }),
+                  message: result?.message) {
+            [.cancel("OK")]
+        }
+        .m3Dialog("Eliminare l'orario?", isPresented: $confirmingDeleteAll,
+                  message: "Verranno eliminati tutti gli eventi con note, file e verifiche segnate. Colori e palette salvati restano.") {
+            [.cancel(), DialogAction(title: "Elimina l'orario", style: .destructive) { store.deleteAll() }]
+        }
 
-        Section {
+        ListGroup("iCloud", footer: "Work in progress: la sincronizzazione dell'orario tra i tuoi dispositivi con iCloud non è ancora disponibile. Nel frattempo puoi spostare l'orario con un backup.") {
             Toggle(isOn: .constant(false)) {
-                HStack(spacing: 8) {
-                    Label("Sincronizza con iCloud", systemImage: "icloud")
-                    Pill(text: "Work in progress", short: "WIP", color: Theme.fair)
+                HStack(spacing: 16) {
+                    FormIcon("cloud")
+                    Text("Sincronizza con iCloud")
+                        .font(.m3(16, weight: 500))
+                        .foregroundStyle(Theme.ink)
+                    Pill(text: "Work in progress", short: "WIP", color: Theme.fair, small: true)
                 }
             }
+            .toggleStyle(.m3)
             .disabled(true)
-        } header: {
-            Text("iCloud")
-        } footer: {
-            Text("Work in progress: la sincronizzazione dell'orario tra i tuoi dispositivi con iCloud non è ancora disponibile. Nel frattempo puoi spostare l'orario con un backup.")
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .frame(minHeight: 56)
         }
-        .listRowBackground(Theme.surface)
     }
 
     private func export() {

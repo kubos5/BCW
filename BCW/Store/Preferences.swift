@@ -6,6 +6,8 @@ enum DashboardMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String { self == .list ? "Lista" : "Calendario" }
     var symbol: String { self == .list ? "list.bullet" : "calendar" }
+    /// Icona di Material Symbols.
+    var icon: String { self == .list ? "list" : "calendar" }
 }
 
 /// Vista della scheda Orario.
@@ -21,6 +23,15 @@ enum TimetableMode: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Icona di Material Symbols.
+    var icon: String {
+        switch self {
+        case .list: "list"
+        case .calendar: "calendar"
+        case .day: "dayView"
+        }
+    }
+
     var symbol: String {
         switch self {
         case .list: "list.bullet"
@@ -29,9 +40,9 @@ enum TimetableMode: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Viste disponibili: su iPhone la Calendario non c'è (il mese è già nella Dashboard).
+    /// Viste disponibili: la Calendario non c'è (il mese è già nella Dashboard).
     static var available: [TimetableMode] {
-        Platform.isMac ? allCases : [.list, .day]
+        [.list, .day]
     }
 }
 

@@ -4,18 +4,16 @@ options:
   bundleIdPrefix: com.bcw
   deploymentTarget:
     iOS: "26.0"
-    macOS: "26.0"
   developmentLanguage: it
 targets:
   BCW:
     type: application
-    # Un solo target per iPhone, iPad e Mac (app nativa, non Catalyst).
-    supportedDestinations: [iOS, macOS]
+    supportedDestinations: [iOS]
     sources: [BCW]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.bcw.app
-        MARKETING_VERSION: "2.0"
+        MARKETING_VERSION: "3.0"
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "5.0"
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
@@ -25,7 +23,6 @@ targets:
         # iOS: aggiornamento in background per le notifiche delle novità.
         "INFOPLIST_FILE[sdk=iphone*]": Config/Info-iOS.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         INFOPLIST_KEY_CFBundleDisplayName: BCW
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.education
@@ -36,10 +33,3 @@ targets:
         "INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphone*]": YES
         SUPPORTS_MACCATALYST: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
-        # macOS: sandbox con accesso a Internet e al Calendario (solo scrittura).
-        "ENABLE_APP_SANDBOX[sdk=macosx*]": YES
-        "ENABLE_HARDENED_RUNTIME[sdk=macosx*]": YES
-        "ENABLE_OUTGOING_NETWORK_CONNECTIONS[sdk=macosx*]": YES
-        "ENABLE_RESOURCE_ACCESS_CALENDARS[sdk=macosx*]": YES
-        # Backup dell'orario e file allegati: lettura e scrittura dei file scelti dall'utente.
-        "ENABLE_USER_SELECTED_FILES[sdk=macosx*]": readwrite

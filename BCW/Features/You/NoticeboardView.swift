@@ -20,51 +20,24 @@ struct NoticeboardView: View {
         }
     }
 
-    /// Su macOS, comunicazione aperta nel pannello di destra.
-    @State private var selection: Notice.ID?
-    /// Solo il passaggio conta (la larghezza cambierebbe a ogni fotogramma).
-    @State private var isWide = true
-
-    /// Elenco e dettaglio affiancati, come in Mail (solo su macOS e se c'è spazio).
-    private var isSplit: Bool { Platform.isMac && isWide }
-
     var body: some View {
-        Group {
-            if isSplit {
-                splitView
-            } else {
-                ScrollView {
-                    list
-                        .pagePadding()
-                        .padding(.bottom, 24)
-                }
-            }
+        ScrollView {
+            list
+                .pagePadding()
+                .padding(.bottom, 32)
         }
+        .tracksPageScroll()
         .themedBackground()
-        .onGeometryChange(for: Bool.self) { $0.size.width >= 820 } action: { isWide = $0 }
-        #if DEBUG
-        .onAppear {
-            // Per gli screenshot di sviluppo: `-BCWOpenNotice YES` apre la prima comunicazione.
-            if UserDefaults.standard.bool(forKey: "BCWOpenNotice") { selection = model.notices.first?.id }
-        }
-        #endif
-        .screenTitle("Bacheca", subtitle: Platform.isMac ? unreadSubtitle : nil)
+        .pageChrome("Bacheca", subtitle: nil, style: .inline)
         .localSearchable(text: $search, prompt: Self.searchPrompt)
         .refreshable { await model.loadNotices() }
     }
 
-    private var unreadSubtitle: String? {
-        let unread = model.unreadNoticesCount
-        return unread == 0 ? nil : (unread == 1 ? "1 da leggere" : "\(unread) da leggere")
-    }
-
     private var list: some View {
         VStack(alignment: .leading, spacing: 16) {
-            #if os(macOS)
-            LocalSearchField(text: $search, prompt: Self.searchPrompt)
-            #endif
+            PageSearchBar(text: $search, prompt: Self.searchPrompt)
             ChipRow {
-                FilterChip(title: "Da leggere", symbol: "circle.fill", isSelected: onlyUnread) {
+                FilterChip(title: "Da leggere", icon: "circleFill", isSelected: onlyUnread) {
                     onlyUnread.toggle()
                 }
                 FilterChip(title: "Tutte", isSelected: category == nil) { category = nil }
@@ -76,112 +49,65 @@ struct NoticeboardView: View {
             }
 
             if filtered.isEmpty {
-                ContentUnavailableView(model.notices.isEmpty ? "Bacheca vuota" : "Nessun risultato",
-                                       systemImage: "megaphone",
-                                       description: Text(model.notices.isEmpty
-                                                         ? "Le comunicazioni della scuola appariranno qui."
-                                                         : "Prova a cambiare i filtri."))
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 40)
+                EmptyState(model.notices.isEmpty ? "Bacheca vuota" : "Nessun risultato", icon: "megaphone",
+                           description: model.notices.isEmpty ? "Le comunicazioni della scuola appariranno qui." : "Prova a cambiare i filtri.")
             } else {
-                LazyVStack(spacing: 10) {
+                ListGroup {
                     ForEach(filtered) { notice in
-                        if isSplit {
-                            Button {
-                                selection = notice.id
-                            } label: {
-                                NoticeRow(notice: notice, isSelected: selection == notice.id)
-                            }
-                            .buttonStyle(.plain)
-                        } else {
-                            NavigationLink {
-                                NoticeDetailView(notice: notice)
-                                    .pushedPageTitle("Comunicazione")
-                            } label: {
-                                NoticeRow(notice: notice)
-                            }
-                            .buttonStyle(.plain)
+                        NavigationLink {
+                            NoticeDetailView(notice: notice)
+                                .pageChrome("", style: .inline)
+                        } label: {
+                            NoticeRow(notice: notice)
                         }
+                        .buttonStyle(.listRow)
                     }
                 }
             }
         }
-        .animation(.snappy, value: filtered)
-    }
-
-    private var splitView: some View {
-        HStack(spacing: 0) {
-            ScrollView {
-                list
-                    .padding(.leading, 28)
-                    .padding(.trailing, 12)
-                    .padding(.top, 8)
-                    .padding(.bottom, Theme.bottomInset)
-            }
-            .frame(width: 420)
-
-            Divider().overlay(Theme.separator)
-
-            Group {
-                if let notice = model.notices.first(where: { $0.id == selection }) {
-                    NoticeDetailView(notice: notice)
-                        .id(notice.id)
-                } else {
-                    ContentUnavailableView("Nessuna comunicazione aperta", systemImage: "megaphone",
-                                           description: Text("Scegli una comunicazione dall'elenco per leggerla."))
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+        .animation(Motion.spatial, value: filtered)
     }
 }
 
 private struct NoticeRow: View {
     let notice: Notice
-    var isSelected = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Circle()
-                .fill(notice.isRead ? Color.clear : Theme.accent)
-                .frame(width: 9, height: 9)
-                .padding(.top, 7)
+                .fill(notice.isRead ? Color.clear : Theme.primary)
+                .frame(width: 10, height: 10)
+                .padding(.top, 6)
             VStack(alignment: .leading, spacing: 6) {
                 Text(notice.title)
-                    .font(.body.weight(notice.isRead ? .regular : .semibold))
+                    .font(.m3(15, weight: notice.isRead ? 500 : 700))
                     .foregroundStyle(Theme.ink)
                     .multilineTextAlignment(.leading)
                     .lineLimit(3)
                 HStack(spacing: 8) {
                     Text(notice.category)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Theme.accent)
+                        .font(.m3(12, weight: 650))
+                        .foregroundStyle(Theme.primary)
                         .lineLimit(1)
                     if let date = notice.publishedAt {
                         Text(date.shortDayWithYear)
-                            .font(.caption)
+                            .font(.m3(12))
                             .foregroundStyle(Theme.secondaryInk)
                     }
                     Spacer()
                     if notice.hasAttachments || !notice.attachments.isEmpty {
-                        Image(systemName: "paperclip")
-                            .font(.caption)
+                        Icon("paperclip", size: 18)
                             .foregroundStyle(Theme.secondaryInk)
                     }
                     if notice.requiresAction {
                         Pill(text: notice.needsSign ? "Da firmare" : (notice.needsJoin ? "Adesione" : "Risposta"),
-                             color: Theme.fair, font: .caption2.weight(.bold))
+                             color: Theme.fair, small: true)
                     }
                 }
             }
         }
-        .card(padding: 14)
-        .overlay {
-            if isSelected {
-                RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
-                    .strokeBorder(Theme.accent, lineWidth: 1.5)
-            }
-        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -204,18 +130,18 @@ struct NoticeDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Eyebrow(text: notice.category, color: Theme.accent)
+                    Eyebrow(text: notice.category, color: Theme.primary)
                     Text(detail?.title?.nilIfEmpty ?? notice.title)
-                        .font(.title2.weight(.semibold))
+                        .font(.m3(26, weight: 500, rounded: true))
                         .foregroundStyle(Theme.ink)
                     if let date = notice.publishedAt {
                         Text("Pubblicata \(date.longDay.lowercased()) \(date.it("yyyy"))")
-                            .font(.footnote)
+                            .font(.m3(13))
                             .foregroundStyle(Theme.secondaryInk)
                     }
                     if let from = notice.validFrom, let to = notice.validTo {
                         Text("Valida dal \(from.shortDay) al \(to.shortDayWithYear)")
-                            .font(.footnote)
+                            .font(.m3(13))
                             .foregroundStyle(Theme.secondaryInk)
                     }
                 }
@@ -223,13 +149,13 @@ struct NoticeDetailView: View {
                 if loading {
                     LoadingCard()
                 } else if let error {
-                    StatusBanner(message: error, symbol: "exclamationmark.triangle")
+                    StatusBanner(message: error, icon: "alertTriangle")
                 } else if let text = detail?.text?.nilIfEmpty {
                     Text(text)
-                        .font(.body)
+                        .font(.m3(15))
                         .foregroundStyle(Theme.ink)
                         .textSelection(.enabled)
-                        .lineSpacing(4)
+                        .lineSpacing(8)
                         .card()
                 }
 
@@ -241,8 +167,9 @@ struct NoticeDetailView: View {
                                 Task { await open(attachment) }
                             } label: {
                                 HStack(spacing: 12) {
-                                    IconBadge(symbol: "doc.richtext", tint: Theme.neutral, size: 34)
+                                    IconBadge(icon: "fileText", tint: Theme.neutral, size: 34)
                                     Text(attachment.fileName)
+                                        .font(.m3(15))
                                         .foregroundStyle(Theme.ink)
                                         .lineLimit(2)
                                         .multilineTextAlignment(.leading)
@@ -250,25 +177,33 @@ struct NoticeDetailView: View {
                                     if downloading == attachment.number {
                                         InlineProgress()
                                     } else {
-                                        Image(systemName: "arrow.down.circle")
-                                            .foregroundStyle(Theme.accent)
+                                        Icon("download")
+                                            .foregroundStyle(Theme.primary)
                                     }
                                 }
                                 .card(padding: 12)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.pressable)
                         }
                     }
                 }
 
                 actions
             }
-            .pagePadding()
-            .padding(.bottom, 24)
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+            .padding(.bottom, 32)
+            .frame(maxWidth: 780, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .themedBackground()
-        .inlineTitleDisplay()
+        .tracksPageScroll()
         .quickLookPreview($previewURL)
+        .m3Dialog("Confermi?", isPresented: $confirmJoin, message: "La tua adesione verrà inviata alla scuola.") {
+            [.cancel(), DialogAction(title: "Aderisci", style: .strong) { Task { await perform(.join) } }]
+        }
+        .m3Dialog("Confermi?", isPresented: $confirmSign, message: "Confermerai la presa visione della comunicazione.") {
+            [.cancel(), DialogAction(title: "Conferma e firma", style: .strong) { Task { await perform(.sign) } }]
+        }
         .task { await load() }
     }
 
@@ -279,45 +214,36 @@ struct NoticeDetailView: View {
                 Eyebrow(text: "Richiesta della scuola")
                 if notice.needsJoin {
                     if detail.joined {
-                        Label("Hai aderito", systemImage: "checkmark.seal.fill").foregroundStyle(Theme.good)
+                        StatusLine(text: "Hai aderito", icon: "checkSealFill", color: Theme.good)
                     } else {
-                        // Il dialogo è agganciato al pulsante, così appare accanto ad esso.
-                        Button("Aderisci", systemImage: "hand.thumbsup") { confirmJoin = true }
-                            .buttonStyle(.glassProminent)
-                            .confirmationDialog("Confermi?", isPresented: $confirmJoin) {
-                                Button("Aderisci") { Task { await perform(.join) } }
-                            } message: {
-                                Text("La tua adesione verrà inviata alla scuola.")
-                            }
+                        Button { confirmJoin = true } label: { Label { Text("Aderisci") } icon: { Icon("thumbsUp") } }
+                            .buttonStyle(.m3(.filled))
                     }
                 }
                 if notice.needsSign {
                     if detail.signed {
-                        Label("Presa visione confermata", systemImage: "checkmark.seal.fill").foregroundStyle(Theme.good)
+                        StatusLine(text: "Presa visione confermata", icon: "checkSealFill", color: Theme.good)
                     } else {
-                        Button("Conferma presa visione", systemImage: "signature") { confirmSign = true }
-                            .buttonStyle(.glassProminent)
-                            .confirmationDialog("Confermi?", isPresented: $confirmSign) {
-                                Button("Conferma e firma") { Task { await perform(.sign) } }
-                            } message: {
-                                Text("Confermerai la presa visione della comunicazione.")
-                            }
+                        Button { confirmSign = true } label: { Label { Text("Conferma presa visione") } icon: { Icon("signature") } }
+                            .buttonStyle(.m3(.filled))
                     }
                 }
                 if notice.needsReply {
                     if let reply = detail.replyText {
                         Text("La tua risposta: \(reply)")
+                            .font(.m3(15))
                             .foregroundStyle(Theme.secondaryInk)
                     } else {
                         TextField("Scrivi una risposta", text: $replyText, axis: .vertical)
-                            .lineLimit(2...5)
-                            .padding(12)
-                            .background(Theme.background, in: .rect(cornerRadius: 12, style: .continuous))
-                        Button("Invia risposta", systemImage: "paperplane") {
-                            Task { await reply() }
-                        }
-                        .glassButton()
-                        .disabled(replyText.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .lineLimit(3...6)
+                            .font(.m3(16))
+                            .textFieldStyle(.plain)
+                            .padding(16)
+                            .frame(minHeight: 96, alignment: .topLeading)
+                            .background(Theme.surfaceContainerHighest, in: .rect(cornerRadius: Theme.radii.l, style: .continuous))
+                        Button { Task { await reply() } } label: { Label { Text("Invia risposta") } icon: { Icon("send") } }
+                            .buttonStyle(.m3(.tonal))
+                            .disabled(replyText.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
             }

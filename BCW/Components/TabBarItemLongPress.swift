@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 import UIKit
 
@@ -45,7 +44,7 @@ struct TabBarItemLongPress: UIViewRepresentable {
             tabBar = bar
         }
 
-        private static func tabBar(in view: UIView) -> UITabBar? {
+        static func tabBar(in view: UIView) -> UITabBar? {
             if let bar = view as? UITabBar { return bar }
             for subview in view.subviews {
                 if let bar = tabBar(in: subview) { return bar }
@@ -93,4 +92,46 @@ struct TabBarItemLongPress: UIViewRepresentable {
         }
     }
 }
-#endif
+
+/// Icone piene delle schede della barra di sistema (Liquid Glass) come `selectedImage` degli
+/// elementi della `UITabBar`: la barra mostra l'aspetto selezionato dentro la bolla mentre si
+/// sposta, quindi l'icona piena segue la bolla (come nelle app di sistema). Con un'icona scelta
+/// nell'etichetta SwiftUI in base alla scheda aperta cambiava solo a selezione avvenuta.
+struct TabBarSelectedImages: UIViewRepresentable {
+    /// Nomi delle icone piene (senza `m.`), nell'ordine delle schede della barra.
+    let names: [String]
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.isUserInteractionEnabled = false
+        view.isHidden = true
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        // La barra esiste solo dopo che la vista è entrata nella finestra (all'avvio si riprova);
+        // SwiftUI può rifare gli elementi a ogni aggiornamento: si riapplicano ogni volta.
+        apply(from: view, attempts: 10)
+    }
+
+    private func apply(from view: UIView, attempts: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + (attempts == 10 ? 0 : 0.25)) {
+            guard let window = view.window, let bar = TabBarItemLongPress.Coordinator.tabBar(in: window),
+                  let items = bar.items, !items.isEmpty else {
+                if attempts > 0 { apply(from: view, attempts: attempts - 1) }
+                return
+            }
+            for (item, name) in zip(items, names) {
+                guard let image = item.image, item.selectedImage?.accessibilityIdentifier != name,
+                      let filled = UIImage(named: "m." + name) else { continue }
+                // Alla stessa misura dell'icona normale, come modello da tingere.
+                let size = image.size
+                let selected = UIGraphicsImageRenderer(size: size).image { _ in
+                    filled.draw(in: CGRect(origin: .zero, size: size))
+                }.withRenderingMode(.alwaysTemplate)
+                selected.accessibilityIdentifier = name
+                item.selectedImage = selected
+            }
+        }
+    }
+}

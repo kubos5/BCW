@@ -1,74 +1,137 @@
 import SwiftUI
 
-/// Impostazioni su iOS: un elenco di sottosezioni, come le schede della finestra Impostazioni del
-/// Mac (`MacSettingsView`), con le stesse sezioni.
+/// Sottopagine delle Impostazioni.
+enum SettingsPane: String, CaseIterable, Identifiable {
+    case general, appearance, grades, dashboard, timetable, notifications, accounts
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .general: "Generale"
+        case .appearance: "Aspetto"
+        case .grades: "Voti"
+        case .dashboard: "Dashboard"
+        case .timetable: "Orario"
+        case .notifications: "Notifiche"
+        case .accounts: "Account"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .general: "gear"
+        case .appearance: "palette"
+        case .grades: "graduationCap"
+        case .dashboard: "dashboard"
+        case .timetable: "timetable"
+        case .notifications: "bellActive"
+        case .accounts: "users"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .general: Theme.secondaryInk
+        case .appearance: Theme.tertiary
+        case .grades: Theme.subject(1)
+        case .dashboard: Theme.primary
+        case .timetable: Theme.subject(3)
+        case .notifications: Theme.fair
+        case .accounts: Theme.subject(5)
+        }
+    }
+
+    /// Contenuto della sottopagina: elenchi segmentati uno sotto l'altro.
+    @ViewBuilder
+    var content: some View {
+        switch self {
+        case .general:
+            SecuritySettingsSection()
+            DataSettingsSection()
+            AboutSettingsSection()
+        case .appearance: AppearanceSettingsSection()
+        case .grades: GradeSettingsSection()
+        case .dashboard: DashboardSettingsSection()
+        case .timetable: TimetableSettingsSection()
+        case .notifications: NotificationSettingsSection()
+        case .accounts: AccountsSettingsPane()
+        }
+    }
+}
+
+/// Impostazioni: un elenco di sottopagine.
 struct SettingsView: View {
     var body: some View {
-        Form {
-            Section {
-                link("Generale", symbol: "gearshape", tint: Theme.secondaryInk) {
-                    AppearanceSettingsSection()
-                    DataSettingsSection()
-                    AboutSettingsSection()
+        ScrollView {
+            VStack(spacing: 24) {
+                ListGroup {
+                    link(.general)
+                    link(.appearance)
+                }
+                ListGroup {
+                    link(.grades)
+                    link(.dashboard)
+                    link(.timetable)
+                    link(.notifications)
+                }
+                ListGroup {
+                    NavigationLink {
+                        AccountView()
+                    } label: {
+                        NavigationRow(SettingsPane.accounts.title, icon: SettingsPane.accounts.icon,
+                                      tint: SettingsPane.accounts.tint)
+                    }
+                    .buttonStyle(.listRow)
                 }
             }
-            .listRowBackground(Theme.surface)
-            Section {
-                link("Voti", symbol: "graduationcap", tint: Theme.subjectColor(1)) { GradeSettingsSection() }
-                link("Dashboard", symbol: "calendar.day.timeline.left", tint: Theme.accent) { DashboardSettingsSection() }
-                link("Orario", symbol: "tablecells", tint: Theme.subjectColor(3)) { TimetableSettingsSection() }
-                link("Notifiche", symbol: "bell.badge", tint: Theme.fair) { NotificationSettingsSection() }
-            }
-            .listRowBackground(Theme.surface)
-            Section {
-                NavigationLink {
-                    AccountView()
-                } label: {
-                    SettingsRowLabel(title: "Account", symbol: "person.2", tint: Theme.subjectColor(5))
-                }
-            }
-            .listRowBackground(Theme.surface)
+            .pagePadding()
+            .padding(.bottom, Theme.bottomInset)
         }
-        .themedList()
-        .contentMargins(.bottom, Theme.bottomInset - 24, for: .scrollContent)
-        .screenTitle("Impostazioni")
+        .tracksPageScroll()
+        .themedBackground()
+        .pageChrome("Impostazioni", style: .inline)
     }
 
-    private func link<Content: View>(_ title: String, symbol: String, tint: Color,
-                                      @ViewBuilder content: @escaping () -> Content) -> some View {
+    private func link(_ pane: SettingsPane) -> some View {
         NavigationLink {
-            Form(content: content)
-                .themedList()
-                .contentMargins(.bottom, Theme.bottomInset - 24, for: .scrollContent)
-                .screenTitle(title)
-                .inlineTitleDisplay()
+            SettingsPaneView(pane: pane)
         } label: {
-            SettingsRowLabel(title: title, symbol: symbol, tint: tint)
+            NavigationRow(pane.title, icon: pane.icon, tint: pane.tint)
         }
+        .buttonStyle(.listRow)
     }
 }
 
-/// Riga di una sottosezione delle Impostazioni: icona in un quadrato colorato e titolo.
-private struct SettingsRowLabel: View {
-    let title: String
-    let symbol: String
-    let tint: Color
+/// Una sottopagina delle Impostazioni su iPhone.
+struct SettingsPaneView: View {
+    let pane: SettingsPane
 
     var body: some View {
-        Label {
-            Text(title)
-                .foregroundStyle(Theme.ink)
-        } icon: {
-            Image(systemName: symbol)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(width: 30, height: 30)
-                .background(tint.gradient, in: .rect(cornerRadius: 8, style: .continuous))
+        ScrollView {
+            VStack(spacing: 24) {
+                pane.content
+            }
+            .pagePadding()
+            .padding(.bottom, Theme.bottomInset)
         }
+        .tracksPageScroll()
+        .themedBackground()
+        .pageChrome(pane.title, style: .inline)
     }
 }
 
-// MARK: - Sezioni (condivise con la finestra Impostazioni di macOS)
+// MARK: - Sezioni
+
+struct SecuritySettingsSection: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        ListGroup("Sicurezza", footer: "BCW si blocca all'apertura e quando torni dopo averla lasciata in secondo piano.") {
+            ToggleRow("Blocca con \(BiometricLock.biometryName)", icon: "lock",
+                      isOn: Bindable(model.preferences).useBiometrics)
+        }
+    }
+}
 
 struct GradeSettingsSection: View {
     @Environment(AppModel.self) private var model
@@ -76,19 +139,14 @@ struct GradeSettingsSection: View {
     var body: some View {
         @Bindable var preferences = model.preferences
 
-        Section {
-            Picker("Calcolo della media", selection: $preferences.averageMode) {
-                ForEach(AverageMode.allCases) { Text($0.title).tag($0) }
+        ListGroup("Voti", footer: "I voti blu, annullati o \"non fa media\" sono sempre esclusi. I pesi sono quelli impostati dai docenti su Classeviva.") {
+            SelectRow("Calcolo della media", selection: $preferences.averageMode,
+                      options: AverageMode.allCases.map { ($0, $0.title, nil) })
+            ToggleRow("Usa i pesi dei voti", isOn: $preferences.weightedAverage)
+            StepperRow(title: "Media obiettivo", value: $preferences.targetAverage, range: 4...10, step: 0.25) {
+                GradeFormat.short($0)
             }
-            Toggle("Usa i pesi dei voti", isOn: $preferences.weightedAverage)
-            LabeledStepper("Media obiettivo", value: GradeFormat.short(preferences.targetAverage),
-                           number: $preferences.targetAverage, in: 4...10, step: 0.25)
-        } header: {
-            Text("Voti")
-        } footer: {
-            Text("I voti blu, annullati o \"non fa media\" sono sempre esclusi. I pesi sono quelli impostati dai docenti su Classeviva.")
         }
-        .listRowBackground(Theme.surface)
     }
 }
 
@@ -99,8 +157,8 @@ struct NotificationSettingsSection: View {
     var body: some View {
         @Bindable var preferences = model.preferences
 
-        Section {
-            Toggle("Promemoria compiti e verifiche", isOn: $preferences.homeworkReminders)
+        ListGroup("Promemoria", footer: "Ricevi una notifica la sera prima di ogni compito o verifica. I compiti segnati come fatti vengono saltati.") {
+            ToggleRow("Promemoria compiti e verifiche", icon: "bell", isOn: $preferences.homeworkReminders)
                 .onChange(of: preferences.homeworkReminders) { _, enabled in
                     Task {
                         if enabled {
@@ -113,42 +171,38 @@ struct NotificationSettingsSection: View {
                         await model.rescheduleReminders()
                     }
                 }
-                .notificationsDeniedAlert(isPresented: $notificationsDenied)
             if preferences.homeworkReminders {
-                Picker("Orario", selection: $preferences.reminderHour) {
-                    ForEach(14...22, id: \.self) { Text("\($0):00").tag($0) }
-                }
-                .onChange(of: preferences.reminderHour) { Task { await model.rescheduleReminders() } }
+                SelectRow("Orario", icon: "clock", selection: $preferences.reminderHour,
+                          options: (14...22).map { ($0, "\($0):00", nil) })
+                    .onChange(of: preferences.reminderHour) { Task { await model.rescheduleReminders() } }
             }
-        } header: {
-            Text("Promemoria")
-        } footer: {
-            Text("Ricevi una notifica la sera prima di ogni compito o verifica. I compiti segnati come fatti vengono saltati.")
+            ShareLink(item: AgendaCalendarFile(events: model.agenda.filter { $0.begin >= Date().startOfDay },
+                                               reminderHour: preferences.homeworkReminders ? preferences.reminderHour : nil),
+                      preview: SharePreview("Agenda di BCW")) {
+                ListRow("Esporta l'agenda nel Calendario", titleColor: Theme.primary, leading: {
+                    FormIcon("calendarPlus", color: Theme.primary)
+                }, trailing: { EmptyView() })
+            }
+            .buttonStyle(.listRow)
         }
-        .listRowBackground(Theme.surface)
+        .m3Dialog("Notifiche disattivate", isPresented: $notificationsDenied,
+                  message: "Per ricevere i promemoria consenti le notifiche a BCW nelle Impostazioni di iOS.") {
+            [.cancel("OK"), DialogAction(title: "Apri Impostazioni", style: .strong) {
+                Platform.openNotificationSettings()
+            }]
+        }
 
-        Section {
+        ListGroup("Novità", footer: "Una notifica per ogni novità trovata aggiornando i dati, anche con BCW chiusa: iOS sceglie quando aggiornare in background, in base a quanto usi l'app, quindi le notifiche possono arrivare con un po' di ritardo.") {
             ForEach(NewsKind.allCases) { kind in
-                Toggle(isOn: Binding {
+                ToggleRow(kind.title, icon: kind.icon, isOn: Binding {
                     preferences.newsNotifications.contains(kind)
                 } set: { isOn in
                     if isOn { enableNews(kind) } else { preferences.newsNotifications.remove(kind) }
-                }) {
-                    Label(kind.title, systemImage: kind.symbol)
-                }
+                })
             }
-        } header: {
-            Text("Novità")
-        } footer: {
-            Text(Platform.isMac
-                 ? "Una notifica per ogni novità trovata aggiornando i dati mentre BCW è aperta."
-                 : "Una notifica per ogni novità trovata aggiornando i dati, anche con BCW chiusa: iOS sceglie quando aggiornare in background, in base a quanto usi l'app, quindi le notifiche possono arrivare con un po' di ritardo.")
         }
-        .listRowBackground(Theme.surface)
         .onChange(of: preferences.newsNotifications) {
-            #if os(iOS)
             NewsNotifications.scheduleBackgroundRefresh(model: model)
-            #endif
         }
     }
 
@@ -164,64 +218,19 @@ struct NotificationSettingsSection: View {
     }
 }
 
-private extension View {
-    func notificationsDeniedAlert(isPresented: Binding<Bool>) -> some View {
-        alert("Notifiche disattivate", isPresented: isPresented) {
-            Button(Platform.isMac ? "Apri Impostazioni di Sistema" : "Apri Impostazioni") {
-                Platform.openNotificationSettings()
-            }
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(Platform.isMac
-                 ? "Per ricevere i promemoria consenti le notifiche a BCW in Impostazioni di Sistema › Notifiche."
-                 : "Per ricevere i promemoria consenti le notifiche a BCW nelle Impostazioni di iOS.")
-        }
-    }
-}
-
 struct DashboardSettingsSection: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         @Bindable var preferences = model.preferences
 
-        Section {
-            Picker("Vista", selection: $preferences.dashboardMode) {
-                ForEach(DashboardMode.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
-            }
-            Toggle("Mostra \"Nei prossimi giorni\"", isOn: $preferences.showUpcomingDays)
-            // Su macOS il titolo sta nella barra della finestra, dove entra sempre per intero.
-            if !Platform.isMac {
-                Picker("Abbrevia il titolo", selection: $preferences.titleAbbreviation) {
-                    ForEach(TitleAbbreviation.allCases) { Text($0.title).tag($0) }
-                }
-            }
-        } header: {
-            Text("Dashboard")
-        } footer: {
-            if Platform.isMac {
-                Text("La vista Calendario mostra il mese intero accanto al giorno scelto; la vista Lista la sola settimana.")
-            } else {
-                Text("Il titolo abbreviato mostra la data in forma breve (es. \"Gio 1 ott\"). In automatico si abbrevia solo se il nome completo non entra.")
-            }
+        ListGroup("Dashboard", footer: "Il titolo abbreviato mostra la data in forma breve (es. \"Gio 1 ott\"). In automatico si abbrevia solo se il nome completo non entra.") {
+            SelectRow("Vista", selection: $preferences.dashboardMode,
+                      options: DashboardMode.allCases.map { ($0, $0.title, $0.icon) })
+            ToggleRow("Mostra \"Nei prossimi giorni\"", isOn: $preferences.showUpcomingDays)
+            SelectRow("Abbrevia il titolo", selection: $preferences.titleAbbreviation,
+                      options: TitleAbbreviation.allCases.map { ($0, $0.title, nil) })
         }
-        .listRowBackground(Theme.surface)
-    }
-}
-
-struct AppearanceSettingsSection: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        @Bindable var preferences = model.preferences
-
-        Section("Aspetto e sicurezza") {
-            Picker("Tema", selection: $preferences.appearance) {
-                ForEach(AppearanceMode.allCases) { Text($0.title).tag($0) }
-            }
-            Toggle("Blocca con \(BiometricLock.biometryName)", isOn: $preferences.useBiometrics)
-        }
-        .listRowBackground(Theme.surface)
     }
 }
 
@@ -229,132 +238,295 @@ struct DataSettingsSection: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Section("Dati") {
-            Button("Aggiorna tutto", systemImage: "arrow.clockwise") {
+        ListGroup("Dati") {
+            ButtonRow("Aggiorna tutto", icon: "refresh") {
                 Task { await model.refreshAll() }
             }
-            Button("Azzera compiti segnati come fatti", systemImage: "checklist.unchecked") {
+            ButtonRow("Azzera compiti segnati come fatti", icon: "listUnchecked") {
                 model.preferences.completedHomework = []
             }
         }
-        .listRowBackground(Theme.surface)
     }
 }
 
 struct AboutSettingsSection: View {
-    var body: some View {
-        Section {
-            LabeledContent("Versione", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
-            Link(destination: URL(string: "https://web.spaggiari.eu")!) {
-                Label("Apri Classeviva sul web", systemImage: "safari")
-            }
-        } header: {
-            Text("Informazioni")
-        } footer: {
-            Text("BCW (Better ClasseViVa) è un client non ufficiale e non è affiliato a Gruppo Spaggiari Parma S.p.A. Le credenziali sono salvate solo nel Portachiavi di questo dispositivo e inviate esclusivamente ai server di Classeviva.")
-        }
-        .listRowBackground(Theme.surface)
-    }
-}
-
-#if os(macOS)
-/// Finestra Impostazioni di macOS (⌘,): le stesse sezioni di iOS, divise in schede.
-struct MacSettingsView: View {
-    enum Pane: Hashable { case general, grades, dashboard, timetable, notifications, accounts }
-    @State private var pane: Pane = .general
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
-        TabView(selection: $pane) {
-            Tab("Generale", systemImage: "gearshape", value: Pane.general) {
-                settingsForm {
-                    AppearanceSettingsSection()
-                    DataSettingsSection()
-                    AboutSettingsSection()
+        ListGroup("Informazioni", footer: "BCW (Better ClasseViVa) è un client non ufficiale e non è affiliato a Gruppo Spaggiari Parma S.p.A. Le credenziali sono salvate solo nel Portachiavi di questo dispositivo e inviate esclusivamente ai server di Classeviva.") {
+            ValueRow("Versione", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
+            Button {
+                openURL(URL(string: "https://web.spaggiari.eu")!)
+            } label: {
+                ListRow("Apri Classeviva sul web") {
+                    FormIcon("compass")
+                } trailing: {
+                    Icon("externalLink", size: 18)
+                        .foregroundStyle(Theme.onSurfaceVariant)
                 }
             }
-            Tab("Voti", systemImage: "graduationcap", value: .grades) {
-                settingsForm { GradeSettingsSection() }
-            }
-            Tab("Dashboard", systemImage: "calendar.day.timeline.left", value: .dashboard) {
-                settingsForm { DashboardSettingsSection() }
-            }
-            Tab("Orario", systemImage: "tablecells", value: .timetable) {
-                settingsForm { TimetableSettingsSection() }
-            }
-            Tab("Notifiche", systemImage: "bell.badge", value: .notifications) {
-                settingsForm { NotificationSettingsSection() }
-            }
-            Tab("Account", systemImage: "person.2", value: .accounts) {
-                AccountsSettingsPane()
-            }
+            .buttonStyle(.listRow)
         }
-        .frame(width: 540)
-        .frame(minHeight: 300)
-    }
-
-    private func settingsForm<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        Form(content: content)
-            .formStyle(.grouped)
-            .themedList()
-            .scrollDisabled(false)
-            .frame(minHeight: 300, idealHeight: 420)
     }
 }
 
-/// Elenco degli account salvati, nella finestra Impostazioni.
-private struct AccountsSettingsPane: View {
+// MARK: - Aspetto
+
+/// Aspetto: tema, colore d'accento (colori dinamici di Material 3), forme, movimento, caratteri e
+/// Liquid Glass. Le stesse impostazioni della versione web.
+struct AppearanceSettingsSection: View {
     @Environment(AppModel.self) private var model
-    @Environment(MacNavigation.self) private var nav
 
     var body: some View {
-        Form {
-            Section {
-                ForEach(model.accounts) { account in
-                    let isActive = !model.isDemo && account.id == model.activeAccountID
-                    HStack {
-                        AccountRow(account: account, isActive: isActive)
-                        if !isActive {
-                            Button("Usa") { withAnimation { model.switchAccount(to: account.id) } }
-                        }
-                        Button("Rimuovi", systemImage: "minus.circle", role: .destructive) {
-                            withAnimation { model.removeAccount(account.id) }
-                        }
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.borderless)
-                        .help("Rimuovi l'account e le sue credenziali da questo Mac")
-                    }
-                }
-                if model.accounts.isEmpty {
-                    Text(model.isDemo ? "Stai usando la modalità demo." : "Nessun account salvato.")
-                        .foregroundStyle(Theme.secondaryInk)
-                }
-            } header: {
-                Text("Account salvati")
-            } footer: {
-                Text("Le credenziali restano solo nel Portachiavi di questo Mac.")
-            }
-            .listRowBackground(Theme.surface)
+        @Bindable var preferences = model.preferences
+        @Bindable var theme = ThemeStore.shared
 
-            Section {
-                Button("Aggiungi account…", systemImage: "person.crop.circle.badge.plus") {
-                    nav.addingAccount = true
-                }
-                .disabled(model.phase != .signedIn)
-                if !model.isDemo {
-                    Button("Prova la demo", systemImage: "sparkles") {
-                        withAnimation { model.startDemo() }
-                    }
-                    .disabled(model.phase != .signedIn)
+        ListGroup("Tema") {
+            ThemePreview()
+            SelectRow("Tema", icon: "sun", selection: $preferences.appearance,
+                      options: AppearanceMode.allCases.map { ($0, $0.title, nil) })
+        }
+
+        ListGroup("Interfaccia", footer: "Con Liquid Glass la barra di navigazione, la barra delle schede e i pulsanti dei menu sono quelli di sistema, in vetro. Senza, tutta l'interfaccia è in Material 3 Expressive, come la versione web di BCW.") {
+            ToggleRow("Liquid Glass", subtitle: theme.liquidGlass ? "Sì" : "No", icon: "sparkles", isOn: $theme.liquidGlass)
+        }
+
+        ListGroup("Colore d'accento", footer: "Tutti i colori di BCW (pulsanti, superfici, schede) sono generati dal colore scelto con i colori dinamici di Material 3, nel tema chiaro e in quello scuro. I colori di materie, voti e assenze non cambiano.") {
+            AccentPicker()
+            SelectRow("Stile dei colori", subtitle: theme.colorStyle.subtitle, icon: "colorStyle", selection: $theme.colorStyle,
+                      options: ColorStyle.allCases.map { ($0, $0.title, nil) })
+            SelectRow("Contrasto", icon: "contrast", selection: $theme.contrast,
+                      options: ContrastLevel.allCases.map { ($0, $0.title, nil) })
+        }
+
+        ListGroup("Forme e movimento", footer: "Espressive: animazioni a molla con un piccolo rimbalzo, come in Material 3 Expressive. Standard: senza rimbalzo. Ridotte: brevi e senza movimenti ampi. I caratteri arrotondati usano l'asse ROND di Google Sans Flex.") {
+            SelectRow("Angoli", icon: "corners", selection: $theme.corners,
+                      options: CornerStyle.allCases.map { ($0, $0.title, nil) })
+            SelectRow("Animazioni", icon: "motion", selection: $theme.motion,
+                      options: MotionStyle.allCases.map { ($0, $0.title, nil) })
+            SelectRow("Caratteri arrotondati", icon: "textStyle", selection: $theme.roundedText,
+                      options: RoundedText.allCases.map { ($0, $0.title, nil) })
+            if !theme.isDefault {
+                ButtonRow("Ripristina l'aspetto di BCW", icon: "refresh") {
+                    withAnimation(Motion.effects) { theme.reset() }
                 }
             }
-            .listRowBackground(Theme.surface)
         }
-        .formStyle(.grouped)
-        .themedList()
-        .frame(minHeight: 300, idealHeight: 420)
     }
 }
-#endif
+
+/// Piccola anteprima dei componenti con i colori e le forme scelti.
+private struct ThemePreview: View {
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            Shaped(shape: .cookie9Sided, fill: Theme.primaryContainer, size: 56) {
+                Icon("palette")
+                    .foregroundStyle(Theme.onPrimaryContainer)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Anteprima")
+                    .font(.m3(16, weight: 550, rounded: true))
+                    .foregroundStyle(Theme.ink)
+                Text("Pulsanti, schede e forme")
+                    .font(.m3(13))
+                    .foregroundStyle(Theme.secondaryInk)
+                FlowLayout(spacing: 8) {
+                    Text("Primario").fixedSize()
+                        .modifier(PreviewButton(background: Theme.primary, foreground: Theme.onPrimary, radius: 16))
+                    Text("Tonale").fixedSize()
+                        .modifier(PreviewButton(background: Theme.secondaryContainer, foreground: Theme.onSecondaryContainer, radius: 16))
+                    Text("Terziario").fixedSize()
+                        .modifier(PreviewButton(background: Theme.tertiaryContainer, foreground: Theme.onTertiaryContainer, radius: Theme.radii.s))
+                }
+                .padding(.top, 10)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Grid(horizontalSpacing: 6, verticalSpacing: 6) {
+                GridRow {
+                    tone(Theme.primary)
+                    tone(Theme.secondaryContainer)
+                }
+                GridRow {
+                    tone(Theme.tertiaryContainer)
+                    tone(Theme.surfaceContainerHighest)
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
+            .padding(.top, 4)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .accessibilityHidden(true)
+    }
+
+    private func tone(_ color: Color) -> some View {
+        Circle()
+            .fill(color)
+            .overlay(Circle().strokeBorder(Theme.ink.opacity(0.12), lineWidth: 1))
+            .frame(width: 16, height: 16)
+    }
+
+    private struct PreviewButton: ViewModifier {
+        let background: Color
+        let foreground: Color
+        let radius: CGFloat
+
+        func body(content: Content) -> some View {
+            content
+                .font(.m3(14, weight: 600))
+                .foregroundStyle(foreground)
+                .padding(.horizontal, 12)
+                .frame(height: 32)
+                .background(background, in: .rect(cornerRadius: radius, style: .continuous))
+        }
+    }
+}
+
+/// Campioni dei colori d'accento (come quelli di Android: in alto il primario, in basso secondario
+/// e terziario) e un campione per scegliere un colore qualsiasi.
+private struct AccentPicker: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var customColor: Color = .red
+
+    var body: some View {
+        let theme = ThemeStore.shared
+        let accent = ThemeStore.normalize(theme.accentColor) ?? defaultAccent
+        let isPreset = accentPresets.contains { $0.hex == accent }
+        VStack(alignment: .leading, spacing: 14) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 44, maximum: 60), spacing: 8)], spacing: 12) {
+                ForEach(accentPresets, id: \.hex) { preset in
+                    Button {
+                        Haptics.selection()
+                        withAnimation(Motion.spatial) { theme.accentColor = preset.hex }
+                    } label: {
+                        AccentSwatch(colors: theme.swatch(preset.hex, dark: colorScheme == .dark),
+                                     selected: preset.hex == accent, icon: preset.hex == accent ? "check" : nil)
+                    }
+                    .buttonStyle(SwatchButtonStyle())
+                    .accessibilityLabel(preset.name)
+                    .accessibilityAddTraits(preset.hex == accent ? .isSelected : [])
+                    .help(preset.name)
+                }
+                // Un colore qualsiasi: il selettore di sistema sta sopra al campione, quasi invisibile.
+                ZStack {
+                    AccentSwatch(colors: isPreset ? nil : theme.swatch(accent, dark: colorScheme == .dark),
+                                 selected: !isPreset, icon: isPreset ? "colorize" : "check")
+                    ColorPicker("Scegli un colore qualsiasi", selection: $customColor, supportsOpacity: false)
+                        .labelsHidden()
+                        .scaleEffect(2.2)
+                        .opacity(0.011)
+                }
+                .frame(width: 44, height: 44)
+                .help("Scegli un colore qualsiasi")
+            }
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(Color(platformColor: PlatformColor(hex: Int(accent.dropFirst(), radix: 16) ?? 0)))
+                    .overlay(Circle().strokeBorder(Theme.ink.opacity(0.15), lineWidth: 1))
+                    .frame(width: 16, height: 16)
+                Text(accent.uppercased())
+                    .font(.numeral(14))
+                    .foregroundStyle(Theme.secondaryInk)
+                Spacer()
+                if accent != defaultAccent {
+                    Button {
+                        withAnimation(Motion.spatial) { theme.accentColor = defaultAccent }
+                    } label: {
+                        Label { Text("Colore di BCW") } icon: { Icon("refresh") }
+                    }
+                    .buttonStyle(.m3(.text, size: .xs))
+                }
+            }
+            .frame(minHeight: 32)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
+        .onAppear { customColor = Color(platformColor: PlatformColor(hex: Int(accent.dropFirst(), radix: 16) ?? 0)) }
+        .onChange(of: customColor) { _, color in
+            guard let hex = color.hexString, hex != ThemeStore.normalize(theme.accentColor) else { return }
+            theme.accentColor = hex
+        }
+    }
+}
+
+private struct AccentSwatch: View {
+    /// Primario, secondario, terziario; `nil` = arcobaleno (colore qualsiasi).
+    let colors: [Color]?
+    let selected: Bool
+    let icon: String?
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: selected ? Theme.radii.l : 22, style: .continuous)
+        ZStack {
+            if let colors, colors.count == 3 {
+                VStack(spacing: 0) {
+                    colors[0]
+                    HStack(spacing: 0) {
+                        colors[1]
+                        colors[2]
+                    }
+                }
+            } else {
+                AngularGradient(colors: (0..<9).map { Theme.subject([0, 3, 6, 1, 9, 5, 2, 4, 0][$0]) }, center: .center)
+            }
+            if let icon {
+                Icon(icon, size: 18)
+                    .foregroundStyle(Theme.ink)
+                    .frame(width: 26, height: 26)
+                    .background(Theme.surfaceContainerLowest, in: .circle)
+            }
+        }
+        .frame(width: 44, height: 44)
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(Theme.ink.opacity(0.12), lineWidth: 1))
+        .padding(3)
+        .overlay {
+            if selected {
+                RoundedRectangle(cornerRadius: Theme.radii.l + 3, style: .continuous)
+                    .strokeBorder(Theme.ink, lineWidth: 2)
+            }
+        }
+        .padding(-3)
+        .animation(Motion.spatial, value: selected)
+    }
+}
+
+private struct SwatchButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.94 : 1)
+            .animation(Motion.spatialFast, value: configuration.isPressed)
+    }
+}
+
+extension Color {
+    /// Colore in esadecimale (`#rrggbb`), nello spazio sRGB.
+    var hexString: String? {
+        var (r, g, b, a): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
+        guard UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a) else { return nil }
+        func channel(_ v: CGFloat) -> String { String(format: "%02x", Int((min(max(v, 0), 1) * 255).rounded())) }
+        return "#" + channel(r) + channel(g) + channel(b)
+    }
+}
+
+// MARK: - Account
+
+/// Elenco degli account salvati (sottopagina Account).
+struct AccountsSettingsPane: View {
+    @Environment(AppModel.self) private var model
+    @State private var addingAccount = false
+
+    var body: some View {
+        AccountsSection {
+            addingAccount = true
+        }
+        if model.isDemo {
+            ListGroup {
+                ListRow(model.demoExitMessage)
+            }
+        }
+    }
+}
 
 struct AccountView: View {
     @Environment(AppModel.self) private var model
@@ -362,95 +534,72 @@ struct AccountView: View {
     @State private var addingAccount = false
 
     var body: some View {
-        Form {
-            Section {
-                VStack(spacing: 10) {
-                    Text(model.card?.initials ?? String(model.displayName.prefix(1)))
-                        .font(.numeral(34, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 88, height: 88)
-                        .background(Theme.accent.gradient, in: .circle)
+        ScrollView {
+            VStack(spacing: 24) {
+                VStack(spacing: 8) {
+                    Avatar(initials: model.card?.initials ?? String(model.displayName.prefix(1)), size: 96, shape: .cookie12Sided)
                     Text(model.displayName)
-                        .font(.title2.weight(.semibold))
+                        .font(.m3(28, weight: 500, rounded: true))
+                        .foregroundStyle(Theme.ink)
                     if let classDescription = model.classDescription {
                         Text(classDescription.sentenceCased)
+                            .font(.m3(16))
                             .foregroundStyle(Theme.secondaryInk)
                     }
                 }
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-            }
-            .listRowBackground(Color.clear)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
 
-            AccountsSection { addingAccount = true }
+                AccountsSection { addingAccount = true }
 
-            if let card = model.card {
-                Section("Profilo") {
-                    LabeledContent("Codice utente", value: card.ident)
-                    LabeledContent("Tipo di account", value: card.userTypeDescription)
-                    if let birth = card.birthDate {
-                        LabeledContent("Data di nascita", value: birth.shortDayWithYear)
-                    }
-                    if let fiscal = card.fiscalCode?.nilIfEmpty {
-                        LabeledContent("Codice fiscale", value: fiscal)
-                            .textSelection(.enabled)
-                    }
-                }
-                .listRowBackground(Theme.surface)
-
-                Section("Scuola") {
-                    if let school = card.schoolDescription {
-                        LabeledContent("Istituto", value: school)
-                    }
-                    if let city = card.schoolCity?.nilIfEmpty {
-                        LabeledContent("Città", value: "\(city.nameCased)\(card.schoolProvince.map { " (\($0))" } ?? "")")
-                    }
-                    if let code = card.miurSchoolCode?.nilIfEmpty {
-                        LabeledContent("Codice meccanografico", value: code)
-                    }
-                }
-                .listRowBackground(Theme.surface)
-            }
-
-            Section {
-                // Stesso colore d'accento degli altri pulsanti; il ruolo distruttivo resta nel dialogo.
-                Button(model.isDemo ? "Esci dalla demo" : "Esci da questo account",
-                       systemImage: "rectangle.portrait.and.arrow.right") {
-                    confirmSignOut = true
-                }
-                .foregroundStyle(Theme.accent)
-                // Agganciato al pulsante: il dialogo compare accanto ad esso.
-                .confirmationDialog(signOutTitle, isPresented: $confirmSignOut, titleVisibility: .visible) {
-                    Button("Esci", role: .destructive) { model.signOut() }
-                }
-            } footer: {
-                Text(signOutFooter)
-            }
-            .listRowBackground(Theme.surface)
-        }
-        #if os(macOS)
-        .formStyle(.grouped)
-        .themedList()
-        .frame(maxWidth: 680)
-        .frame(maxWidth: .infinity)
-        .themedBackground()
-        #else
-        .themedList()
-        .contentMargins(.bottom, Theme.bottomInset - 24, for: .scrollContent)
-        #endif
-        .screenTitle("Account")
-        .inlineTitleDisplay()
-        .sheet(isPresented: $addingAccount) {
-            NavigationStack {
-                LoginView(isAddingAccount: true)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Annulla", systemImage: "xmark") { addingAccount = false }
+                if let card = model.card {
+                    ListGroup("Profilo") {
+                        ValueRow("Codice utente", value: card.ident)
+                        ValueRow("Tipo di account", value: card.userTypeDescription)
+                        if let birth = card.birthDate {
+                            ValueRow("Data di nascita", value: birth.shortDayWithYear)
+                        }
+                        if let fiscal = card.fiscalCode?.nilIfEmpty {
+                            ValueRow("Codice fiscale", value: fiscal)
+                                .textSelection(.enabled)
                         }
                     }
+
+                    ListGroup("Scuola") {
+                        if let school = card.schoolDescription {
+                            ValueRow("Istituto", value: school)
+                        }
+                        if let city = card.schoolCity?.nilIfEmpty {
+                            ValueRow("Città", value: "\(city.nameCased)\(card.schoolProvince.map { " (\($0))" } ?? "")")
+                        }
+                        if let code = card.miurSchoolCode?.nilIfEmpty {
+                            ValueRow("Codice meccanografico", value: code)
+                        }
+                    }
+                }
+
+                ListGroup(footer: signOutFooter) {
+                    ButtonRow(model.isDemo ? "Esci dalla demo" : "Esci da questo account", icon: "logout", destructive: true) {
+                        confirmSignOut = true
+                    }
+                }
             }
-            .sheetFrame(width: 480, height: 600)
+            .pagePadding()
+            .padding(.bottom, Theme.bottomInset)
+            .frame(maxWidth: 680)
+            .frame(maxWidth: .infinity)
+        }
+        .tracksPageScroll()
+        .themedBackground()
+        .pageChrome("Account", style: .inline)
+        .m3Dialog(signOutTitle, isPresented: $confirmSignOut,
+                  message: model.isDemo ? model.demoExitMessage : "Le credenziali di questo account verranno rimosse da questo dispositivo.") {
+            [.cancel(), DialogAction(title: "Esci", style: .destructive) { model.signOut() }]
+        }
+        .sheet(isPresented: $addingAccount) {
+            AddAccountSheet { addingAccount = false }
         }
     }
 
@@ -466,6 +615,19 @@ struct AccountView: View {
     }
 }
 
+/// Foglio per aggiungere un account (la schermata di accesso, con Annulla).
+struct AddAccountSheet: View {
+    let dismiss: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            LoginView(isAddingAccount: true)
+                .sheetChrome("Aggiungi account", leading: .cancel(action: dismiss))
+        }
+        .m3Sheet()
+    }
+}
+
 /// Sezione "Account" della pagina Account: account salvati, aggiunta di un account e demo.
 /// È anche il contenuto del popup per cambiare account (`AccountSwitcherSheet`).
 struct AccountsSection: View {
@@ -473,45 +635,45 @@ struct AccountsSection: View {
     /// Nel popup il titolo è già nella barra: l'intestazione della sezione si ripeterebbe.
     var showsHeader = true
     let addAccount: () -> Void
+    @State private var removing: SavedAccount?
 
     var body: some View {
-        Section {
+        ListGroup(showsHeader ? "Account" : nil,
+                  footer: model.accounts.count > 1
+                  ? "Tocca un account per passare ad esso. Usa il cestino per rimuoverlo"
+                  : "Puoi aggiungere altri account Classeviva (ad esempio quelli di fratelli o sorelle) e passare dall'uno all'altro.") {
             ForEach(model.accounts) { account in
-                Button {
-                    withAnimation { model.switchAccount(to: account.id) }
-                } label: {
-                    AccountRow(account: account,
-                               isActive: !model.isDemo && account.id == model.activeAccountID)
-                }
-                .buttonStyle(.plain)
-                .swipeActions {
-                    Button("Rimuovi", systemImage: "trash", role: .destructive) {
-                        withAnimation { model.removeAccount(account.id) }
+                let isActive = !model.isDemo && account.id == model.activeAccountID
+                HStack(spacing: 0) {
+                    Button {
+                        withAnimation { model.switchAccount(to: account.id) }
+                    } label: {
+                        AccountRow(account: account, isActive: isActive)
                     }
+                    .buttonStyle(.listRow)
+                    IconButton("trash", label: "Rimuovi") { removing = account }
+                        .padding(.trailing, 8)
+                        .help("Rimuovi l'account e le sue credenziali da questo dispositivo")
                 }
                 .contextMenu {
-                    Button("Rimuovi", systemImage: "trash", role: .destructive) {
-                        withAnimation { model.removeAccount(account.id) }
-                    }
+                    Button(role: .destructive) { removing = account } label: { Label("Rimuovi", icon: "trash") }
                 }
             }
-            Button("Aggiungi account", systemImage: "person.crop.circle.badge.plus", action: addAccount)
+            ButtonRow("Aggiungi account", icon: "userPlus", action: addAccount)
             if !model.isDemo {
                 // Uscendo dalla demo si torna a questo account.
-                Button("Prova la demo", systemImage: "sparkles") {
+                ButtonRow("Prova la demo", icon: "sparkles") {
                     withAnimation { model.startDemo() }
                 }
             }
-        } header: {
-            if showsHeader { Text("Account") }
-        } footer: {
-            Text(model.accounts.count > 1
-                 ? (Platform.isMac
-                    ? "Fai clic su un account per passare ad esso. Fai clic con il tasto destro per rimuoverlo."
-                    : "Tocca un account per passare ad esso. Scorri verso sinistra per rimuoverlo.")
-                 : "Puoi aggiungere altri account Classeviva (ad esempio quelli di fratelli o sorelle) e passare dall'uno all'altro.")
         }
-        .listRowBackground(Theme.surface)
+        .m3Dialog("Rimuovere \(removing?.name ?? "l'account")?",
+                  isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+                  message: "Le credenziali di questo account verranno rimosse da questo dispositivo.") {
+            [.cancel(), DialogAction(title: "Rimuovi", style: .destructive) {
+                if let id = removing?.id { withAnimation { model.removeAccount(id) } }
+            }]
+        }
     }
 }
 
@@ -520,28 +682,14 @@ struct AccountRow: View {
     let isActive: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
-            Text(account.initials)
-                .font(.numeral(15, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(Theme.subjectColor(StableID.make(account.id)).gradient, in: .circle)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(account.name)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(Theme.ink)
-                Text(account.school ?? account.credentials.username)
-                    .font(.footnote)
-                    .foregroundStyle(Theme.secondaryInk)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 4)
+        ListRow(account.name, subtitle: account.school ?? account.credentials.username) {
+            Avatar(initials: account.initials, size: 40, shape: .cookie9Sided,
+                   tint: Theme.subjectColor(StableID.make(account.id)))
+        } trailing: {
             if isActive {
-                Image(systemName: "checkmark")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(Theme.accent)
+                Icon("check")
+                    .foregroundStyle(Theme.primary)
             }
         }
-        .contentShape(.rect)
     }
 }
