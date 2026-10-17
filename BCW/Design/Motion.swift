@@ -1,8 +1,10 @@
 import SwiftUI
 import UIKit
 
-/// Movimento di Material 3 Expressive: molle spaziali (posizione, forma) con un piccolo
-/// rimbalzo ed effetti (colore, opacità) senza. Seguono Impostazioni › Aspetto › Animazioni:
+/// Movimento di Material 3 Expressive (`MotionScheme` di Compose): molle spaziali (posizione,
+/// forma) con un piccolo rimbalzo ed effetti (colore, opacità) senza. Valori espressivi: spaziali
+/// veloce 800/0,6, normale 380/0,8, lento 200/0,8; effetti 3800, 1600 (smorzamento 1). Con
+/// risposta = 2π/√rigidezza. Seguono Impostazioni › Aspetto › Animazioni:
 /// espressive, standard (senza rimbalzo) o ridotte (brevi, senza movimenti ampi).
 enum Motion {
     private static var style: MotionStyle { ThemeStore.shared.motion }
@@ -42,6 +44,37 @@ enum Motion {
     /// Effetti (colori, opacità).
     static var effects: Animation {
         style == .reduced ? .easeOut(duration: 0.15) : .spring(response: 0.16, dampingFraction: 1)
+    }
+}
+
+// MARK: - Transizioni di Material 3
+
+extension AnyTransition {
+    /// Asse condiviso orizzontale: tra elementi allo stesso livello (giorni, schede). Quello che
+    /// esce scivola e svanisce da una parte, quello che entra arriva dall'altra.
+    static func sharedAxisX(forward: Bool, distance: CGFloat = 48) -> AnyTransition {
+        .asymmetric(insertion: .offset(x: forward ? distance : -distance).combined(with: .opacity),
+                    removal: .offset(x: forward ? -distance : distance).combined(with: .opacity))
+    }
+
+    /// Asse condiviso verticale: tra passaggi di un flusso o viste della stessa pagina.
+    static func sharedAxisY(forward: Bool = true, distance: CGFloat = 32) -> AnyTransition {
+        .asymmetric(insertion: .offset(y: forward ? distance : -distance).combined(with: .opacity),
+                    removal: .offset(y: forward ? -distance : distance).combined(with: .opacity))
+    }
+
+    /// Dissolvenza incrociata (fade through): tra contenuti senza relazione. Quello vecchio svanisce
+    /// in fretta, quello nuovo compare ingrandendosi appena.
+    static var fadeThrough: AnyTransition {
+        .asymmetric(insertion: .opacity.combined(with: .scale(scale: 0.94)).animation(Motion.spatial.delay(0.05)),
+                    removal: .opacity.animation(Motion.effectsFast))
+    }
+
+    /// Espansione: il contenuto compare mentre il contenitore si allunga con la molla spaziale (e
+    /// svanisce in fretta chiudendo).
+    static var expand: AnyTransition {
+        .asymmetric(insertion: .opacity.animation(Motion.effects.delay(0.04)).combined(with: .scale(scale: 0.98, anchor: .top)),
+                    removal: .opacity.animation(Motion.effectsFast))
     }
 }
 

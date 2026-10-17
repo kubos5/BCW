@@ -746,36 +746,37 @@ struct LinkButtonStyle: ButtonStyle {
     }
 }
 
-/// Campo con una data (pillola `surface-container-high`): toccandolo si apre il selettore di sistema.
+/// Campo con una data (pillola `surface-container-high`): toccandolo si apre il selettore della data
+/// di Material 3 (`M3DatePickerSheet`); una data fuori da `range` viene riportata dentro.
 struct DateField: View {
     @Binding var date: Date
     var range: ClosedRange<Date>?
+    @State private var picking = false
 
     var body: some View {
-        ZStack {
-            Text(date.longDay)
-                .font(.m3(15))
-                .foregroundStyle(Theme.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .padding(.horizontal, 14)
-                .frame(maxWidth: .infinity, minHeight: 40)
-                .background(Theme.surfaceContainerHigh, in: .capsule)
-            // Il selettore di sistema sta sopra, quasi invisibile: lo apre un tocco sul campo.
-            Group {
-                if let range {
-                    DatePicker("Giorno", selection: $date, in: range, displayedComponents: .date)
-                } else {
-                    DatePicker("Giorno", selection: $date, displayedComponents: .date)
-                }
+        Button { picking = true } label: {
+            HStack(spacing: 6) {
+                Icon("calendarMonth", size: 18)
+                    .foregroundStyle(Theme.onSurfaceVariant)
+                Text(date.longDay)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            .labelsHidden()
-            .environment(\.locale, Locale(identifier: "it_IT"))
+            .font(.m3(15, weight: 550))
+            .foregroundStyle(Theme.ink)
+            .padding(.horizontal, 14)
             .frame(maxWidth: .infinity, minHeight: 40)
-            .scaleEffect(x: 3, y: 1)
-            .opacity(0.011)
-            .clipped()
+            .background(Theme.surfaceContainerHigh, in: .capsule)
+            .contentShape(.capsule)
         }
-        .accessibilityElement(children: .contain)
+        .buttonStyle(.pressable(radius: 20, pressed: 12))
+        .accessibilityHint("Sceglie una data")
+        .sheet(isPresented: $picking) {
+            M3DatePickerSheet(selection: date) { picked in
+                var value = picked
+                if let range { value = min(max(value, range.lowerBound), range.upperBound) }
+                date = value
+            }
+        }
     }
 }

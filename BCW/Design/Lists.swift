@@ -320,7 +320,8 @@ struct SelectButton<Value: Hashable>: View {
         }
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
-        .fixedSize(horizontal: false, vertical: true)
+        // Il valore resta intero: semmai va a capo il titolo della voce.
+        .fixedSize(horizontal: !expands, vertical: true)
         .accessibilityLabel(label)
         .accessibilityValue(current)
     }

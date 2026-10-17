@@ -52,7 +52,7 @@ struct NoticeboardView: View {
                 EmptyState(model.notices.isEmpty ? "Bacheca vuota" : "Nessun risultato", icon: "megaphone",
                            description: model.notices.isEmpty ? "Le comunicazioni della scuola appariranno qui." : "Prova a cambiare i filtri.")
             } else {
-                LazyVStack(spacing: 10) {
+                ListGroup {
                     ForEach(filtered) { notice in
                         NavigationLink {
                             NoticeDetailView(notice: notice)
@@ -60,7 +60,7 @@ struct NoticeboardView: View {
                         } label: {
                             NoticeRow(notice: notice)
                         }
-                        .buttonStyle(.pressable)
+                        .buttonStyle(.listRow)
                     }
                 }
             }
@@ -106,7 +106,8 @@ private struct NoticeRow: View {
                 }
             }
         }
-        .card(padding: 14)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -93,12 +93,19 @@ struct AgendaEventRow: View {
                 .padding(.top, -4)
         } else {
             Button(action: toggle) {
-                Icon(isDone ? "checkCircleFill" : "circle")
-                    .foregroundStyle(isDone ? Theme.good : Theme.subjectColor(event.subjectId))
-                    .scaleEffect(isDone ? 1 : 1)
-                    .phaseAnimator([false, true], trigger: isDone) { view, phase in
-                        view.scaleEffect(phase && isDone ? 1.18 : 1)
-                    } animation: { _ in Motion.spatialFast }
+                // Come la casella di Material 3: il segno compare ingrandendosi con la molla veloce.
+                ZStack {
+                    if isDone {
+                        Icon("checkCircleFill")
+                            .foregroundStyle(Theme.good)
+                            .transition(.scale(scale: 0.4).combined(with: .opacity))
+                    } else {
+                        Icon("circle")
+                            .foregroundStyle(Theme.subjectColor(event.subjectId))
+                            .transition(.opacity)
+                    }
+                }
+                .animation(Motion.spatialFast, value: isDone)
             }
             .buttonStyle(CheckButtonStyle())
             .frame(width: 32, height: 32)

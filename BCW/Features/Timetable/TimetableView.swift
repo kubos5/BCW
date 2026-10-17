@@ -9,6 +9,8 @@ import SwiftUI
 /// gli eventi si spostano e si ridimensionano seguendo l'allineamento scelto lì.
 struct TimetableView: View {
     @Environment(AppModel.self) private var model
+    /// Per nascondere la barra delle schede durante la modifica (al suo posto la barra degli strumenti).
+    @Environment(\.tabChrome) private var tabChrome
     /// Cambia quando si tocca di nuovo la scheda Orario (iOS): si torna a oggi.
     var reselection = 0
 
@@ -25,10 +27,9 @@ struct TimetableView: View {
     @State private var deleting: TimetableEntry?
     /// Modalità di modifica grafica: vista Giorno con eventi trascinabili.
     @State private var isEditing = false
-    /// La settimana che galleggia sopra gli eventi, intera o ridotta (`CalendarHeader`).
-    @State private var weekScroll = WeekHeaderScroll()
-    /// Altezza di ciò che galleggia sotto la settimana (bozza, modifica, avvisi).
-    @State private var extrasHeight: CGFloat = 0
+    /// Cambio di giorno con la transizione ad asse condiviso (anche scorrendo di lato).
+    @State private var swipe = DaySwipe()
+    @State private var pickingDate = false
 
     struct PaletteWeekday: Identifiable {
         let weekday: Int
@@ -59,16 +60,27 @@ struct TimetableView: View {
     var body: some View {
         PlatformNavigationStack {
             content
-                .overlay(alignment: .bottomTrailing) {
-                    // Nuovo evento: il pulsante d'azione flottante della pagina, come nella versione web.
-                    if !isEditing && store.draft == nil {
-                        FAB(icon: "plus", label: "Nuovo evento") {
-                            editor = TimetableEditorRequest(weekday: selectedDay.timetableWeekday)
+                .overlay {
+                    if isEditing {
+                        // Modalità temporanea: la barra degli strumenti vivace prende il posto
+                        // della barra delle schede.
+                        TimetableEditToolbar {
+                            editor = TimetableEditorRequest(weekday: selectedDay.timetableWeekday, kind: .breakTime)
+                        } colorDay: {
+                            paletteWeekday = PaletteWeekday(weekday: selectedDay.timetableWeekday)
+                        } done: {
+                            setEditing(false)
                         }
-                        .padding(16)
+                        .padding(.bottom, 16)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else if store.draft == nil {
+                        // Le azioni per creare e modificare: il menu del pulsante d'azione flottante.
+                        FABMenu(icon: "plus", label: "Aggiungi o modifica", items: fabItems)
+                            .transition(.scale(scale: 0.4, anchor: .bottomTrailing).combined(with: .opacity))
                     }
                 }
-                .pageChrome(isEditing ? "Modifica" : "Orario",
+                .pageChrome(isEditing ? "Modifica orario" : "Orario",
                             subtitle: nil, style: .inline) {
                     barActions
                 }
@@ -92,6 +104,9 @@ struct TimetableView: View {
                 }
                 .sheet(isPresented: $showingHiddenTests) {
                     TimetableHiddenTestsView()
+                }
+                .sheet(isPresented: $pickingDate) {
+                    M3DatePickerSheet(selection: selectedDay) { select($0) }
                 }
                 .m3Dialog("Eliminare «\(deleting?.displayTitle ?? "")»?",
                           isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
@@ -117,10 +132,12 @@ struct TimetableView: View {
                 }
                 .onChange(of: reselection) {
                     select(Date().startOfDay)
-                    weekScroll.open()
                 }
                 // Con una bozza in anteprima non si modifica l'orario.
                 .onChange(of: store.draft == nil) { _, noDraft in if !noDraft { setEditing(false) } }
+                .onChange(of: isEditing, initial: true) { _, editing in tabChrome?.hidesBar = editing }
+                .onAppear { tabChrome?.hidesBar = isEditing }
+                .onDisappear { tabChrome?.hidesBar = false }
                 #if DEBUG
                 .task { await DebugTimetable.prepareIfRequested(model: model) }
                 #endif
@@ -157,63 +174,66 @@ struct TimetableView: View {
         withAnimation(Motion.spatial) { isEditing = editing }
     }
 
+    /// Cambia il giorno scelto con la transizione ad asse condiviso, nel verso giusto.
     private func select(_ day: Date) {
+        let day = day.startOfDay
         guard !day.isSameDay(as: selectedDay) else { return }
-        withAnimation(Motion.spatial) { selectedDay = day.startOfDay }
+        swipe.go(day > selectedDay ? 1 : -1) { selectedDay = day }
     }
 
     private var daySelection: Binding<Date> {
-        Binding { selectedDay } set: { day in
-            guard !day.isSameDay(as: selectedDay) else { return }
-            selectedDay = day.startOfDay
-        }
+        Binding { selectedDay } set: { select($0) }
     }
 
     // MARK: Barra
 
     @ViewBuilder
     private var barActions: some View {
-        // "Oggi" c'è solo se il giorno scelto non è oggi, come "Domani" nella Dashboard.
-        if showsToday {
+        // "Oggi" c'è solo se il giorno scelto non è oggi, come "Domani" nella Dashboard. Senza
+        // Liquid Glass sta accanto al giorno in grande, come nella Dashboard.
+        if showsToday && (ThemeStore.shared.liquidGlass || isEditing) {
             BarTextButton(title: "Oggi") { select(Date()) }
                 .keyboardShortcut("t")
                 .help("Vai a oggi")
                 .transition(.scale(scale: 0.6).combined(with: .opacity))
         }
-        if isEditing {
-            BarTextButton(title: "Fine", icon: "check", prominent: true) { setEditing(false) }
-                .keyboardShortcut(.defaultAction)
-                .help("Esci dalla modifica dell'orario")
-                .accessibilityLabel("Fine modifica")
-        } else {
+        if !isEditing {
+            // Passa all'altra vista: l'icona è quella della vista in cui si va.
+            let other: TimetableMode = mode == .day ? .list : .day
+            BarButton(other == .day ? "Vista Giorno" : "Vista Lista", icon: other == .day ? "dayView" : "viewAgenda") {
+                withAnimation(Motion.spatial) { model.preferences.timetableMode = other }
+            }
             optionsMenu
-                .help("Modifica, colori e generazione")
+                .help("Verifiche e colori")
         }
+    }
+
+    /// Voci del menu del pulsante d'azione flottante.
+    private var fabItems: [FABMenuItem] {
+        [
+            FABMenuItem(title: "Genera dalle lezioni", icon: "wand") { showingGenerator = true },
+            FABMenuItem(title: "Modifica orario", icon: "edit") { setEditing(true) },
+            FABMenuItem(title: "Nuovo intervallo", icon: "coffee") {
+                editor = TimetableEditorRequest(weekday: selectedDay.timetableWeekday, kind: .breakTime)
+            },
+            FABMenuItem(title: "Nuovo evento", icon: "add") {
+                editor = TimetableEditorRequest(weekday: selectedDay.timetableWeekday)
+            },
+        ]
     }
 
     private var optionsMenu: some View {
         BarMenu(icon: "moreH", label: "Opzioni dell'orario") {
-            MenuItem("Modifica orario", icon: "alignFree") { setEditing(true) }
-                .disabled(store.draft != nil)
-            MenuDivider()
-            MenuPicker(title: "Vista", selection: Binding(get: { mode }, set: { model.preferences.timetableMode = $0 }),
-                       options: TimetableMode.available.map { ($0, $0.title, $0.icon) })
             // Cambia ciò che mostra la lista: sta con la scelta della vista.
             MenuItem("Mostra le verifiche", icon: "test", checked: model.preferences.timetableShowsTests) {
                 model.preferences.timetableShowsTests.toggle()
             }
             MenuItem("Verifiche nascoste…", icon: "eyeOff") { showingHiddenTests = true }
             MenuDivider()
-            MenuItem("Nuovo intervallo", icon: "coffee") {
-                editor = TimetableEditorRequest(weekday: selectedDay.timetableWeekday, kind: .breakTime)
-            }
-            .disabled(store.draft != nil)
             MenuItem("Colora una giornata…", icon: "palette") {
                 paletteWeekday = PaletteWeekday(weekday: selectedDay.timetableWeekday)
             }
             .disabled(store.timetable.isEmpty || store.draft != nil)
-            MenuDivider()
-            MenuItem("Genera dalle lezioni registrate…", icon: "wand") { showingGenerator = true }
         }
     }
 
@@ -225,71 +245,54 @@ struct TimetableView: View {
 
     @ViewBuilder
     private var content: some View {
-        // La settimana galleggia sopra gli eventi (`CalendarHeader`): l'area degli eventi parte sotto
-        // la settimana ridotta e si sposta con lei (`WeekHeaderScroll.Shift`), senza scorrerle insieme.
-        ZStack(alignment: .top) {
+        // In alto la settimana, ferma, con sotto bozza, modifica e avvisi; poi il giorno, che scorre.
+        VStack(spacing: 0) {
+            // Alla stessa altezza della Dashboard: lì la barra di ricerca (Material) è 4 punti più
+            // alta del titolo grande.
+            CalendarBar(selectedDay: daySelection, pickDate: { pickingDate = true })
+                .padding(.top, ThemeStore.shared.liquidGlass ? 0 : 4)
+            floatingExtras
             switch mode {
             case .list, .calendar:
                 ScrollView {
-                    // Con il giorno accanto, già visibile mentre si scorre di lato.
-                    SwipeDayPages(state: weekScroll, day: selectedDay) { day, _ in
-                        TimetableDayList(content: TimetableDayContent(day: day, model: model), actions: actions)
+                    DayPage(swipe: swipe, day: selectedDay) { day in
+                        TimetableDayList(content: TimetableDayContent(day: day, model: model), actions: actions,
+                                         jump: day.isToday ? nil : { select(Date()) })
                             .equatable()
-                            .id(day)
-                            .transition(.opacity)
                             .pagePadding()
-                            .padding(.bottom, Theme.bottomInset)
+                            .padding(.top, 4)
+                            // Spazio per il pulsante d'azione flottante.
+                            .padding(.bottom, Theme.bottomInset + 56)
                     }
-                    .background { CalendarHeaderPan(state: weekScroll) }
+                    .background { DaySwipeGesture(swipe: swipe) }
                 }
-                .scrollClipDisabled()
                 .scrollDismissesKeyboard(.immediately)
-                .safeAreaPadding(.top, collapsedFloatingHeight)
-                .modifier(WeekHeaderScroll.Shift(state: weekScroll))
+                .transition(.fadeThrough)
             case .day:
+                if ThemeStore.shared.liquidGlass {
+                    // La barra di sistema segue il primo scorrimento che trova: questo, fermo, la
+                    // tiene con il titolo grande (la vista Giorno parte già scorsa alla prima ora).
+                    ScrollView { Color.clear.frame(height: 1) }
+                        .frame(height: 0)
+                        .scrollDisabled(true)
+                        .accessibilityHidden(true)
+                }
                 TimetableTimeline(days: [selectedDay], selectedDay: selectedDay, actions: actions, isEditing: isEditing,
-                                  topInset: collapsedFloatingHeight, headerState: weekScroll)
+                                  swipe: swipe)
+                    .transition(.fadeThrough)
             }
-
-            VStack(spacing: 10) {
-                WeekHeaderHost(selectedDay: daySelection, state: weekScroll)
-                floatingExtras
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { extrasHeight = $0 }
-            }
-            .padding(.horizontal)
-            .padding(.top, 4)
         }
-        .animation(Motion.spatial, value: selectedDay)
         .animation(Motion.spatial, value: isEditing)
         .animation(Motion.spatial, value: store.draft == nil)
         .themedBackground()
         .onAppear {
             // Scorrendo di lato si passa al giorno prima o dopo (non durante la modifica).
-            weekScroll.onSwipeDay = { direction in
-                guard !isEditing else { return }
-                // Il contenuto è fuori dallo schermo: si cambia senza dissolvenza.
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) { selectedDay = selectedDay.adding(days: direction).startOfDay }
+            swipe.onSwipe = { direction in
+                select(selectedDay.adding(days: direction))
             }
+            swipe.isEnabled = !isEditing
         }
-        .onChange(of: mode) { weekScroll.reset() }
-    }
-
-    /// La settimana con l'avanzamento dello stato, letto solo qui (cambia a ogni fotogramma).
-    private struct WeekHeaderHost: View {
-        @Binding var selectedDay: Date
-        let state: WeekHeaderScroll
-
-        var body: some View {
-            CalendarHeader(selectedDay: $selectedDay, style: .week, progress: state.progress, onExpand: state.open)
-        }
-    }
-
-    /// Inizio dell'area degli eventi: sotto la settimana ridotta e ciò che le galleggia sotto (bozza,
-    /// modifica, avvisi). Con la settimana intera l'area scende di `WeekHeaderScroll.range`.
-    private var collapsedFloatingHeight: CGFloat {
-        4 + CalendarHeader.collapsedHeight + (extrasHeight > 0 ? 10 + extrasHeight : 0) + 12
+        .onChange(of: isEditing) { _, editing in swipe.isEnabled = !editing }
     }
 
     /// Sotto la settimana: bozza in anteprima, modifica dell'orario e, nella vista Giorno, le
@@ -301,11 +304,9 @@ struct TimetableView: View {
             VStack(spacing: 10) {
                 if store.draft != nil {
                     banner
-                        .shadow(color: Theme.shadow.opacity(0.14), radius: 8, y: 3)
                 }
                 if isEditing {
                     TimetableEditBar()
-                        .shadow(color: Theme.shadow.opacity(0.14), radius: 8, y: 3)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 if !unmatched.isEmpty {
@@ -323,6 +324,8 @@ struct TimetableView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            .padding(.horizontal)
+            .padding(.bottom, 12)
         }
     }
 

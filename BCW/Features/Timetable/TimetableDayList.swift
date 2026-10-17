@@ -18,21 +18,58 @@ struct TimetableDayList: View {
     @Environment(AppModel.self) private var model
     let content: TimetableDayContent
     let actions: TimetableActions
+    /// "Oggi" accanto al giorno in grande, se il giorno è un altro (senza Liquid Glass).
+    var jump: (() -> Void)?
+
+    /// Righe dell'elenco: le lezioni di seguito (senza pause tra loro) formano una lista segmentata.
+    private enum Row: Identifiable {
+        case run([TimetableLayout.Cluster])
+        case pause(TimetableEntry)
+        case gap(start: Int, end: Int)
+
+        var id: String {
+            switch self {
+            case let .run(clusters): "r-\(clusters[0].id)"
+            case let .pause(entry): "b-\(entry.id)"
+            case let .gap(start, end): "g-\(start)-\(end)"
+            }
+        }
+    }
+
+    private var rows: [Row] {
+        // Qui gli intervalli sono righe tra gli eventi: dividono i gruppi che attraversano.
+        var rows: [Row] = []
+        for item in TimetableLayout(entries: content.entries, splitAtBreaks: true).listItems {
+            switch item {
+            case let .cluster(cluster):
+                if case let .run(clusters)? = rows.last, let last = clusters.last, cluster.start <= last.end {
+                    rows[rows.count - 1] = .run(clusters + [cluster])
+                } else {
+                    rows.append(.run([cluster]))
+                }
+            case let .pause(entry): rows.append(.pause(entry))
+            case let .gap(start, end): rows.append(.gap(start: start, end: end))
+            }
+        }
+        return rows
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             header
+            if content.day.isToday && !content.isDraft {
+                TimetableNowCard(content: content, actions: actions)
+                    .padding(.bottom, 6)
+            }
             if showsTests && !content.unmatchedTests.isEmpty {
                 unmatchedTests
             }
             if content.entries.isEmpty {
                 emptyState
             } else {
-                // Qui gli intervalli sono righe tra gli eventi: dividono i gruppi che attraversano.
-                let items = TimetableLayout(entries: content.entries, splitAtBreaks: true).listItems
-                ForEach(items) { item in
-                    switch item {
-                    case let .cluster(cluster): clusterView(cluster)
+                ForEach(rows) { row in
+                    switch row {
+                    case let .run(clusters): runView(clusters)
                     case let .pause(entry): BreakRow(entry: entry, day: content.day, isDraft: content.isDraft, actions: actions)
                     case let .gap(start, end): gapRow(start: start, end: end)
                     }
@@ -41,44 +78,90 @@ struct TimetableDayList: View {
         }
     }
 
+    /// Lezioni di seguito: angoli ampi solo in cima e in fondo, 2 punti tra l'una e l'altra.
+    private func runView(_ clusters: [TimetableLayout.Cluster]) -> some View {
+        VStack(spacing: 2) {
+            ForEach(Array(clusters.enumerated()), id: \.element.id) { index, cluster in
+                clusterView(cluster, corners: ListCellCorners(
+                    top: index == 0 ? Theme.radii.li : Theme.radii.xs,
+                    bottom: index == clusters.count - 1 ? Theme.radii.li : Theme.radii.xs))
+            }
+        }
+    }
+
+    /// Il giorno in grande, come nella Dashboard, con i chip di lezioni, orario e verifiche.
     private var header: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(content.day.longDay)
-                .font(.m3(22, weight: 500, rounded: true))
-                .foregroundStyle(Theme.ink)
-            if let summary {
-                Text(summary)
-                    .font(.m3(14))
-                    .foregroundStyle(Theme.secondaryInk)
+        let day = content.day
+        let relative = day.isToday || day.isTomorrow || day.isYesterday
+        return VStack(alignment: .leading, spacing: 12) {
+            // Come il giorno in grande della Dashboard.
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(relative ? day.relativeDayName : day.it("EEEE").capitalizedFirst)
+                        .font(.m3(40, weight: 500, rounded: true))
+                        .tracking(-0.5)
+                        .foregroundStyle(Theme.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(relative ? day.longDay : day.it("dMMMMyyyy"))
+                        .font(.m3(16, weight: 500))
+                        .foregroundStyle(Theme.secondaryInk)
+                }
+                Spacer(minLength: 0)
+                if let jump, !ThemeStore.shared.liquidGlass {
+                    Button(action: jump) {
+                        Label { Text("Oggi") } icon: { Icon("today") }
+                    }
+                    .buttonStyle(.m3(.tonal, size: .s))
+                }
+            }
+            let chips = statusChips
+            if !chips.isEmpty {
+                FlowLayout(spacing: 8) {
+                    ForEach(chips, id: \.text) { $0 }
+                }
             }
         }
         .padding(.horizontal, 4)
         .padding(.top, 4)
-        .padding(.bottom, 4)
+        .padding(.bottom, 8)
     }
 
-    private var summary: String? {
-        var parts: [String] = []
+    private var statusChips: [StatusChip] {
+        var chips: [StatusChip] = []
         let lessons = content.entries.filter { !$0.isBreak }.count
-        if lessons > 0 { parts.append(lessons == 1 ? "1 lezione" : "\(lessons) lezioni") }
-        if let span = content.layout.span { parts.append("\(TimeOfDay.string(span.start))–\(TimeOfDay.string(span.end))") }
+        if lessons > 0 {
+            chips.append(StatusChip(text: lessons == 1 ? "1 lezione" : "\(lessons) lezioni", icon: "bookText"))
+        }
+        if let span = content.layout.span {
+            chips.append(StatusChip(text: "\(TimeOfDay.string(span.start))–\(TimeOfDay.string(span.end))", icon: "schedule",
+                                    container: Theme.surfaceContainerHigh, foreground: Theme.onSurfaceVariant))
+        }
         let tests = content.badges.values.filter(\.isTest).count + content.unmatchedTests.count
-        if showsTests && tests > 0 { parts.append(tests == 1 ? "1 verifica" : "\(tests) verifiche") }
-        if model.calendarStatus(on: content.day)?.isHoliday == true { parts.append("Giorno di vacanza") }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        if showsTests && tests > 0 {
+            chips.append(StatusChip(text: tests == 1 ? "1 verifica" : "\(tests) verifiche", icon: "test",
+                                    container: Theme.tertiaryContainer, foreground: Theme.onTertiaryContainer))
+        }
+        if model.calendarStatus(on: content.day)?.isHoliday == true {
+            chips.append(StatusChip(text: "Vacanza", icon: "beach", container: Theme.goodContainer,
+                                    foreground: Theme.onGoodContainer))
+        }
+        return chips
     }
 
     @ViewBuilder
-    private func clusterView(_ cluster: TimetableLayout.Cluster) -> some View {
+    private func clusterView(_ cluster: TimetableLayout.Cluster, corners: ListCellCorners) -> some View {
         if cluster.columns == 1, let placed = cluster.blocks.first {
-            EntryBlockCard(block: placed.block, content: content, compact: false, actions: actions)
+            EntryBlockCard(block: placed.block, content: content, compact: false, corners: corners, actions: actions)
         } else {
             // Eventi contemporanei: uno accanto all'altro.
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: 2) {
                 ForEach(0..<cluster.columns, id: \.self) { column in
-                    VStack(spacing: 8) {
+                    VStack(spacing: 2) {
                         ForEach(cluster.blocks.filter { $0.column == column }) { placed in
-                            EntryBlockCard(block: placed.block, content: content, compact: true, actions: actions)
+                            EntryBlockCard(block: placed.block, content: content, compact: true, corners: corners,
+                                           actions: actions)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .top)
@@ -123,19 +206,11 @@ struct TimetableDayList: View {
     }
 
     private var unmatchedTests: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Icon("alertTriangle", size: 20)
-                Text("Verifiche senza lezione in orario")
-                    .font(.m3(14, weight: 650))
-            }
-            .foregroundStyle(Theme.secondaryInk)
+        ListGroup("Verifiche senza lezione in orario", background: Theme.fairContainer.opacity(0.45)) {
             ForEach(content.unmatchedTests) { test in
-                RegisterTestRow(test: test, isHidden: false, unmatched: true)
-                if test.id != content.unmatchedTests.last?.id { M3Divider() }
+                SegmentCell(padding: 14) { RegisterTestRow(test: test, isHidden: false, unmatched: true) }
             }
         }
-        .card()
     }
 }
 
@@ -153,9 +228,9 @@ struct EntryBlockCard: View {
     let content: TimetableDayContent
     /// Versione stretta per gli eventi affiancati.
     let compact: Bool
+    /// Angoli nella lista segmentata delle lezioni di seguito.
+    var corners = ListCellCorners(top: Theme.radii.li, bottom: Theme.radii.li)
     let actions: TimetableActions
-
-    private var radius: CGFloat { Theme.radii.li }
 
     /// Senza l'opzione "Mostra le verifiche" la lista non segna le verifiche (si vedono comunque
     /// nel dettaglio dell'evento e nella vista Giorno).
@@ -171,7 +246,8 @@ struct EntryBlockCard: View {
             ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                 let tint = Theme.timetableColor(entry, store: model.timetable)
                 EntryRow(entry: entry, badges: badges(for: entry), compact: compact,
-                         showsTitle: index == 0 || !compact, tint: tint, isDraft: content.isDraft)
+                         showsTitle: index == 0 || !compact, tint: tint, isDraft: content.isDraft,
+                         isToday: content.day.isToday)
                     .modifier(EntryFill(tint: tint, isDraft: content.isDraft))
                     .overlay(alignment: .top) {
                         if index > 0 {
@@ -189,10 +265,10 @@ struct EntryBlockCard: View {
                     .accessibilityAddTraits(.isButton)
             }
         }
-        .clipShape(.rect(cornerRadius: radius, style: .continuous))
+        .clipShape(corners.shape)
         .overlay {
             if content.isDraft {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                corners.shape
                     .strokeBorder(Theme.timetableColor(block.entries[0], store: model.timetable),
                                   style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
             }
@@ -208,8 +284,22 @@ struct EntryRow: View {
     var showsTitle = true
     let tint: Color
     var isDraft = false
+    /// L'evento è di oggi: mentre è in corso mostra quanto manca e una barra di avanzamento.
+    var isToday = false
 
     var body: some View {
+        if isToday && !isDraft {
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                let minute = TimeOfDay.nowMinutes(of: context.date)
+                row(ongoing: minute >= entry.start && minute < entry.end ? minute : nil)
+            }
+        } else {
+            row(ongoing: nil)
+        }
+    }
+
+    /// `ongoing`: minuto attuale, se l'evento è in corso.
+    private func row(ongoing: Int?) -> some View {
         HStack(alignment: .top, spacing: compact ? 8 : 12) {
             if !compact {
                 VStack(alignment: .trailing, spacing: 0) {
@@ -239,6 +329,9 @@ struct EntryRow: View {
                         .lineLimit(compact ? 3 : 2)
                         .minimumScaleFactor(compact ? 0.75 : 1)
                     Spacer(minLength: 0)
+                    if ongoing != nil && !compact {
+                        Pill(text: "In corso", color: tint, filled: true, bold: true)
+                    }
                     if badges.isTest && !compact {
                         Pill(text: "Verifica", color: Theme.primary, bold: true)
                     }
@@ -295,9 +388,13 @@ struct BreakRow: View {
                     .foregroundStyle(tint)
                 Text("\(entry.displayTitle) · \(entry.timeRange)")
                     .monospacedDigit()
-                    .foregroundStyle(Theme.secondaryInk)
+                    .foregroundStyle(Theme.onSurfaceVariant)
             }
-            .font(.m3(12))
+            .font(.m3(12, weight: 600))
+            .padding(.leading, 10)
+            .padding(.trailing, 12)
+            .frame(height: 30)
+            .background(tint.mix(Theme.surfaceContainerHigh, 0.2), in: .capsule)
             .fixedSize()
             wave
         }

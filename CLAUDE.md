@@ -18,7 +18,7 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   affiancati, intervalli in primo piano, colori e
   palette (anche su una serie di eventi di una giornata), bozza generata dalle lezioni con anteprima tratteggiata,
   backup esportabile/importabile (due conferme) e iCloud segnato come Work in progress nelle Impostazioni.
-  "Modifica orario" (menu in alto a destra) apre la modifica grafica, sempre nella vista Giorno: spostare e
+  "Modifica orario" (menu del pulsante d'azione flottante) apre la modifica grafica, sempre nella vista Giorno: spostare e
   ridimensionare gli eventi, doppio tocco per crearli, tocco per l'editor. Lì si sceglie l'allineamento, che vale
   per tutto l'orario (non solo per il trascinamento): automatico = eventi da 30/60 minuti alla mezz'ora (anche gli
   orari inseriti a mano), libero = qualsiasi orario. Passando a automatico con eventi non allineati serve una
@@ -30,6 +30,16 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (angoli continui); feedback aptico su iOS. In Impostazioni › Aspetto c'è "Liquid Glass: sì/no": con "no" tutto è
   come sul web; con "sì" barra di navigazione, barra delle schede e pulsanti dei menu sono quelli di sistema in vetro.
   L'utente gradisce funzioni extra utili.
+- **UX** (scelta dell'utente, ottobre 2026): non più quella dell'app originale ma quella di una vera app M3 Expressive,
+  con le stesse funzioni e le stesse quattro schede (Dashboard, Orario, Voti, Tu). Senza Liquid Glass la ricerca è
+  una barra in cima alla Dashboard (con vista e avatar dell'account) che si allarga nella pagina di ricerca; con
+  Liquid Glass resta la scheda Cerca di sistema. Giorno in grande con chip di stato (Dashboard e Orario), sezioni
+  segmentate, "Nei prossimi giorni" come la vista Programma di Google Calendar, menu del FAB nell'Orario, barra degli
+  strumenti flottante vivace in modifica (al posto della barra delle schede), media in primo piano con i periodi in un
+  gruppo di pulsanti collegati e schede Material nei Voti, profilo centrato e statistiche collegate in Tu (le
+  Impostazioni si aprono solo dall'ingranaggio in alto). Calendari come il selettore della data di Material 3,
+  settimana dell'Orario come gruppo di pulsanti. Elenchi delle pagine secondarie in liste segmentate (niente card con
+  separatori).
 
 ## Stato attuale
 - Il progetto compila e gira sul simulatore. `xcode-select` punta ai Command Line Tools, quindi per compilare da
@@ -45,7 +55,11 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `-BCWTimetableSheet generator|hidden` apre il generatore (con `-BCWGeneratorBreaks N` intervalli) o le verifiche
   nascoste, `-BCWTimetableDraft YES` mostra la bozza in anteprima, `-timetableMode list|day` sceglie la vista,
   `-BCWTimetableEditing YES` apre la modifica, `-BCWTimetableDay N` apre l'orario N giorni dopo oggi (i valori negativi
-  non passano come argomenti), `-BCWOpenSubject YES`, `-BCWDaysAgo N`, `-BCWKeychainService nome` (Portachiavi vuoto).
+  non passano come argomenti), `-BCWOpenSubject YES`, `-BCWDaysAgo N`, `-BCWKeychainService nome` (Portachiavi vuoto),
+  `-BCWNowMinute N` (l'orario fa come se fosse il minuto N del giorno, per l'evento "In corso", `TimeOfDay.nowMinutes`),
+  `-BCWOpenPage nome` apre una pagina di Tu (bacheca, note, scrutini, anni, assenze, materiale, lezioni, agenda,
+  materie, libri, calendario, account, impostazioni o `impostazioni-<pane>`, es. `impostazioni-appearance`;
+  `cambia-account` apre il popup degli account).
 - Autotest dell'orario (solo DEBUG): `-BCWTimetableSelfTest YES` prova backup (esportazione, importazione, file,
   rifiuto di file non validi, riapertura da disco), modifiche estese agli eventi con lo stesso nome, generazione e
   passaggio dall'allineamento libero all'automatico;
@@ -59,8 +73,13 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - `BCW.xcodeproj` usa **cartelle sincronizzate** (objectVersion 77): i file in `BCW/` entrano nel target da soli.
 - Un solo target iOS (iPhone e iPad; `SUPPORTED_PLATFORMS = iphoneos iphonesimulator`).
 - `Utilities/Platform.swift`: piccoli adattatori (`Platform.copy`, `screenTitle`, `pagePadding`, `CardGrid`, `ChipRow`,
-  `PlatformNavigationStack`, `localSearchable`, `CenteredCircle`, `UnobservedValue`).
-- iOS, ricerca: `.searchable` sta dentro la scheda Cerca (`SearchView`), con `Tab(role: .search)`. Con l'SDK di
+  `PlatformNavigationStack`, `localSearchable`, `UnobservedValue`).
+- iOS, ricerca senza Liquid Glass: la barra delle schede Material ha quattro destinazioni e la ricerca è
+  `SearchAppBar` in cima alla Dashboard (`DashboardChrome`): toccandola la pillola resta sospesa e diventa il campo
+  (freccia indietro, X), e `SearchView(embedded: true)` prende il posto della pagina con `.fadeThrough`; la barra delle
+  schede si nasconde (`TabChrome.hidesBar`, anche per la tastiera). Niente `navigationTransition(.zoom)`: lasciava
+  bande nere ai lati della pagina. Passando a Material con la scheda Cerca aperta si torna alla Dashboard.
+- iOS, ricerca con Liquid Glass: `.searchable` sta dentro la scheda Cerca (`SearchView`), con `Tab(role: .search)`. Con l'SDK di
   iOS 27 la scheda finirebbe dentro la barra e il campo in alto: da iOS 27 in poi `MainTabView` applica
   `.tabViewSearchActivation(.searchTabSelection)` (verificato: torna il pulsante separato con il campo in basso;
   selezionando la scheda si apre subito la tastiera e la X riporta alla scheda precedente). `.searchable` sulla
@@ -76,7 +95,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   compresso, e scorrere ancora da codice dopo o insieme al sistema dà uno scatto (verificato, anche con `ScrollPosition`):
   le pagine principali delle schede vanno tenute in `.inlineLarge`.
 - Account: su iOS il popup `AccountSwitcherSheet` (dal basso, in vetro, rilevamenti medio/grande) mostra la stessa
-  `AccountsSection` della pagina Account; si apre dal pulsante in alto a destra in Tu e tenendo premuta la scheda Tu, e
+  `AccountsSection` della pagina Account; si apre dall'avatar nella barra di ricerca della Dashboard, dal pulsante
+  "Cambia"/"Aggiungi" del profilo in Tu e tenendo premuta la scheda Tu, e
   si chiude da solo quando comincia il cambio. La demo non è un
   account: non entra nel conteggio (icona del pulsante, testi), si apre con "Prova la demo" anche con un account
   collegato (`activeAccountID` resta impostato e uscendo si torna a quello).
@@ -145,42 +165,39 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Verifiche riconosciute con euristica sul testo (`AgendaEvent.kind`), Classeviva non ha un codice dedicato.
 
 ## Layout e comportamenti
-- Orario: solo viste Lista e Giorno (`TimetableMode.available`; il mese c'è nella Dashboard).
-- Calendario mobile su iPhone (`Components/CalendarHeader.swift`), uguale in Orario (Lista e Giorno) e Dashboard
-  (Lista = settimana, Calendario = mese): `CalendarHeader` galleggia sopra l'area che scorre in uno `ZStack` e non fa
-  parte dello scorrimento. L'area parte sotto il calendario ridotto (`safeAreaPadding` costante) e scende di `range`
-  (intero − ridotto; nel mese dipende dalle settimane) con `.offset` (`WeekHeaderScroll.Shift`, solo disegno).
-  Il passaggio non usa lo scorrimento di iOS: `CalendarHeaderPan` aggiunge allo `UIScrollView` (trovato dallo sfondo del
-  contenuto) un pan verticale, che parte sempre da intero (l'area è ferma, `scrollDisabled`; in Dashboard
-  `expandedScrolls` lascia allo scorrimento i gesti verso il basso, per aggiornare), da ridotto solo verso il basso con
-  l'area in cima e sempre durante uno scatto; e uno orizzontale per il giorno prima/dopo (`onSwipeDay`, solo da
-  fermo): il giorno accanto (`SwipeDayPages`, nel contenuto dello scorrimento, che ha `scrollClipDisabled`; le pagine hanno un'identità propria e un giorno fisso, i giorni accanto si costruiscono in anticipo da fermi e al rilascio le pagine si scambiano di ruolo senza essere ricostruite: costruire una pagina della Dashboard costa ~80 ms)
-  segue il dito già durante il gesto. Al rilascio il giorno cambia subito (vibrazione e dissolvenza nel calendario:
-  `CalendarHeader` riattiva l'animazione con `.transaction(value:)`) e i due contenuti si scambiano di ruolo nella stessa
-  posizione, senza animazioni (il nuovo diventa quello principale, il vecchio quello accanto); poi scorrono fino al
-  giorno nuovo. Un gesto durante lo scorrimento lo riprende da dov'è. "Oggi"/"Domani" nella barra
-  seguono il giorno con uno stato a parte animato (`showsToday`, `showsTomorrow`), perché lo scambio è senza animazioni.
-  La vibrazione del punto di resistenza scatta anche quando lo supera solo la velocità del rilascio. Lo scorrimento li aspetta (`shouldBeRequiredToFailBy`); misure nella finestra; la traslazione
-  riparte da zero quando il gesto è riconosciuto (altrimenti il contenuto saltava dei punti di riconoscimento).
-  Il contenuto segue il dito con una curva di resistenza (`resisted`): prima del punto (metà del tratto) resta sempre
-  più indietro, superato lo rincorre (`catchUp`) con una vibrazione ed è tirato verso l'altra posizione. Un gesto che
-  riprende uno scatto a metà segue il dito senza curva. In un gesto si arriva al massimo a ridotto. Lasciando il dito
-  decide il lato del punto (con la velocità) e una molla calcolata a ogni fotogramma (`CADisplayLink`, così un gesto
-  la riprende dal valore visibile) porta alla posizione senza superarla. Lasciare allo scorrimento un gesto durante
-  la molla lo faceva tremare (si muove con l'area): non farlo. L'avanzamento si legge solo negli host del calendario
-  e in `Shift`. Tutto è tagliato solo dal bordo della card (`scrollClipDisabled`, niente `clipped` interni); da ridotto
-  le griglie invisibili non devono prendere i tocchi (`allowsHitTesting`), altrimenti rubano i gesti all'area.
-  Il mese si riduce alla settimana del giorno scelto: le altre settimane salgono e svaniscono, i giorni dei mesi
-  accanto che la completano compaiono (`MonthMorphCell`), e riducendo si torna al mese del giorno scelto.
-  `CalendarHeaderPan` cerca lo scorrimento a ogni spostamento nella gerarchia (`Anchor`, `didMoveToWindow`/
-  `didMoveToSuperview`), non solo in `updateUIView`: quando la pagina viene ricostruita (es. cambiando Liquid Glass)
-  i gesti restavano sul vecchio scorrimento, con l'Orario bloccato (`scrollDisabled` da intero) e l'intestazione
-  della Dashboard ferma. Un gesto tolto a metà viene chiuso a mano (`detach`).
+- Orario: solo viste Lista e Giorno (`TimetableMode.available`; il mese c'è nella Dashboard). Nella Lista: giorno in
+  grande con chip e "Oggi" accanto (come la Dashboard), `TimetableNowCard` per oggi (lezione in corso con avanzamento e la
+  successiva, oppure la prossima), lezioni di seguito in una lista segmentata (`Row.run`), intervalli in una pillola.
+  Vista Giorno: blocchi pieni nella tinta, ore di un gruppo separate da 2 punti con angoli piccoli; lo scorrimento
+  iniziale va fatto dopo la prima impaginazione (`task` con una breve attesa). Lista e Giorno si scambiano con
+  `.fadeThrough`.
+- Settimana e mese di Dashboard e Orario (`Components/CalendarBar.swift`): gruppo di pulsanti di M3 Expressive, fermo
+  sopra l'area che scorre (in un `VStack`, non sovrapposto). Settimana: il giorno scelto pieno, tutto arrotondato e
+  più largo (`WeightedRow`); mese (vista Calendario della Dashboard): gli stessi pulsanti più bassi in griglia. Il
+  passaggio settimana ↔ mese è una molla spaziale (la settimana scelta resta, le altre compaiono); nella Dashboard il
+  mese si chiude da solo scorrendo (oltre 40 punti) e si riapre in cima, a meno che lo si chiuda con il pulsante.
+  Frecce e scorrimento di lato sulla barra cambiano settimana (o mese); il titolo apre `M3DatePickerSheet`.
+  La settimana sta alla stessa altezza nelle due schede (verificato al pixel): con Material la barra di ricerca della
+  Dashboard è 4 punti più alta del titolo grande dell'Orario, che per questo ha 4 punti in più sopra la barra.
+- Vista Giorno dell'Orario con Liquid Glass: la barra di sistema segue il primo scorrimento che trova e la vista parte
+  già scorsa alla prima ora, quindi il titolo diventava piccolo; uno `ScrollView` vuoto e fermo prima della vista lo
+  tiene grande.
+- Lezioni (Dashboard e Registro delle lezioni): `refreshAll` svuota le lezioni già scaricate, quindi chi le mostra
+  le richiede di nuovo anche quando cambia `lastUpdated` (prima il Registro restava su "Caricamento…").
+- Cambio di giorno (`Components/DayPager.swift`): `DaySwipe` + `DayPage` + `DaySwipeGesture`. Transizione ad asse
+  condiviso X di Material 3 (`.sharedAxisX`). `DaySwipe.go(verso)` fissa prima il verso e cambia il giorno al giro
+  dopo: SwiftUI prende la transizione della pagina che esce dal suo ultimo aggiornamento. Lo spostamento del dito sta
+  sulla pagina (dentro l'`id`), non sul contenitore: così al rilascio la pagina vecchia esce da dove l'ha lasciata il
+  dito e quella nuova entra dal lato opposto (sul contenitore entrava dalla parte sbagliata). Il gesto è un pan di UIKit
+  aggiunto allo `UIScrollView` (trovato da una vista `Anchor` sullo sfondo del contenuto, a ogni spostamento nella
+  gerarchia), che lo scorrimento aspetta (`shouldBeRequiredToFailBy`) e che non parte sopra elementi che scorrono di
+  lato. Tutte le selezioni di un giorno (barra, selettore, "Domani"/"Oggi") passano da `select`, che usa `go`.
   Le registrazioni del simulatore salvano fotogrammi solo quando lo schermo cambia (le pause spariscono): per misurare
   un'animazione stampare i valori con l'ora (`CACurrentMediaTime`).
 - Impostazioni: elenco di sottopagine (Generale, Aspetto, Voti, Dashboard, Orario, Notifiche, Account).
-- Dashboard, "Nei prossimi giorni": ogni giorno è una card comprimibile (`UpcomingDayCard`, intestazione = comprimi).
-  Toccando il resto della card si va a quel giorno, ma i tocchi propri vincono: la casella del compito e il testo
+- Dashboard, "Nei prossimi giorni": ogni giorno (`UpcomingDayCard`) ha a sinistra la data (`DateBadge`, tocco = vai al
+  giorno) e a destra il nome, che comprime, e gli elementi in una lista segmentata.
+  Toccando un elemento si va a quel giorno, ma i tocchi propri vincono: la casella del compito e il testo
   tagliato di una riga (che si apre); `AgendaEventRow.onPlainTap` misura se il testo è tagliato.
 - Notifiche delle novità (`Store/NewsNotifications.swift`): dopo ogni `refreshAll` confronta voti, comunicazioni,
   note, assenze e compiti/verifiche futuri con gli id già visti per account (`UserDefaults`), e notifica solo i tipi
@@ -194,14 +211,7 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (`Timetable.testRules`, `TestHidingRules`: docenti, materie, giorni, periodi, parole, senza lezione in orario);
   mostrandone a mano una nascosta da una regola finisce in `shownTests` (eccezione), nascondendola di nuovo l'eccezione
   si toglie. Il motivo viene da `TimetableStore.hiddenReason(for:unmatched:)`; la Dashboard non ne è toccata.
-- Orario, barra: niente frecce per cambiare giorno; "Oggi" compare solo se il giorno scelto non è oggi,
-  come "Domani" nella Dashboard.
-- Elenchi di card in `CardGrid` (una colonna); filtri in `ChipRow` (scorrono in orizzontale).
-- Dashboard: "Nei prossimi giorni" cambia identità (`upcomingGeneration`) in `select(_:)`, insieme al giorno.
-  L'identità non deve dipendere dallo stato compresso: comprimere sostituirebbe la sezione intera e l'intestazione
-  scenderebbe e risalirebbe. La transizione usa lo spostamento del giorno scelto (`upcomingTransition`,
-  `dayDetailHeight`): `.move(edge:)` sposta di tutta l'altezza della vista, troppo con la lista aperta e troppo poco
-  con la sola intestazione.
+- Elenchi in liste segmentate (`ListGroup`); filtri in `ChipRow` (scorrono in orizzontale).
 - Rotelle in pulsanti e righe: `InlineProgress`.
 
 ## Prestazioni
@@ -212,14 +222,11 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `DayDetail.Content` e `SearchView.Results`), mai in proprietà calcolate richiamate più volte o dentro le righe.
 - Niente `@State` con misure che cambiano di continuo (`onGeometryChange` di un `CGFloat`): ricalcola la pagina a ogni
   fotogramma; misurare solo il passaggio che serve (`Bool`).
-- Misure che cambiano a ogni fotogramma e servono solo in certi momenti (es. `dayDetailHeight`) vanno in
+- Misure che cambiano a ogni fotogramma e servono solo in certi momenti vanno in
   `UnobservedValue`, non in uno `@State` osservato: altrimenti l'intera pagina si ricalcola a ogni fotogramma.
 - `.card()` mette l'ombra sulla sola forma di sfondo: un'ombra sull'intera vista va ricalcolata dal contenuto.
-- Su iPhone `-BCWSwipeBench N` / `-BCWHeaderBench N` (solo DEBUG) simulano scorrimenti laterali o riduzioni del calendario
-  e stampano i fotogrammi lenti (`BCW-BENCH`); `-BCWTab timetable` apre l'Orario. Le viste con chiusure tra i parametri
-  (righe dell'agenda, giorni successivi, giorni dell'orario) sono `Equatable` e usate con `.equatable()`: altrimenti ogni
-  aggiornamento della pagina le ricalcolava tutte. Nel mese che si riduce i giorni si spostano con `offset` invece di
-  cambiare il margine (che faceva rimisurare tutte le pagine dei mesi a ogni fotogramma).
+- Le viste con chiusure tra i parametri (righe dell'agenda, giorni successivi, giorni dell'orario) sono `Equatable` e
+  usate con `.equatable()`: altrimenti ogni aggiornamento della pagina le ricalcolava tutte.
 - Per misurare: build Release per il simulatore con `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG`, un aggancio temporaneo
   che ripete l'interazione e `sample <pid> 8` sul processo del simulatore, poi sommare i campioni per funzione dell'app.
 
@@ -237,9 +244,27 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `ToggleRow`, `SelectRow`, `NavigationRow`, `FormField`/`FormFieldValue` per i campi con l'etichetta sopra come nei
   fogli del web…), `Overlays.swift` (`.overlayHost()`: menu `AppMenu`/`MenuItem`,
   `.m3Dialog`, toast; con Liquid Glass i menu sono `Menu` di sistema), `Page.swift`.
+- Selettore della data (`DatePicker.swift`, `M3DatePickerSheet`): modale di Material 3 con la data in grande,
+  griglia del mese (scorrendo di lato si cambia mese) e griglia di mesi e anni; Oggi, Annulla, OK. Lo apre anche
+  `DateField` (pillola con la data, `Controls.swift`; riporta nel suo `range` la data scelta). Niente `DatePicker` di
+  sistema nascosto sopra i campi: si intravedeva il suo testo.
+- Componenti propri di M3 Expressive (`Expressive.swift`): `SearchAppBar`, `AccountAvatarButton`, `FABMenu` (con
+  Liquid Glass `GlassFABMenu`: pulsante di vetro tinto di 60 punti, come il pulsante di ricerca della barra delle
+  schede e allineato sopra di esso, da cui escono le voci come pillole di vetro con `glassEffectID` nello stesso
+  `GlassEffectContainer`. Non un `Menu` di sistema: il trascinamento apriva il menu invece di allungare il pulsante e,
+  chiudendosi, il vetro scuro del menu rientrava senza tinta (nero fino alla fine). Né `glassEffect(.interactive())`
+  né `.buttonStyle(.glassProminent)` si allungano trascinando in SwiftUI (crescono soltanto): l'allungamento verso il
+  dito è fatto a mano (capsula frenata con `tanh`, ritorno con `Motion.spatialFast`). Non può fondersi con la barra
+  delle schede di sistema, il cui vetro non sta nello stesso `GlassEffectContainer` delle viste dell'app), `FloatingToolbar` (vivace = modalità temporanea; con Liquid Glass
+  in vetro) con `ToolbarIconButton`/`ToolbarTextButton`, `PrimaryTabs`, `ConnectedButtonGroup` (etichette libere),
+  `SegmentedSection` (intestazione comprimibile + `ListGroup`) con `SegmentCell`, `StatusChip`, `DateBadge`, `TabChrome`
+  (una pagina nasconde la barra delle schede: modifica dell'orario, ricerca; va rimesso a `false` in `onDisappear`).
+  Linee guida M3: la barra degli strumenti non va insieme alla barra di navigazione, per questo in modifica la barra
+  delle schede sparisce; il menu del FAB ha 2–6 voci.
 - Pagine: `pageChrome(title, …) { azioni }`. Con Liquid Glass usa titolo e barra di sistema (`.inlineLarge` per le
   pagine principali, `isRootPage`); con Material nasconde la barra e mette `TopAppBar` + titolo grande nel contenuto.
-  Fogli: `sheetChrome` + `.m3Sheet()`. `MainTabView`: con Material la `M3NavigationBar` è sovrapposta (TabView e
+  Fogli: `sheetChrome` + `.m3Sheet()`, con gli angoli del sistema: `presentationCornerRadius` vale anche per gli
+  angoli in basso, che così non seguivano più la curva dello schermo. `MainTabView`: con Material la `M3NavigationBar` è sovrapposta (TabView e
   NavigationStack non propagano `safeAreaInset`), lo spazio in fondo arriva con `bottomBarInset`.
 - `ListGroup`: prima e ultima voce con angoli ampi (`li`), quelle in mezzo stretti (`xs`). Gli angoli vanno passati
   anche direttamente allo sfondo della voce: un modificatore applicato a un `Subview` fuori da `.environment` legge
@@ -258,14 +283,19 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Sul simulatore i tocchi istantanei spesso non premono i pulsanti SwiftUI: usare `touch_path` da 120–150 ms.
 
 ## Convenzioni
-- Testi UI e commenti in italiano. Stile: card, `Eyebrow`, `FilterChip`, `StatTile`, `GradeBadge`, `AverageRing`,
+- Testi UI e commenti in italiano. Stile: liste segmentate, `StatusChip`, `FilterChip`, `StatTile` (anche in griglie
+  collegate con `corners`), `GradeBadge`, `AverageRing`,
   `Pill` (stati su una riga, con versione abbreviata).
-- Sezioni comprimibili: sempre `CollapsibleContent` (scorre ritagliato con sfumatura in alto) e intestazione con
-  `HeaderButtonStyle` (niente attenuazione alla pressione), dentro `withAnimation(.snappy)`.
-  Da chiusa (animazione finita) il contenuto non viene né costruito né disegnato (`CollapseBody`, vista animabile che
-  chiama la closure solo quando serve): non costa nulla e, se cambiasse mentre è nascosto, le sue animazioni non si
-  vedrebbero sotto l'intestazione, dove la maschera si allarga per le ombre. Lo stato interno del contenuto (es. una
-  riga espansa) si azzera chiudendo la sezione.
+- Animazioni: solo le molle di `Motion` (valori di `MotionScheme` di M3 Expressive) e le transizioni di Material 3 in
+  `Motion.swift`: `.sharedAxisX/Y` (elementi allo stesso livello: giorni, schede dei Voti), `.fadeThrough` (contenuti
+  senza relazione: ricerca, Lista/Giorno), `.expand` (sezioni). Niente curve o molle fatte a mano.
+- Sezioni comprimibili: sempre `CollapsibleContent` (espansione M3: il contenitore si allunga con la molla, il
+  contenuto compare in dissolvenza ed è ritagliato) e intestazione con `HeaderButtonStyle`, dentro
+  `withAnimation(Motion.spatial)`. Da chiusa il contenuto non viene costruito; lo stato interno (es. una riga espansa)
+  si azzera chiudendo la sezione.
+- Titoli senza Liquid Glass: le pagine principali delle schede hanno il titolo grande (34 punti) nella riga dei
+  pulsanti, come `.inlineLarge` con Liquid Glass (`TopAppBar(large:)`, in `pageChrome` quando non c'è la freccia
+  indietro). Dashboard e Orario hanno inoltre il giorno in grande sotto la settimana.
 - Pagine lunghe (Tu, Account, Impostazioni): margine in fondo `Theme.bottomInset`. iOS rimpicciolisce la tab bar
   scorrendo solo se la pagina è abbastanza lunga (verificato: Tu con 24 punti non lo faceva, con 120 sì).
 - README: niente trattini lunghi, niente grassetto/corsivo nelle parti aggiunte, tabelle solo se indispensabili.

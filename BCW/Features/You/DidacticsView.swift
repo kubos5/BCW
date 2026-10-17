@@ -80,7 +80,8 @@ struct DidacticsView: View {
                             }
                             .padding(.leading, 4)
 
-                            CardGrid(minWidth: 360, spacing: 12) {
+                            // Le cartelle di un docente formano una lista segmentata.
+                            ListGroup {
                                 ForEach(list) { folder in
                                     folderCard(folder, teacher: teacher)
                                 }
@@ -195,8 +196,6 @@ struct DidacticsView: View {
                 }
             }
         }
-        .background(Theme.card)
-        .clipShape(.rect(cornerRadius: Theme.radii.li, style: .continuous))
     }
 
     private func open(_ content: DidacticContent) async {

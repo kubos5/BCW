@@ -47,17 +47,13 @@ struct AgendaListView: View {
                     EmptyState("Niente da mostrare", icon: "checklist", description: "Nessun elemento corrisponde ai filtri.")
                 }
 
-                CardGrid(minWidth: 380, spacing: 12) {
+                LazyVStack(alignment: .leading, spacing: 20) {
                     ForEach(grouped, id: \.0) { day, events in
-                        VStack(alignment: .leading, spacing: 12) {
-                            Eyebrow(text: day.relativeDayName, color: Theme.primary)
-                            let lastID = events.last?.id
+                        ListGroup(day.relativeDayName) {
                             ForEach(events) { event in
-                                AgendaEventRow(event: event)
-                                if event.id != lastID { M3Divider() }
+                                SegmentCell { AgendaEventRow(event: event) }
                             }
                         }
-                        .card()
                     }
                 }
             }

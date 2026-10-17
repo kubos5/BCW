@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Schede dell'app su iPhone e iPad. Con Liquid Glass è la `TabView` di sistema; altrimenti la
-/// barra di navigazione di Material 3 (64 punti, `surface-container`, indicatore a pillola
-/// 56 × 32 dietro l'icona della scheda aperta), come la versione web.
+/// Schede dell'app su iPhone e iPad. Con Liquid Glass è la `TabView` di sistema (con la scheda
+/// Cerca); altrimenti la barra di navigazione di Material 3 con quattro destinazioni (64 punti,
+/// `surface-container`, indicatore a pillola 56 × 32 dietro l'icona della scheda aperta) e la
+/// ricerca nella barra in cima alla Dashboard.
 struct MainTabView: View {
     @Environment(AppModel.self) private var model
     @State private var selection: AppTab = MainTabView.initialTab
@@ -10,6 +11,8 @@ struct MainTabView: View {
     /// Incrementato toccando di nuovo la scheda già aperta.
     @State private var reselections: [AppTab: Int] = [:]
     @State private var switchingAccount = false
+    /// Una pagina può nascondere la barra delle schede (es. la modifica dell'orario).
+    @State private var chrome = TabChrome()
 
     enum AppTab: Hashable, CaseIterable {
         case dashboard, timetable, grades, you, search
@@ -96,19 +99,23 @@ struct MainTabView: View {
                 tabLabel(.search)
             }
         }
+        .environment(\.tabChrome, chrome)
         .modifier(SeparateSearchTab())
         .tabBarMinimizeBehavior(glass ? .onScrollDown : .never)
         // La barra sta sopra le schede: lo spazio che occupa lo riserva ogni pagina (`pageChrome`),
         // perché né la `TabView` né le pile di navigazione passano il margine di un `safeAreaInset`.
         .overlay(alignment: .bottom) {
-            if !glass {
+            if !glass && !chrome.hidesBar {
                 M3NavigationBar(selection: selection, badge: model.unreadNoticesCount) { tab in
                     tabSelection.wrappedValue = tab
                 } longPress: { tab in
                     if tab == .you { switchingAccount = true }
                 }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .ignoresSafeArea(.keyboard)
             }
         }
+        .animation(Motion.spatial, value: chrome.hidesBar)
         // Tenendo premuta la scheda Tu si cambia account al volo.
         .background {
             if glass {
@@ -117,6 +124,10 @@ struct MainTabView: View {
         }
         .sheet(isPresented: $switchingAccount) {
             AccountSwitcherSheet()
+        }
+        // Senza Liquid Glass la scheda Cerca non è nella barra: si torna alla Dashboard.
+        .onChange(of: glass) { _, glass in
+            if !glass && selection == .search { selection = .dashboard }
         }
     }
 
@@ -144,14 +155,16 @@ struct MainTabView: View {
 /// pagine ricevono il nuovo tocco sulla scheda aperta per tornare in cima.
 private struct MaterialTab: ViewModifier {
     let reselection: Int
+    @Environment(\.tabChrome) private var chrome
 
     func body(content: Content) -> some View {
         let glass = ThemeStore.shared.liquidGlass
+        let hidden = chrome?.hidesBar ?? false
         content
             .environment(\.tabReselection, glass ? 0 : reselection)
-            .toolbarVisibility(glass ? .automatic : .hidden, for: .tabBar)
+            .toolbarVisibility(glass && !hidden ? .automatic : .hidden, for: .tabBar)
             // Le pagine (dentro le loro pile di navigazione) lasciano lo spazio della barra.
-            .environment(\.bottomBarInset, glass ? 0 : M3NavigationBar.height)
+            .environment(\.bottomBarInset, glass || hidden ? 0 : M3NavigationBar.height)
     }
 }
 
@@ -165,7 +178,8 @@ private struct M3NavigationBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(MainTabView.AppTab.allCases, id: \.self) { tab in
+            // La ricerca sta nella barra in cima alla Dashboard, come nelle app Google.
+            ForEach(MainTabView.AppTab.allCases.filter { $0 != .search }, id: \.self) { tab in
                 NavigationBarItem(tab: tab, selected: tab == selection, badge: tab == .you ? badge : 0,
                                   select: { select(tab) }, longPress: { longPress(tab) })
             }

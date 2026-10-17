@@ -62,16 +62,6 @@ struct CardGrid<Content: View>: View {
     }
 }
 
-/// Cerchio centrato nel riquadro, di diametro fisso: area cliccabile dei giorni del calendario.
-struct CenteredCircle: Shape {
-    var diameter: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        Path(ellipseIn: CGRect(x: rect.midX - diameter / 2, y: rect.midY - diameter / 2,
-                               width: diameter, height: diameter))
-    }
-}
-
 /// Ricerca dentro una singola pagina (bacheca, agenda, materiale).
 extension View {
     func localSearchable(text: Binding<String>, prompt: String) -> some View {

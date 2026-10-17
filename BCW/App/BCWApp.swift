@@ -55,7 +55,7 @@ struct RootView: View {
                     .zIndex(1)
             }
         }
-        .animation(.smooth, value: model.phase)
+        .animation(Motion.effects, value: model.phase)
         .appTheme()
         .overlayHost()
         .task {

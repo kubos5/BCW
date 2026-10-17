@@ -7,6 +7,9 @@ struct SearchView: View {
     @Environment(AppModel.self) private var model
     /// Testo cercato (appartiene a chi mostra la pagina).
     @Binding var query: String
+    /// Aperta dalla barra di ricerca della Dashboard (senza Liquid Glass): sta nella pila della
+    /// Dashboard e il campo è nella barra in alto.
+    var embedded = false
 
     private var trimmed: String { query.trimmingCharacters(in: .whitespaces) }
     @FocusState private var fieldFocused: Bool
@@ -44,176 +47,177 @@ struct SearchView: View {
     }
 
     var body: some View {
-        PlatformNavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if !ThemeStore.shared.liquidGlass {
-                        PageLargeTitle()
-                            .padding(.bottom, -4)
-                        M3SearchBar(text: $query, prompt: Self.prompt, focus: $fieldFocused)
-                            .padding(.bottom, 4)
-                    }
-                    if trimmed.isEmpty {
-                        suggestions
-                    } else {
-                        let results = Results(model: model, query: trimmed)
-                        if results.isEmpty {
-                            EmptyState("Nessun risultato per \"\(trimmed)\"", icon: "search",
-                                       description: "Controlla l'ortografia o prova con un'altra ricerca.")
-                        } else {
-                            CardGrid(minWidth: 400, spacing: 12) {
-                                resultCards(results)
-                            }
-                        }
-                    }
-                }
-                .pagePadding()
-                .padding(.bottom, 32)
-            }
-            .tracksPageScroll()
-            .scrollDismissesKeyboard(.immediately)
-            .themedBackground()
-            .pageChrome("Cerca")
-            .modifier(SystemSearch(query: $query))
-            .task { if model.didactics.isEmpty { await model.loadDidactics() } }
+        if embedded {
+            page
+        } else {
+            PlatformNavigationStack { page }
         }
     }
 
+    private var page: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if !ThemeStore.shared.liquidGlass && !embedded {
+                    PageLargeTitle()
+                        .padding(.bottom, -4)
+                    M3SearchBar(text: $query, prompt: Self.prompt, focus: $fieldFocused)
+                        .padding(.bottom, 4)
+                }
+                if trimmed.isEmpty {
+                    suggestions
+                } else {
+                    let results = Results(model: model, query: trimmed)
+                    if results.isEmpty {
+                        EmptyState("Nessun risultato per \"\(trimmed)\"", icon: "search",
+                                   description: "Controlla l'ortografia o prova con un'altra ricerca.")
+                    } else {
+                        resultGroups(results)
+                    }
+                }
+            }
+            .pagePadding()
+            .padding(.top, embedded ? 4 : 0)
+            .padding(.bottom, 32)
+            .animation(Motion.spatial, value: trimmed.isEmpty)
+        }
+        .tracksPageScroll()
+        .scrollDismissesKeyboard(.immediately)
+        .themedBackground()
+        .modifier(SearchChrome(query: $query, embedded: embedded, focus: $fieldFocused))
+        .task { if model.didactics.isEmpty { await model.loadDidactics() } }
+    }
+
+    /// Prima di scrivere: scorciatoie per tipo e suggerimenti dalle materie.
     private var suggestions: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader("Suggerimenti")
-            FlowChips(items: ["Verifica", "Interrogazione"] + Array(Set(model.grades.map(\.subjectName))).sorted().prefix(8)) {
-                query = $0
-                fieldFocused = true
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 0) {
+                ListHeader("Cerca per tipo")
+                FlowLayout(spacing: 8) {
+                    ForEach([("Verifica", "test"), ("Interrogazione", "person"), ("Compiti", "book"),
+                             ("Comunicazione", "megaphone")], id: \.0) { item in
+                        Button {
+                            query = item.0
+                            fieldFocused = true
+                        } label: {
+                            Label { Text(item.0) } icon: { Icon(item.1, size: 18) }
+                                .labelStyle(M3ButtonLabelStyle(iconSize: 18))
+                                .font(.m3(14, weight: 600))
+                                .padding(.leading, 12)
+                                .padding(.trailing, 16)
+                                .frame(height: 40)
+                        }
+                        .buttonStyle(.m3(.tonal, size: .s))
+                    }
+                }
+                .padding(.horizontal, 4)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                ListHeader("Materie")
+                FlowChips(items: Array(Set(model.grades.map(\.subjectName))).sorted().prefix(10).map { $0 }) {
+                    query = $0
+                    fieldFocused = true
+                }
+                .padding(.horizontal, 4)
             }
         }
     }
 
     @ViewBuilder
-    private func resultCards(_ results: Results) -> some View {
+    private func resultGroups(_ results: Results) -> some View {
         let agenda = results.agenda
         let grades = results.grades
         let notices = results.notices
         let notes = results.notes
         let files = results.files
         if !agenda.isEmpty {
-            let shown = Array(agenda.prefix(15))
-            let lastID = shown.last?.id
-            group("Agenda", count: agenda.count) {
-                ForEach(shown) { event in
-                    AgendaEventRow(event: event, showsDate: true)
-                    if event.id != lastID { M3Divider() }
-                }
-            }
-        }
-        if !grades.isEmpty {
-            group("Voti", count: grades.count) {
-                ForEach(grades.prefix(15)) { grade in
-                    HStack(spacing: 12) {
-                        GradeBadge(grade: grade, size: 40)
-                        VStack(alignment: .leading, spacing: 2) {
-                            SubjectTag(name: grade.subjectName, id: grade.subjectId)
-                            Text("\(grade.kind) · \(grade.date.shortDay)\(grade.notes.map { " · \($0)" } ?? "")")
-                                .font(.m3(12))
-                                .foregroundStyle(Theme.secondaryInk)
-                                .lineLimit(2)
-                        }
+            ListGroup(header(for: "Agenda", count: agenda.count)) {
+                ForEach(agenda.prefix(15)) { event in
+                    SegmentCell {
+                        AgendaEventRow(event: event, showsDate: true)
                     }
                 }
             }
         }
+        if !grades.isEmpty {
+            ListGroup(header(for: "Voti", count: grades.count)) {
+                ForEach(grades.prefix(15)) { grade in
+                    HStack(spacing: 14) {
+                        GradeBadge(grade: grade, size: 44)
+                        VStack(alignment: .leading, spacing: 2) {
+                            SubjectTag(name: grade.subjectName, id: grade.subjectId)
+                            Text("\(grade.kind) · \(grade.date.shortDay)\(grade.notes.map { " · \($0)" } ?? "")")
+                                .font(.m3(13))
+                                .foregroundStyle(Theme.secondaryInk)
+                                .lineLimit(2)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+            }
+        }
         if !notices.isEmpty {
-            group("Bacheca", count: notices.count) {
+            ListGroup(header(for: "Bacheca", count: notices.count)) {
                 ForEach(notices.prefix(10)) { notice in
                     NavigationLink {
                         NoticeDetailView(notice: notice)
                             .pageChrome("", style: .inline)
                     } label: {
-                        HStack(spacing: 12) {
-                            Text(notice.title)
-                                .font(.m3(15))
-                                .foregroundStyle(Theme.ink)
-                                .multilineTextAlignment(.leading)
-                            Spacer()
-                            Icon("chevronRight", size: 22)
-                                .foregroundStyle(Theme.secondaryInk)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .frame(minHeight: 44)
-                        .contentShape(.rect)
+                        NavigationRow(notice.title, subtitle: notice.category, icon: "megaphone", tint: Theme.primary)
                     }
-                    .buttonStyle(.pressable(radius: Theme.radii.m, pressed: Theme.radii.m))
-                    .padding(.horizontal, -8)
+                    .buttonStyle(.listRow)
                 }
             }
         }
         if !files.isEmpty {
-            group("Materiale didattico", count: files.count) {
+            ListGroup(header(for: "Materiale didattico", count: files.count)) {
                 ForEach(files.prefix(10), id: \.1.id) { teacher, content in
                     NavigationLink {
                         DidacticsView()
                     } label: {
-                        HStack(spacing: 12) {
-                            Icon(content.icon).foregroundStyle(Theme.primary)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(content.name).font(.m3(15)).foregroundStyle(Theme.ink)
-                                Text(teacher.name).font(.m3(12)).foregroundStyle(Theme.secondaryInk)
-                            }
-                            Spacer()
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .frame(minHeight: 44)
-                        .contentShape(.rect)
+                        NavigationRow(content.name, subtitle: teacher.name, icon: content.icon, tint: Theme.tertiary)
                     }
-                    .buttonStyle(.pressable(radius: Theme.radii.m, pressed: Theme.radii.m))
-                    .padding(.horizontal, -8)
+                    .buttonStyle(.listRow)
                 }
             }
         }
         if !notes.isEmpty {
-            group("Note", count: notes.count) {
+            ListGroup(header(for: "Note", count: notes.count)) {
                 ForEach(notes.prefix(10)) { note in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(note.text).font(.m3(15)).foregroundStyle(Theme.ink)
-                        Text("\(note.category.singular) · \(note.date.shortDay)")
-                            .font(.m3(12))
-                            .foregroundStyle(Theme.secondaryInk)
+                    ListRow(note.text, subtitle: "\(note.category.singular) · \(note.date.shortDay)") {
+                        IconBadge(icon: "messageAlert", tint: Theme.poor, size: 40)
+                    } trailing: {
+                        EmptyView()
                     }
                 }
             }
         }
     }
 
-    private func group<Content: View>(_ title: String, count: Int, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Eyebrow(text: title, color: Theme.primary)
-                Spacer()
-                Text("\(count)")
-                    .font(.m3(12).monospacedDigit())
-                    .foregroundStyle(Theme.secondaryInk)
-            }
-            content()
-        }
-        .card()
+    private func header(for title: String, count: Int) -> String {
+        count > 15 ? "\(title) · \(count)" : title
     }
 }
 
-/// Con Liquid Glass il campo di ricerca è quello di sistema (nella barra delle schede);
-/// altrimenti è la barra di ricerca di Material 3 nel contenuto.
-private struct SystemSearch: ViewModifier {
+/// Barra della ricerca. Con Liquid Glass il campo è quello di sistema (nella barra delle schede);
+/// nella Dashboard (Material) il campo è la barra di ricerca sospesa della Dashboard; altrimenti il
+/// titolo con il campo nel contenuto.
+private struct SearchChrome: ViewModifier {
     @Binding var query: String
+    let embedded: Bool
+    var focus: FocusState<Bool>.Binding
 
     func body(content: Content) -> some View {
         if ThemeStore.shared.liquidGlass {
             content
+                .pageChrome("Cerca")
                 .searchable(text: $query, prompt: SearchView.prompt)
                 // Con la tastiera aperta il titolo "Cerca" resta visibile.
                 .searchPresentationToolbarBehavior(.avoidHidingContent)
-        } else {
+        } else if embedded {
             content
+        } else {
+            content.pageChrome("Cerca")
         }
     }
 }

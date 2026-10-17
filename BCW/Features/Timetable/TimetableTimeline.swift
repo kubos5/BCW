@@ -13,12 +13,9 @@ struct TimetableTimeline: View {
     var onSelectDay: (Date) -> Void = { _ in }
     let actions: TimetableActions
     var isEditing = false
-    /// Spazio in cima per un'intestazione che galleggia sopra la giornata (iPhone): gli eventi
-    /// cominciano sotto di essa e scorrendo le passano sotto. Con l'intestazione mobile le
-    /// verifiche senza lezione sono mostrate da chi la disegna.
-    var topInset: CGFloat = 0
-    /// Intestazione mobile (iPhone): la giornata si sposta con lei e i suoi gesti stanno qui.
-    var headerState: WeekHeaderScroll? = nil
+    /// Cambio di giorno (asse condiviso) e scorrimento laterale; chi lo passa mostra da sé le
+    /// verifiche senza lezione.
+    var swipe: DaySwipe? = nil
     var hourHeight: CGFloat = 60
 
     static let gutter: CGFloat = 54
@@ -31,32 +28,32 @@ struct TimetableTimeline: View {
                 header
                 M3Divider()
             }
-            if topInset == 0,
+            if swipe == nil,
                let unmatched = contents.first(where: { $0.day.isSameDay(as: selectedDay) })?.unmatchedTests,
                !unmatched.isEmpty {
                 unmatchedBanner(unmatched)
             }
             ScrollViewReader { proxy in
                 ScrollView {
-                    if let headerState {
-                        // Con il giorno accanto, già visibile mentre si scorre di lato (in sola lettura).
-                        SwipeDayPages(state: headerState, day: selectedDay, prepares: !isEditing) { day, isMain in
-                            grid([TimetableDayContent(day: day, model: model)], isEditing: isMain && isEditing)
+                    if let swipe {
+                        DayPage(swipe: swipe, day: selectedDay) { day in
+                            grid([TimetableDayContent(day: day, model: model)], isEditing: isEditing)
                         }
-                        .background { CalendarHeaderPan(state: headerState, swipeEnabled: !isEditing) }
+                        .background { DaySwipeGesture(swipe: swipe) }
                     } else {
                         grid(contents, isEditing: isEditing)
                     }
                 }
-                .scrollClipDisabled(headerState != nil)
                 .scrollIndicators(.hidden)
-                .safeAreaPadding(.top, topInset)
-                .modifier(OptionalHeaderShift(state: headerState))
-                .onAppear { proxy.scrollTo(HourGrid.anchor(initialHour(contents)), anchor: .top) }
+                .task {
+                    // Dopo la prima impaginazione (margine in alto compreso).
+                    try? await Task.sleep(for: .milliseconds(80))
+                    proxy.scrollTo(HourGrid.anchor(initialHour(contents)), anchor: .top)
+                }
                 .onChange(of: selectedDay) { _, _ in
                     // Su iPhone, cambiando giorno, si va alla prima lezione del nuovo giorno.
                     if days.count == 1 {
-                        withAnimation(.snappy) { proxy.scrollTo(HourGrid.anchor(initialHour(contents)), anchor: .top) }
+                        withAnimation(Motion.spatialSlow) { proxy.scrollTo(HourGrid.anchor(initialHour(contents)), anchor: .top) }
                     }
                 }
             }
@@ -84,13 +81,16 @@ struct TimetableTimeline: View {
         }
         .frame(height: 24 * hourHeight)
         .padding(.vertical, Self.verticalPadding)
-        .padding(.bottom, 60)
+        // Spazio per il pulsante d'azione flottante e la barra degli strumenti della modifica.
+        .padding(.bottom, 100)
     }
 
+    /// Ora da portare in cima: mezz'ora prima della prima lezione. `scrollTo` allinea al bordo
+    /// dello scorrimento, sotto l'intestazione che galleggia sopra (`topInset`): si sale di altrettante ore.
     private func initialHour(_ contents: [TimetableDayContent]) -> Int {
         let starts = contents.compactMap { $0.layout.span?.start }
-        guard let first = starts.min() else { return 7 }
-        return max(0, (first - 30) / 60)
+        let hour = starts.min().map { max(0, ($0 - 30) / 60) } ?? 7
+        return hour
     }
 
     private var header: some View {
@@ -167,7 +167,7 @@ private struct HourGrid: View {
             }
             if showsNow {
                 TimelineView(.everyMinute) { context in
-                    let minutes = TimeOfDay.minutes(of: context.date)
+                    let minutes = TimeOfDay.nowMinutes(of: context.date)
                     Text(TimeOfDay.string(minutes))
                         .font(.m3(11, weight: 700).monospacedDigit())
                         .foregroundStyle(Theme.onPoor)
@@ -234,7 +234,7 @@ private struct TimelineDayColumn: View {
 
                 if content.day.isToday {
                     TimelineView(.everyMinute) { context in
-                        let y = CGFloat(TimeOfDay.minutes(of: context.date)) / 60 * hourHeight
+                        let y = CGFloat(TimeOfDay.nowMinutes(of: context.date)) / 60 * hourHeight
                         ZStack(alignment: .leading) {
                             Rectangle().fill(Theme.poor).frame(height: 2)
                             Circle().fill(Theme.poor).frame(width: 8, height: 8).offset(x: -4)
@@ -304,7 +304,9 @@ private struct TimelineSegment: View {
     @State private var resize: CGFloat = 0
     @State private var isLifted = false
 
-    private static let radius: CGFloat = 8
+    /// Angoli dei blocchi: ampi all'esterno, piccoli tra le ore di un gruppo (come le liste segmentate).
+    private var radius: CGFloat { entry.isBreak ? 10 : Theme.radii.m }
+    private var innerRadius: CGFloat { Theme.radii.xs }
 
     private var step: Int { entry.isBreak ? 5 : model.timetable.alignment.dragStep }
     private var isAutomatic: Bool { !entry.isBreak && model.timetable.alignment == .automatic }
@@ -336,7 +338,8 @@ private struct TimelineSegment: View {
     var body: some View {
         let preview = preview
         let tint = Theme.timetableColor(entry, store: model.timetable)
-        let height = max(entry.isBreak ? 10 : 16, CGFloat(preview.end - preview.start) / 60 * hourHeight - (roundsBottom ? 1.5 : 0))
+        // 2 punti di spazio sotto ogni blocco, anche tra le ore di un gruppo.
+        let height = max(entry.isBreak ? 10 : 16, CGFloat(preview.end - preview.start) / 60 * hourHeight - 2)
         let dragging = move != .zero || resize != 0 || isLifted
 
         segment(tint: tint, start: preview.start, end: preview.end, height: height)
@@ -381,10 +384,10 @@ private struct TimelineSegment: View {
 
     @ViewBuilder
     private func segment(tint: Color, start: Int, end: Int, height: CGFloat) -> some View {
-        let shape = UnevenRoundedRectangle(topLeadingRadius: roundsTop ? Self.radius : 0,
-                                           bottomLeadingRadius: roundsBottom ? Self.radius : 0,
-                                           bottomTrailingRadius: roundsBottom ? Self.radius : 0,
-                                           topTrailingRadius: roundsTop ? Self.radius : 0,
+        let top = roundsTop ? radius : innerRadius
+        let bottom = roundsBottom ? radius : innerRadius
+        let shape = UnevenRoundedRectangle(topLeadingRadius: top, bottomLeadingRadius: bottom,
+                                           bottomTrailingRadius: bottom, topTrailingRadius: top,
                                            style: .continuous)
         ZStack(alignment: .topLeading) {
             if entry.isBreak {
@@ -392,14 +395,12 @@ private struct TimelineSegment: View {
                 shape.fill(tint.mix(Theme.surfaceContainerLowest, isDraft ? 0.16 : 0.32))
                 DiagonalStripes(spacing: 10).stroke(tint.opacity(0.25), lineWidth: 3).clipShape(shape)
             } else {
-                shape.fill(tint.mix(Theme.surface, isDraft ? 0.12 : 0.24))
+                // Blocco pieno nella tinta, come gli eventi di un calendario Material.
+                shape.fill(tint.mix(Theme.surface, isDraft ? 0.16 : 0.36))
             }
             HStack(alignment: .top, spacing: 0) {
-                if !entry.isBreak {
-                    Rectangle().fill(tint.opacity(isDraft ? 0.6 : 1)).frame(width: 3)
-                }
                 label(start: start, end: end, height: height, tint: tint)
-                    .padding(.leading, entry.isBreak ? 8 : 6)
+                    .padding(.leading, entry.isBreak ? 8 : 10)
                     .padding(.trailing, 4)
                     .padding(.top, height >= 26 ? 4 : 1)
                 Spacer(minLength: 0)
@@ -411,14 +412,6 @@ private struct TimelineSegment: View {
                 shape.stroke(tint, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
             } else if entry.isBreak {
                 shape.strokeBorder(tint.opacity(0.6), lineWidth: 0.75)
-            }
-        }
-        .overlay(alignment: .top) {
-            if !roundsTop {
-                Line()
-                    .stroke(tint.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    .frame(height: 1)
-                    .padding(.leading, 3)
             }
         }
     }
@@ -530,7 +523,7 @@ private struct TimelineSegment: View {
     private func commit() {
         let result = preview
         let weekday = days[dayIndex + result.dayShift].timetableWeekday
-        withAnimation(.snappy) {
+        withAnimation(Motion.spatial) {
             move = .zero
             resize = 0
             isLifted = false
@@ -541,14 +534,6 @@ private struct TimelineSegment: View {
 
 import UIKit
 
-/// `WeekHeaderScroll.Shift` solo se c'è un'intestazione mobile.
-private struct OptionalHeaderShift: ViewModifier {
-    let state: WeekHeaderScroll?
-
-    func body(content: Content) -> some View {
-        if let state { content.modifier(WeekHeaderScroll.Shift(state: state)) } else { content }
-    }
-}
 
 /// Tieni premuto e trascina: riporta lo spostamento del dito da quando la pressione è stata
 /// riconosciuta. Mentre è attivo lo scorrimento della pagina resta fermo.

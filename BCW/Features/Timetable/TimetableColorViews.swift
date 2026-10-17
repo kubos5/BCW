@@ -85,7 +85,7 @@ struct EntryColorPicker: View {
                     .padding(.vertical, 10)
                 }
 
-                ListGroup("Dalle palette", footer: "Tocca un colore per usarlo. Per colorare un'intera giornata con una sfumatura usa \"Colora una giornata\" nel menu dell'orario.") {
+                ListGroup("Dalle palette", footer: "Tocca un colore per usarlo. Per colorare un'intera giornata con una sfumatura usa \"Colora una giornata\" nel menu ⋯ dell'orario o nella barra della modifica.") {
                     ForEach(store.allPalettes) { palette in
                         PaletteSwatchRow(palette: palette, selected: color) { picked in
                             color = picked

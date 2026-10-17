@@ -5,8 +5,8 @@ import SwiftUI
 /// lunghi di un'ora).
 struct TimetableAlignmentPicker: View {
     @Environment(AppModel.self) private var model
-    /// Gruppo di pulsanti collegati (barra della modifica) invece del pulsante con il menu.
-    var segmented = false
+    /// Due pulsanti a icona nella barra degli strumenti della modifica, invece della voce con il menu.
+    var inToolbar = false
     @State private var confirming = false
 
     private var store: TimetableStore { model.timetable }
@@ -15,10 +15,15 @@ struct TimetableAlignmentPicker: View {
         let selection = Binding(get: { store.alignment }, set: request)
         let options = TimetableAlignment.allCases.map { ($0, $0.shortTitle, Optional<String>.none) }
         Group {
-            if segmented {
-                SegmentedButtons(selection: selection, options: options, compact: true, height: 34,
-                                 selectedColor: Theme.tertiary, selectedForeground: Theme.onTertiary,
-                                 background: Theme.surface.opacity(0.55))
+            if inToolbar {
+                HStack(spacing: 4) {
+                    ForEach(TimetableAlignment.allCases, id: \.self) { alignment in
+                        ToolbarIconButton(alignment.icon, label: alignment.title,
+                                          selected: store.alignment == alignment) {
+                            request(alignment)
+                        }
+                    }
+                }
             } else {
                 SelectRow("Allineamento", icon: store.alignment.icon, selection: selection, options: options)
             }
@@ -54,32 +59,30 @@ struct TimetableAlignmentPicker: View {
     }
 }
 
-/// Barra della modalità di modifica: allineamento e istruzioni (nel contenitore terziario).
+/// Istruzioni della modalità di modifica (nel contenitore terziario), sotto la settimana:
+/// l'allineamento si sceglie nella barra degli strumenti in basso.
 struct TimetableEditBar: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-                HStack(spacing: 8) {
-                    Icon(model.timetable.alignment.icon, size: 20)
-                    Text("Allineamento")
-                        .font(.m3(14, weight: 650))
-                }
-                .fixedSize()
-                Spacer(minLength: 0)
-                TimetableAlignmentPicker(segmented: true)
+        HStack(alignment: .top, spacing: 10) {
+            Icon(model.timetable.alignment.icon, size: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.timetable.alignment.title)
+                    .font(.m3(14, weight: 650))
+                Text(hint)
+                    .font(.m3(12))
+                    .opacity(0.85)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Text(hint)
-                .font(.m3(12))
-                .opacity(0.85)
-                .lineLimit(4)
         }
         .foregroundStyle(Theme.onTertiaryContainer)
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.tertiaryContainer, in: .rect(cornerRadius: Theme.radii.li, style: .continuous))
+        .animation(Motion.effects, value: model.timetable.alignment)
     }
 
     private var hint: String {
@@ -87,7 +90,26 @@ struct TimetableEditBar: View {
             ? "Scatti di mezz'ora, eventi da 30 minuti o un'ora."
             : "Scatti di 5 minuti; orari esatti dall'evento."
         let gestures = "Tieni premuto e trascina per spostare, trascina il bordo in basso per la durata, tocca due volte un'ora vuota per aggiungere."
-        return "\(gestures) \(alignment) Intervalli sempre liberi."
+        return "\(gestures) \(alignment)"
+    }
+}
+
+/// Barra degli strumenti della modifica (vivace, in basso al posto della barra delle schede):
+/// allineamento, nuovo intervallo, colori della giornata e "Fine".
+struct TimetableEditToolbar: View {
+    let addBreak: () -> Void
+    let colorDay: () -> Void
+    let done: () -> Void
+
+    var body: some View {
+        FloatingToolbar(vibrant: true) {
+            TimetableAlignmentPicker(inToolbar: true)
+            ToolbarSeparator()
+            ToolbarIconButton("coffee", label: "Nuovo intervallo", action: addBreak)
+            ToolbarIconButton("palette", label: "Colora la giornata", action: colorDay)
+            ToolbarTextButton(title: "Fine", icon: "check", action: done)
+                .padding(.leading, 4)
+        }
     }
 }
 

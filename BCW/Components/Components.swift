@@ -279,87 +279,34 @@ struct SubjectTag: View {
 
 // MARK: - Sezioni comprimibili
 
-/// Contenuto di una sezione comprimibile. Chiudendo, il contenuto scorre verso l'alto
-/// restando ritagliato nell'area che occupa da aperto (con una sfumatura sul bordo
-/// superiore), così non invade l'intestazione né il resto della pagina.
+/// Contenuto di una sezione comprimibile, con l'espansione di Material 3: il contenitore si
+/// allunga e si accorcia con la molla spaziale (dentro `withAnimation`), il contenuto compare in
+/// dissolvenza mentre si apre e svanisce in fretta chiudendo; resta ritagliato dal contenitore.
+/// Da chiusa il contenuto non viene costruito.
 struct CollapsibleContent<Content: View>: View {
     let isExpanded: Bool
     /// Spazio tra intestazione e contenuto: fa parte dell'area che si comprime.
     var spacing: CGFloat = 0
-    /// Altezza massima della sfumatura sul bordo superiore durante l'animazione.
-    var fade: CGFloat = 24
-    @ViewBuilder let content: () -> Content
-    @State private var height: CGFloat = 0
-
-    var body: some View {
-        CollapseBody(progress: isExpanded ? 1 : 0, height: height, fade: fade, spacing: spacing,
-                     onHeightChange: { height = $0 }, content: content)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .allowsHitTesting(isExpanded)
-            .accessibilityHidden(!isExpanded)
-    }
-}
-
-/// Anima apertura e chiusura: `progress` va da 0 (chiusa) a 1 (aperta).
-/// È una vista (non un modificatore) per costruire il contenuto solo quando serve: da chiusa,
-/// ad animazione finita, il contenuto non viene né costruito né disegnato. Così non costa nulla
-/// (le sezioni chiuse possono essere molte, es. i voti) e, se cambia mentre è nascosto (es. i
-/// giorni successivi quando si sceglie un altro giorno), le sue animazioni non si intravedono
-/// sotto l'intestazione, dove la maschera si allarga per le ombre. L'altezza misurata resta e
-/// serve alla prossima apertura.
-private struct CollapseBody<Content: View>: View, Animatable {
-    var progress: CGFloat
-    let height: CGFloat
-    let fade: CGFloat
-    let spacing: CGFloat
-    let onHeightChange: (CGFloat) -> Void
     @ViewBuilder let content: () -> Content
 
-    nonisolated var animatableData: CGFloat {
-        get { progress }
-        set { progress = newValue }
-    }
-
     var body: some View {
-        // Le molle con un po' di rimbalzo superano l'1: senza limite il contenuto finirebbe
-        // troppo in basso e poi tornerebbe al suo posto con uno scatto.
-        let clamped = min(max(progress, 0), 1)
-        let hidden = (1 - clamped) * height
-        // La sfumatura non supera mai la parte già nascosta: da aperta il bordo è netto
-        // e nessun contenuto al suo posto viene attenuato.
-        let gradient = min(fade, hidden)
-        // Finché il contenuto non è stato misurato (sezione appena creata) non lo si
-        // vincola, così da aperta non parte da altezza zero.
-        let frameHeight: CGFloat? = height == 0 && clamped == 1 ? nil : max(0, height - hidden)
-        if clamped > 0 {
-            content()
-                .padding(.top, spacing)
-                .fixedSize(horizontal: false, vertical: true)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { onHeightChange($0) }
-                .offset(y: -hidden)
-                .frame(height: frameHeight, alignment: .top)
-                .mask(alignment: .top) {
-                    VStack(spacing: 0) {
-                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                            .frame(height: gradient)
-                        Rectangle()
-                    }
-                    // Il ritaglio serve solo sul bordo superiore: ai lati e in basso
-                    // la maschera si allarga per non tagliare le ombre.
-                    .padding([.horizontal, .bottom], -40)
-                }
-                // Compare e scompare senza transizioni proprie: l'animazione è già quella di apertura.
-                .transition(.identity)
-        } else {
-            Color.clear.frame(height: 0)
-                .transition(.identity)
+        VStack(spacing: 0) {
+            if isExpanded {
+                content()
+                    .padding(.top, spacing)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.expand)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .clipped()
     }
 }
 
 // MARK: - Riquadri
 
-/// Riquadro con un numero (assenze, ritardi, medie…): l'icona sta in una forma.
+/// Riquadro con un numero (assenze, ritardi, medie…): l'icona sta in una forma. In una griglia
+/// collegata (`corners`) solo l'angolo verso l'esterno è ampio, gli altri sono piccoli.
 struct StatTile: View {
     let title: String
     let value: String
@@ -368,30 +315,83 @@ struct StatTile: View {
     var shape: MaterialShapeName = .cookie4Sided
     /// Riempie l'altezza disponibile.
     var fillsHeight = false
+    /// Angolo ampio in una griglia collegata (gli altri piccoli): un angolo, oppure un lato
+    /// (`.leading`, `.trailing`) in una riga collegata; `.center` tutti piccoli. Senza, tutti ampi.
+    var corners: UnitPoint?
+    /// Icona sopra il numero (riquadri stretti, es. tre per riga).
+    var vertical = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Shaped(shape: shape, fill: tint.mix(Theme.surfaceContainerHigh, 0.18), size: 44) {
-                Icon(icon, size: 22)
+        if vertical {
+            VStack(alignment: .leading, spacing: 10) {
+                Shaped(shape: shape, fill: tint.mix(Theme.surfaceContainerHigh, 0.18), size: 40) {
+                    Icon(icon, size: 20)
+                        .foregroundStyle(tint)
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(value)
+                        .font(.numeral(28))
+                        .foregroundStyle(Theme.ink)
+                        .contentTransition(.numericText())
+                    Text(title)
+                        .font(.m3(13, weight: 550))
+                        .foregroundStyle(Theme.secondaryInk)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: fillsHeight ? .infinity : nil, alignment: .leading)
+            .background(Theme.card, in: tileShape)
+            .contentShape(tileShape)
+        } else {
+            horizontal
+        }
+    }
+
+    private var horizontal: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(value)
+                    .font(.numeral(30))
+                    .foregroundStyle(Theme.ink)
+                    .contentTransition(.numericText())
+                Text(title)
+                    .font(.m3(13, weight: 550))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            Spacer(minLength: 0)
+            Shaped(shape: shape, fill: tint.mix(Theme.surfaceContainerHigh, 0.18), size: 40) {
+                Icon(icon, size: 20)
                     .foregroundStyle(tint)
             }
-            .padding(.bottom, 8)
-            Text(value)
-                .font(.numeral(28))
-                .foregroundStyle(Theme.ink)
-                .contentTransition(.numericText())
-            Text(title)
-                .font(.m3(13, weight: 550))
-                .foregroundStyle(Theme.secondaryInk)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            .frame(width: 44, height: 44)
         }
-        .frame(maxHeight: fillsHeight ? .infinity : nil, alignment: .topLeading)
-        .card()
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(Theme.card, in: tileShape)
+        .contentShape(tileShape)
+    }
+
+    private var tileShape: UnevenRoundedRectangle {
+        let wide = Theme.radii.li
+        guard let corners else {
+            return UnevenRoundedRectangle(cornerRadii: .init(topLeading: wide, bottomLeading: wide,
+                                                             bottomTrailing: wide, topTrailing: wide), style: .continuous)
+        }
+        let small = Theme.radii.xs
+        func radius(_ corner: UnitPoint, _ side: UnitPoint) -> CGFloat { corners == corner || corners == side ? wide : small }
+        return UnevenRoundedRectangle(cornerRadii: .init(
+            topLeading: radius(.topLeading, .leading),
+            bottomLeading: radius(.bottomLeading, .leading),
+            bottomTrailing: radius(.bottomTrailing, .trailing),
+            topTrailing: radius(.topTrailing, .trailing)), style: .continuous)
     }
 }
 
-/// Icona in un quadrato arrotondato tinto (voci delle liste, sezioni di Tu).
+/// Icona in un cerchio tinto (voci delle liste, sezioni di Tu), come le liste di M3 Expressive.
 struct IconBadge: View {
     let icon: String
     var tint: Color = Theme.accent
@@ -401,7 +401,7 @@ struct IconBadge: View {
         Icon(icon, size: size * 0.58)
             .foregroundStyle(tint)
             .frame(width: size, height: size)
-            .background(tint.opacity(0.15), in: .rect(cornerRadius: size * 0.34, style: .continuous))
+            .background(tint.opacity(0.16), in: .circle)
     }
 }
 

@@ -232,7 +232,7 @@ struct TimetableSettingsSection: View {
     private var store: TimetableStore { model.timetable }
 
     var body: some View {
-        ListGroup("Vista e allineamento", footer: "Con \"Mostra le verifiche\" la vista Lista segna le verifiche di Classeviva e quelle segnate a mano; si vedono sempre nel dettaglio dell'evento e nella vista Giorno. Quelle nascoste, e le regole per nasconderle in automatico, sono in Verifiche nascoste (menu dell'orario). L'allineamento vale per tutto l'orario e per la modalità di modifica (menu dell'orario › Modifica orario). Automatico: gli eventi iniziano all'ora o alla mezz'ora e durano 30 minuti o un'ora; passando all'automatico gli eventi non allineati vengono allineati, dopo una conferma. Libero: qualsiasi orario e durata. Gli intervalli si posizionano sempre liberamente.") {
+        ListGroup("Vista e allineamento", footer: "Con \"Mostra le verifiche\" la vista Lista segna le verifiche di Classeviva e quelle segnate a mano; si vedono sempre nel dettaglio dell'evento e nella vista Giorno. Quelle nascoste, e le regole per nasconderle in automatico, sono in Verifiche nascoste (menu ⋯ dell'orario). L'allineamento vale per tutto l'orario e per la modalità di modifica (pulsante + dell'orario › Modifica orario). Automatico: gli eventi iniziano all'ora o alla mezz'ora e durano 30 minuti o un'ora; passando all'automatico gli eventi non allineati vengono allineati, dopo una conferma. Libero: qualsiasi orario e durata. Gli intervalli si posizionano sempre liberamente.") {
             TimetableAlignmentPicker()
             ToggleRow("Mostra le verifiche nella lista", icon: "test", isOn: Bindable(model.preferences).timetableShowsTests)
         }

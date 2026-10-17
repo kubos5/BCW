@@ -3,10 +3,26 @@ import SwiftUI
 struct LessonsView: View {
     @Environment(AppModel.self) private var model
     @State private var mode: Mode = .day
-    @State private var day = Date().startOfDay
+    /// Si apre su oggi o, nel fine settimana, sull'ultimo giorno di scuola.
+    @State private var day: Date = {
+        var day = Date().startOfDay
+        while day.isWeekend { day = day.adding(days: -1) }
+        return day
+    }()
     @State private var allLessons: [Lesson] = []
     @State private var loadingAll = false
     @State private var subjectFilter: Int?
+    /// Vero mentre si scaricano le lezioni della settimana del giorno scelto.
+    @State private var loadingDay = false
+
+    /// Si riscarica cambiando giorno, sessione o client e dopo ogni aggiornamento dei dati
+    /// (`refreshAll` svuota le lezioni già scaricate: senza, restava "Caricamento…").
+    private struct DayLoad: Hashable {
+        let day: Date
+        let session: UUID
+        let client: ObjectIdentifier?
+        let updated: Date?
+    }
 
     enum Mode: String, CaseIterable, Identifiable {
         case day, subject
@@ -17,9 +33,14 @@ struct LessonsView: View {
     var body: some View {
         content
             .pageChrome("Lezioni", style: .inline)
-            .task(id: day) {
+            .task(id: DayLoad(day: day, session: model.sessionID, client: model.client.map(ObjectIdentifier.init),
+                                  updated: model.lastUpdated)) {
+                guard model.client != nil else { return }
+                loadingDay = true
                 await model.ensureLessons(from: day.startOfWeek, to: day.startOfWeek.adding(days: 6))
+                loadingDay = false
             }
+
             .task(id: mode) {
                 guard mode == .subject, allLessons.isEmpty else { return }
                 loadingAll = true
@@ -57,7 +78,7 @@ struct LessonsView: View {
     private var dayNavigator: some View {
         HStack(spacing: 8) {
             IconButton("chevronLeft", label: "Giorno precedente", kind: .tonal) { day = previousSchoolDay(from: day) }
-            DateField(date: $day, range: CVDate.schoolYear().start...Date())
+            DateField(date: $day, range: CVDate.schoolYear().start.startOfDay...Date().startOfDay)
             IconButton("chevronRight", label: "Giorno successivo", kind: .tonal) {
                 day = min(Date().startOfDay, nextSchoolDay(from: day))
             }
@@ -67,11 +88,6 @@ struct LessonsView: View {
 
     @ViewBuilder
     private var dayLessons: some View {
-        Text(day.longDay)
-            .font(.m3(22, weight: 500, rounded: true))
-            .foregroundStyle(Theme.ink)
-            .padding(.horizontal, 4)
-
         let lessons = model.lessons(on: day)
         if lessons.isEmpty {
             if day.startOfDay > Date().startOfDay {
@@ -80,17 +96,18 @@ struct LessonsView: View {
             } else if model.hasLoadedLessons(on: day) {
                 EmptyState("Nessuna lezione", icon: "bookText",
                            description: day.isWeekend ? "È il fine settimana." : "Non ci sono lezioni registrate per questo giorno.")
-            } else {
+            } else if loadingDay || model.client == nil {
                 LoadingCard()
+            } else {
+                EmptyState("Lezioni non disponibili", icon: "wifiOff",
+                           description: "Non è stato possibile scaricare il registro di questo giorno. Riprova più tardi.")
             }
         } else {
-            VStack(spacing: 14) {
+            ListGroup {
                 ForEach(lessons) { lesson in
-                    LessonRow(lesson: lesson)
-                    if lesson.id != lessons.last?.id { M3Divider() }
+                    SegmentCell { LessonRow(lesson: lesson) }
                 }
             }
-            .card()
         }
     }
 

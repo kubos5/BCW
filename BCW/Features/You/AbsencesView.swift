@@ -53,12 +53,9 @@ struct AbsencesView: View {
                 if filtered.isEmpty {
                     EmptyState("Nessun evento", icon: "checkCircle", description: "Nessuna assenza, ritardo o uscita registrati.")
                 } else {
-                    CardGrid(minWidth: 440, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 20) {
                         ForEach(byMonth, id: \.0) { month, events in
-                            VStack(alignment: .leading, spacing: 10) {
-                                Eyebrow(text: month.monthYear)
-                                    .padding(.leading, 4)
-                                VStack(spacing: 14) {
+                            ListGroup(month.monthYear) {
                                     ForEach(events) { event in
                                         // Data, icona e stato restano centrati sull'intera riga,
                                         // anche quando dettaglio e motivo occupano più righe.
@@ -74,10 +71,9 @@ struct AbsencesView: View {
                                             .frame(width: 44)
                                             AbsenceRow(absence: event, showsReason: true)
                                         }
-                                        if event.id != events.last?.id { M3Divider() }
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 12)
                                     }
-                                }
-                                .card(padding: 14)
                             }
                         }
                     }
@@ -94,12 +90,14 @@ struct AbsencesView: View {
     }
 
     private var counters: some View {
-        Grid(horizontalSpacing: 10, verticalSpacing: 10) {
+        Grid(horizontalSpacing: 2, verticalSpacing: 2) {
             GridRow {
-                StatTile(title: "Assenze", value: "\(count(.absence))", icon: AbsenceEvent.Kind.absence.icon, tint: Theme.poor)
+                StatTile(title: "Assenze", value: "\(count(.absence))", icon: AbsenceEvent.Kind.absence.icon, tint: Theme.poor,
+                         shape: .clover4Leaf, corners: .leading, vertical: true)
                 StatTile(title: "Ritardi", value: "\(count(.late) + count(.shortLate))",
-                         icon: AbsenceEvent.Kind.late.icon, tint: Theme.fair)
-                StatTile(title: "Uscite", value: "\(count(.earlyExit))", icon: AbsenceEvent.Kind.earlyExit.icon, tint: Theme.neutral)
+                         icon: AbsenceEvent.Kind.late.icon, tint: Theme.fair, shape: .sunny, corners: .center, vertical: true)
+                StatTile(title: "Uscite", value: "\(count(.earlyExit))", icon: AbsenceEvent.Kind.earlyExit.icon, tint: Theme.neutral,
+                         shape: .cookie6Sided, corners: .trailing, vertical: true)
             }
         }
     }

@@ -467,6 +467,17 @@ nonisolated enum TimeOfDay {
         return (c.hour ?? 0) * 60 + (c.minute ?? 0)
     }
 
+    /// Minuto attuale del giorno, per l'evento in corso e la linea dell'ora.
+    @MainActor static func nowMinutes(of date: Date) -> Int {
+        #if DEBUG
+        // Per le prove: `-BCWNowMinute 610` fa come se fossero le 10:10.
+        if UserDefaults.standard.object(forKey: "BCWNowMinute") != nil {
+            return UserDefaults.standard.integer(forKey: "BCWNowMinute")
+        }
+        #endif
+        return minutes(of: date)
+    }
+
     /// Data di oggi all'ora indicata (per i `DatePicker` delle ore).
     @MainActor static func date(_ minutes: Int) -> Date {
         CVDate.calendar.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: Date()) ?? Date()

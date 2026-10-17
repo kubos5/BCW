@@ -3,27 +3,24 @@ import SwiftUI
 struct YouView: View {
     @Environment(AppModel.self) private var model
     @State private var switchingAccount = false
+    @State private var showingSettings = false
+    @State private var showingAccount = false
+    #if DEBUG
+    /// Per le prove: `-BCWOpenPage bacheca` apre una pagina di Tu all'avvio (vedi `debugPage`).
+    @State private var debugPage: String?
+    #endif
 
     var body: some View {
-        iOSBody
-    }
-
-    private var iOSBody: some View {
         PlatformNavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    PageLargeTitle()
-                        .padding(.bottom, -10)
-                    // Profilo e statistiche formano un blocco: stessa distanza che c'è tra le statistiche.
-                    VStack(alignment: .leading, spacing: 10) {
-                        NavigationLink {
-                            AccountView()
-                        } label: {
-                            ProfileCard()
-                        }
-                        .buttonStyle(.pressable(radius: Theme.radii.xl, pressed: Theme.radii.l))
-                        stats
+                VStack(alignment: .leading, spacing: 28) {
+                    ProfileHero {
+                        showingAccount = true
+                    } switchAccount: {
+                        switchingAccount = true
                     }
+                    stats
+                    attention
 
                     ListGroup("Comunicazioni") {
                         MenuRow(title: "Bacheca", subtitle: noticeSubtitle, icon: "megaphone",
@@ -61,11 +58,6 @@ struct YouView: View {
                                 icon: "calendarClock", tint: Theme.subject(7)) { SchoolCalendarView() }
                     }
 
-                    ListGroup("App") {
-                        MenuRow(title: "Impostazioni", subtitle: "Medie, orario, promemoria, backup",
-                                icon: "gear", tint: Theme.secondaryInk) { SettingsView() }
-                    }
-
                     YouFooter()
                 }
                 .pagePadding()
@@ -75,40 +67,107 @@ struct YouView: View {
             .scrollsToTopOnReselect()
             .themedBackground()
             .refreshable { await model.refreshAll() }
-            .pageChrome("Tu") {
-                accountSwitcher
+            .pageChrome("Tu", style: .inline) {
+                BarButton("Impostazioni", icon: "gear") { showingSettings = true }
             }
+            .navigationDestination(isPresented: $showingSettings) { SettingsView() }
+            .navigationDestination(isPresented: $showingAccount) { AccountView() }
+            #if DEBUG
+            .navigationDestination(item: $debugPage) { page in debugDestination(page) }
+            .task {
+                if debugPage == nil, let page = UserDefaults.standard.string(forKey: "BCWOpenPage") {
+                    if page == "cambia-account" { switchingAccount = true } else { debugPage = page }
+                }
+            }
+            #endif
             .sheet(isPresented: $switchingAccount) {
                 AccountSwitcherSheet()
             }
         }
     }
 
-    /// Cambio rapido dell'account attivo: apre lo stesso popup della scheda Tu tenuta premuta.
-    /// L'icona conta solo gli account veri: la demo non è un account.
-    private var accountSwitcher: some View {
-        BarButton(model.accounts.count > 1 ? "Cambia account" : "Aggiungi account",
-                  icon: model.accounts.count > 1 ? "users" : "userPlus") {
-            switchingAccount = true
-        }
-    }
-
-    var stats: some View {
+    /// Media e frequenza in una griglia collegata (angoli ampi solo all'esterno, come le liste
+    /// segmentate). Assenze, ritardi e uscite aprono la pagina delle assenze.
+    private var stats: some View {
         let absences = model.absences.filter { $0.kind == .absence }.count
         let lates = model.absences.filter { $0.kind == .late || $0.kind == .shortLate }.count
         let exits = model.absences.filter { $0.kind == .earlyExit }.count
-        return Grid(horizontalSpacing: 10, verticalSpacing: 10) {
-            GridRow {
-                StatTile(title: "Media", value: GradeFormat.average(model.gradeBook.average()),
-                         icon: "graduationCap", tint: Theme.gradeColor(value: model.gradeBook.average()), shape: .cookie9Sided)
-                StatTile(title: "Assenze", value: "\(absences)", icon: "userX", tint: Theme.poor, shape: .clover4Leaf)
+        let average = model.gradeBook.average()
+        // Larghezze e altezze uguali: due colonne della stessa misura, riquadri alti uguali.
+        return VStack(spacing: 2) {
+            HStack(spacing: 2) {
+                StatTile(title: "Media generale", value: GradeFormat.average(average), icon: "graduationCap",
+                         tint: Theme.gradeColor(value: average), shape: .cookie9Sided, corners: .topLeading)
+                    .frame(height: 84)
+                statLink(StatTile(title: "Assenze", value: "\(absences)", icon: "userX", tint: Theme.poor,
+                                  shape: .clover4Leaf, corners: .topTrailing))
             }
-            GridRow {
-                StatTile(title: "Ritardi", value: "\(lates)", icon: "clock", tint: Theme.fair, shape: .sunny)
-                StatTile(title: "Uscite", value: "\(exits)", icon: "doorOpen", tint: Theme.neutral, shape: .cookie6Sided)
+            HStack(spacing: 2) {
+                statLink(StatTile(title: "Ritardi", value: "\(lates)", icon: "clock", tint: Theme.fair,
+                                  shape: .sunny, corners: .bottomLeading))
+                statLink(StatTile(title: "Uscite", value: "\(exits)", icon: "doorOpen", tint: Theme.neutral,
+                                  shape: .cookie6Sided, corners: .bottomTrailing))
             }
         }
     }
+
+    private func statLink(_ tile: StatTile) -> some View {
+        NavigationLink { AbsencesView() } label: {
+            tile.frame(height: 84)
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Ciò che aspetta l'utente (comunicazioni e note da leggere, assenze da giustificare), in
+    /// evidenza nel contenitore secondario. Non c'è se è tutto a posto.
+    @ViewBuilder
+    private var attention: some View {
+        let notices = model.unreadNoticesCount
+        let notes = model.notes.filter { !$0.isRead }.count
+        let absences = model.unjustifiedAbsences.count
+        if notices + notes + absences > 0 {
+            ListGroup("Da vedere", background: Theme.secondaryContainer) {
+                if notices > 0 {
+                    MenuRow(title: notices == 1 ? "1 comunicazione da leggere" : "\(notices) comunicazioni da leggere",
+                            icon: "megaphone", tint: Theme.primary) { NoticeboardView() }
+                }
+                if notes > 0 {
+                    MenuRow(title: notes == 1 ? "1 nota da leggere" : "\(notes) note da leggere",
+                            icon: "messageAlert", tint: Theme.poor) { NotesView() }
+                }
+                if absences > 0 {
+                    MenuRow(title: absences == 1 ? "1 assenza da giustificare" : "\(absences) assenze da giustificare",
+                            icon: "userClock", tint: Theme.fair) { AbsencesView() }
+                }
+            }
+        }
+    }
+
+    #if DEBUG
+    @ViewBuilder
+    private func debugDestination(_ page: String) -> some View {
+        switch page {
+        case "bacheca": NoticeboardView()
+        case "note": NotesView()
+        case "scrutini": ReportsView()
+        case "anni": PreviousYearView()
+        case "assenze": AbsencesView()
+        case "materiale": DidacticsView()
+        case "lezioni": LessonsView()
+        case "agenda": AgendaListView()
+        case "materie": SubjectsView()
+        case "libri": SchoolbooksView()
+        case "calendario": SchoolCalendarView()
+        case "account": AccountView()
+        case let pane where pane.hasPrefix("impostazioni-"):
+            if let found = SettingsPane.allCases.first(where: { $0.rawValue == pane.dropFirst(13) }) {
+                SettingsPaneView(pane: found)
+            }
+        default: SettingsView()
+        }
+    }
+    #endif
 
     private var noticeSubtitle: String {
         let unread = model.unreadNoticesCount
@@ -122,6 +181,55 @@ struct YouView: View {
     private var absenceSubtitle: String {
         let pending = model.unjustifiedAbsences.count
         return pending == 0 ? "Tutto giustificato" : "\(pending) da giustificare"
+    }
+}
+
+/// Profilo in cima a Tu, come la pagina dell'account Google: l'avatar grande in un biscotto che
+/// ruota piano al tocco, nome, scuola e classe al centro, poi i pulsanti per l'account.
+struct ProfileHero: View {
+    @Environment(AppModel.self) private var model
+    let manage: () -> Void
+    let switchAccount: () -> Void
+    @State private var turns = 0.0
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Button {
+                Haptics.soft()
+                withAnimation(Motion.spatialSlow) { turns += 1 }
+            } label: {
+                Avatar(initials: model.card?.initials ?? String(model.displayName.prefix(1)), size: 112,
+                       shape: .cookie12Sided, rotation: .degrees(turns * 60))
+            }
+            .buttonStyle(.plain)
+            .accessibilityHidden(true)
+            VStack(spacing: 4) {
+                Text(model.displayName)
+                    .font(.m3(28, weight: 500, rounded: true))
+                    .foregroundStyle(Theme.ink)
+                    .multilineTextAlignment(.center)
+                if let school = model.card?.schoolDescription {
+                    Text([school, model.card?.schoolCity?.nameCased].compactMap { $0 }.joined(separator: " · "))
+                        .font(.m3(14))
+                        .foregroundStyle(Theme.secondaryInk)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            HStack(spacing: 8) {
+                Button(action: manage) {
+                    Label { Text("Gestisci account") } icon: { Icon("manageAccounts") }
+                }
+                .buttonStyle(.m3(.tonal, size: .s))
+                Button(action: switchAccount) {
+                    Label { Text(model.accounts.count > 1 ? "Cambia" : "Aggiungi") } icon: {
+                        Icon(model.accounts.count > 1 ? "switchAccount" : "userPlus")
+                    }
+                }
+                .buttonStyle(.m3(.outlined, size: .s))
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 8)
     }
 }
 
@@ -167,36 +275,3 @@ private struct MenuRow<Destination: View>: View {
         .buttonStyle(.listRow)
     }
 }
-
-struct ProfileCard: View {
-    @Environment(AppModel.self) private var model
-    /// Riempie l'altezza disponibile.
-    var fillsHeight = false
-    @State private var hovering = false
-
-    var body: some View {
-        HStack(spacing: 16) {
-            Avatar(initials: model.card?.initials ?? String(model.displayName.prefix(1)), size: 72,
-                   shape: .cookie12Sided, rotation: .degrees(hovering ? 30 : 0))
-                .scaleEffect(hovering ? 1.04 : 1)
-            // Solo nome e scuola: la classe è nella pagina Account.
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.displayName)
-                    .font(.m3(22, weight: 500, rounded: true))
-                    .foregroundStyle(Theme.ink)
-                if let school = model.card?.schoolDescription {
-                    Text([school, model.card?.schoolCity?.nameCased].compactMap { $0 }.joined(separator: " · "))
-                        .font(.m3(14))
-                        .foregroundStyle(Theme.secondaryInk)
-                }
-            }
-            Spacer(minLength: 0)
-            Icon("chevronRight", size: 22)
-                .foregroundStyle(Theme.secondaryInk)
-        }
-        .frame(maxHeight: fillsHeight ? .infinity : nil)
-        .card(radius: Theme.radii.xl)
-        .onHover { hovering in withAnimation(Motion.spatial) { self.hovering = hovering } }
-    }
-}
-

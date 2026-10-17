@@ -25,7 +25,7 @@ struct NotesView: View {
                 if filtered.isEmpty {
                     EmptyState("Nessuna nota", icon: "thumbsUp", description: "Continua così!")
                 } else {
-                    CardGrid(minWidth: 360, spacing: 12) {
+                    ListGroup {
                         ForEach(filtered) { note in
                             NoteCard(note: note)
                         }
@@ -43,11 +43,12 @@ struct NotesView: View {
     }
 
     private var summary: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 2) {
             ForEach([DisciplinaryNote.Category.annotation, .disciplinary]) { c in
                 StatTile(title: c.title, value: "\(model.notes.filter { $0.category == c }.count)",
                          icon: c.icon, tint: c == .annotation ? Theme.neutral : Theme.poor,
-                         shape: c == .annotation ? .cookie4Sided : .clover4Leaf)
+                         shape: c == .annotation ? .cookie4Sided : .clover4Leaf,
+                         corners: c == .annotation ? .leading : .trailing, vertical: true)
             }
         }
     }
@@ -80,7 +81,8 @@ private struct NoteCard: View {
                 .font(.m3(12))
                 .foregroundStyle(Theme.secondaryInk)
         }
-        .card(padding: 14)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .task { await model.readNote(note) }
     }
 

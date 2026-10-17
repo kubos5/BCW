@@ -32,13 +32,19 @@ struct SubjectDetailView: View {
     @ViewBuilder
     private var periodPicker: some View {
         if book.activePeriods.count > 1 {
-            SegmentedButtons(selection: $period,
-                             options: [(Int?.none, "Anno", nil)] + book.activePeriods.map { (Optional($0.position), $0.name, nil) })
+            ConnectedButtonGroup(selection: $period, values: [nil] + book.activePeriods.map { Optional($0.position) },
+                                 height: 48) { period, _ in
+                Text(period.flatMap { p in book.activePeriods.first { $0.position == p }?.name } ?? "Anno")
+                    .font(.m3(14, weight: 600))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .padding(.horizontal, 6)
+            }
         }
     }
 
     private var gradeList: some View {
-        CardGrid(minWidth: 340, spacing: 12) {
+        ListGroup {
             ForEach(grades) { grade in
                 GradeCard(grade: grade, book: book, isExpanded: expanded.contains(grade.id)) {
                     withAnimation(Motion.spatial) {
@@ -58,7 +64,8 @@ struct SubjectDetailView: View {
                 chart
                 GoalCalculator(grades: grades, weighted: book.weighted)
 
-                SectionHeader("Voti", subtitle: "\(grades.count) valutazioni")
+                SectionHeader("Voti", subtitle: grades.count == 1 ? "1 valutazione" : "\(grades.count) valutazioni")
+                    .padding(.bottom, -8)
                 gradeList
             }
             .pagePadding()
@@ -69,40 +76,34 @@ struct SubjectDetailView: View {
         .themedBackground()
     }
 
+    /// La media della materia in primo piano, al centro, con docenti e voto migliore e peggiore.
     private var header: some View {
-        HStack(spacing: 20) {
-            AverageRing(value: GradeBook.average(of: grades, weighted: book.weighted), size: 96, lineWidth: 8)
-            VStack(alignment: .leading, spacing: 2) {
-                Eyebrow(text: "Media di materia", color: Theme.subjectColor(subjectId))
+        VStack(spacing: 14) {
+            AverageRing(value: GradeBook.average(of: grades, weighted: book.weighted), size: 156, lineWidth: 12)
+            VStack(spacing: 4) {
                 Text(name)
                     .font(.m3(24, weight: 500, rounded: true))
                     .foregroundStyle(Theme.ink)
+                    .multilineTextAlignment(.center)
                 if !teachers.isEmpty {
                     Text(teachers.joined(separator: ", "))
                         .font(.m3(14))
                         .foregroundStyle(Theme.secondaryInk)
-                }
-                let values = grades.filter(\.countsTowardAverage).compactMap(\.value)
-                if let best = values.max(), let worst = values.min() {
-                    HStack(spacing: 12) {
-                        HStack(spacing: 2) {
-                            Icon("arrowUp", size: 18)
-                            Text(GradeFormat.short(best))
-                        }
-                        .foregroundStyle(Theme.good)
-                        HStack(spacing: 2) {
-                            Icon("arrowDown", size: 18)
-                            Text(GradeFormat.short(worst))
-                        }
-                        .foregroundStyle(Theme.poor)
-                    }
-                    .font(.numeral(15, weight: 700))
-                    .padding(.top, 6)
+                        .multilineTextAlignment(.center)
                 }
             }
-            Spacer(minLength: 0)
+            let values = grades.filter(\.countsTowardAverage).compactMap(\.value)
+            if let best = values.max(), let worst = values.min() {
+                HStack(spacing: 8) {
+                    StatusChip(text: "Migliore \(GradeFormat.short(best))", icon: "arrowUp",
+                               container: Theme.goodContainer, foreground: Theme.onGoodContainer)
+                    StatusChip(text: "Peggiore \(GradeFormat.short(worst))", icon: "arrowDown",
+                               container: Theme.poorContainer, foreground: Theme.onPoorContainer)
+                }
+            }
         }
-        .card(padding: 18)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 4)
     }
 
     @ViewBuilder
@@ -111,33 +112,38 @@ struct SubjectDetailView: View {
         let running = book.runningAverage(for: subjectId, period: period)
         if sorted.count >= 2 {
             VStack(alignment: .leading, spacing: 12) {
-                Eyebrow(text: "Voti e media")
+                Text("Voti e media")
+                    .font(.m3(18, weight: 550))
+                    .foregroundStyle(Theme.ink)
                 Chart {
-                    RuleMark(y: .value("Sufficienza", 6))
-                        .foregroundStyle(Theme.poor.opacity(0.7))
-                        .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [3, 4]))
+                    RectangleMark(yStart: .value("Base", 2), yEnd: .value("Sufficienza", 6))
+                        .foregroundStyle(Theme.poorContainer.opacity(0.15))
                     ForEach(running.indices, id: \.self) { i in
                         LineMark(x: .value("Data", running[i].date), y: .value("Media", running[i].value))
                             .foregroundStyle(Theme.subjectColor(subjectId))
                             .interpolationMethod(.monotone)
-                            .lineStyle(StrokeStyle(lineWidth: 2))
+                            .lineStyle(StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
                     }
                     ForEach(sorted) { grade in
                         PointMark(x: .value("Data", grade.date.startOfDay), y: .value("Voto", grade.value ?? 0))
-                            .foregroundStyle(Theme.gradeColor(grade))
-                            .symbolSize(78)
+                            .symbol {
+                                Circle()
+                                    .fill(Theme.gradeColor(grade))
+                                    .frame(width: 12, height: 12)
+                                    .overlay(Circle().stroke(Theme.surfaceContainerLow, lineWidth: 2.5))
+                            }
                     }
                 }
                 .chartYScale(domain: 2...10)
                 .chartYAxis {
                     AxisMarks(position: .trailing, values: [2, 4, 6, 8, 10]) { _ in
-                        AxisGridLine().foregroundStyle(Theme.outlineVariant)
-                        AxisValueLabel().font(.m3(11)).foregroundStyle(Theme.secondaryInk)
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 1, dash: [2, 4])).foregroundStyle(Theme.outlineVariant)
+                        AxisValueLabel().font(.m3(11, weight: 500)).foregroundStyle(Theme.onSurfaceVariant)
                     }
                 }
                 .frame(height: 170)
             }
-            .card()
+            .card(padding: 18, color: Theme.surfaceContainerLow, radius: Theme.radii.xl)
         }
     }
 }
@@ -155,11 +161,18 @@ struct GoalCalculator: View {
                                            count: upcoming, weighted: weighted)
 
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Eyebrow(text: "Obiettivo")
-                Spacer()
-                Icon("target")
-                    .foregroundStyle(Theme.primary)
+            HStack(spacing: 12) {
+                Shaped(shape: .cookie9Sided, fill: Theme.tertiaryContainer, size: 40) {
+                    Icon("target", size: 22)
+                        .foregroundStyle(Theme.onTertiaryContainer)
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Obiettivo")
+                        .font(.m3(18, weight: 550))
+                    Text("Quanto ti serve per arrivarci")
+                        .font(.m3(13))
+                        .foregroundStyle(Theme.secondaryInk)
+                }
             }
 
             HStack {
@@ -199,7 +212,7 @@ struct GoalCalculator: View {
         }
         .font(.m3(16))
         .foregroundStyle(Theme.ink)
-        .card()
+        .card(padding: 18, color: Theme.surfaceContainerLow, radius: Theme.radii.xl)
         .animation(Motion.spatial, value: preferences.targetAverage)
         .animation(Motion.spatial, value: upcoming)
     }

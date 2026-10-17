@@ -201,9 +201,12 @@ struct SchoolCalendarView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                yearProgress
-                nextHoliday
+            VStack(alignment: .leading, spacing: 24) {
+                // Anno scolastico e prossima vacanza formano una lista segmentata.
+                ListGroup {
+                    yearProgress
+                    nextHoliday
+                }
                 holidayList
             }
             .pagePadding()
@@ -233,8 +236,7 @@ struct SchoolCalendarView: View {
                     .font(.m3(12))
                     .foregroundStyle(Theme.secondaryInk)
             }
-            .frame(maxHeight: .infinity, alignment: .top)
-            .card()
+            .padding(18)
         }
     }
 
@@ -253,15 +255,14 @@ struct SchoolCalendarView: View {
                         .foregroundStyle(Theme.secondaryInk)
                 }
             }
-            .frame(maxHeight: .infinity, alignment: .top)
-            .card()
+            .padding(18)
         }
     }
 
     @ViewBuilder
     private var holidayList: some View {
         SectionHeader("Vacanze e chiusure")
-        VStack(spacing: 14) {
+        ListGroup {
             ForEach(holidays.indices, id: \.self) { i in
                 let h = holidays[i]
                 HStack(spacing: 12) {
@@ -276,15 +277,16 @@ struct SchoolCalendarView: View {
                         .font(.m3(12))
                         .foregroundStyle(Theme.secondaryInk)
                 }
-                if i != holidays.count - 1 { M3Divider() }
+                .padding(.horizontal, 16)
+                .frame(minHeight: 52)
             }
             if holidays.isEmpty {
                 Text("Il calendario non è ancora disponibile.")
                     .font(.m3(14))
                     .foregroundStyle(Theme.secondaryInk)
+                    .padding(16)
             }
         }
-        .card()
     }
 
     private func range(_ h: (start: Date, end: Date)) -> String {

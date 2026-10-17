@@ -122,17 +122,20 @@ private struct PageChrome<Actions: View>: ViewModifier {
                 }
         } else {
             let back = showsBack ?? !isRootPage
+            // Le pagine principali delle schede hanno il titolo grande nella riga dei pulsanti, come
+            // con Liquid Glass (`.inlineLarge`); le altre il titolo grande nel contenuto (o piccolo).
             content
                 .environment(\.pageScroll, scroll)
-                .environment(\.pageLargeTitle, style == .large ? title : nil)
+                .environment(\.pageLargeTitle, style == .large && back ? title : nil)
                 .toolbar(.hidden, for: .navigationBar)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     Color.clear.frame(height: bottomBarInset)
                 }
                 .safeAreaInset(edge: .top, spacing: 0) {
                     TopAppBar(title: title, subtitle: subtitle,
-                              titleShown: style == .inline || scroll.titleShown,
+                              titleShown: style == .inline || !back || scroll.titleShown,
                               scrolled: scroll.scrolled,
+                              large: !back,
                               back: back ? { dismiss() } : nil,
                               actions: actions)
                 }
@@ -146,6 +149,8 @@ struct TopAppBar<Actions: View>: View {
     var subtitle: String?
     var titleShown = true
     var scrolled = false
+    /// Titolo grande (34 punti) nella riga dei pulsanti, per le pagine principali delle schede.
+    var large = false
     var back: (() -> Void)?
     @ViewBuilder let actions: () -> Actions
 
@@ -157,9 +162,11 @@ struct TopAppBar<Actions: View>: View {
             }
             VStack(alignment: .leading, spacing: 0) {
                 Text(title)
-                    .font(.m3(22, weight: 500, rounded: true))
+                    .font(.m3(large ? 34 : 22, weight: large ? 550 : 500, rounded: true))
+                    .tracking(large ? -0.3 : 0)
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                     .contentTransition(.opacity)
                 if let subtitle, titleShown {
                     Text(subtitle)
@@ -287,7 +294,8 @@ extension View {
         modifier(SheetChrome(title: title, leading: leading, trailing: trailing))
     }
 
-    /// Aspetto dei fogli di Material 3: sfondo `surface-container-low` e angoli extra large.
+    /// Aspetto dei fogli di Material 3: sfondo `surface-container-low`, angoli del sistema (in basso
+    /// seguono quelli dello schermo).
     func m3Sheet() -> some View {
         modifier(M3SheetPresentation())
     }
@@ -359,7 +367,8 @@ struct SheetBar: View {
                 .font(.m3(20, weight: 500, rounded: true))
                 .foregroundStyle(Theme.ink)
                 .lineLimit(1)
-                .padding(.horizontal, 110)
+                .minimumScaleFactor(0.75)
+                .padding(.horizontal, 100)
             HStack(spacing: 8) {
                 if let leading {
                     button(leading)
@@ -422,7 +431,8 @@ private struct M3SheetPresentation: ViewModifier {
             .environment(\.bottomBarInset, 0)
             .overlayHost()
             .presentationBackground(Theme.surfaceContainerLow)
-            .presentationCornerRadius(ThemeStore.shared.liquidGlass ? nil : Theme.radii.xl)
+            // Angoli del sistema: un raggio fisso varrebbe anche per quelli in basso, che così non
+            // seguirebbero più la curva dello schermo.
             .presentationDragIndicator(.visible)
     }
 }
