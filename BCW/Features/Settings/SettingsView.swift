@@ -250,10 +250,13 @@ struct DataSettingsSection: View {
 }
 
 struct AboutSettingsSection: View {
+    @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        ListGroup("Informazioni", footer: "BCW (Better ClasseViVa) è un client non ufficiale e non è affiliato a Gruppo Spaggiari Parma S.p.A. Le credenziali sono salvate solo nel Portachiavi di questo dispositivo e inviate esclusivamente ai server di Classeviva.") {
+        ListGroup("Informazioni", footer: model.isCloud
+                  ? "BCW (Better ClasseViVa) è un client non ufficiale e non è affiliato a Gruppo Spaggiari Parma S.p.A. Le credenziali degli account abbinati sono salvate cifrate nel tuo account BCW e nel Portachiavi di questo dispositivo, e inviate ai server di Classeviva per accedere."
+                  : "BCW (Better ClasseViVa) è un client non ufficiale e non è affiliato a Gruppo Spaggiari Parma S.p.A. Le credenziali sono salvate solo nel Portachiavi di questo dispositivo e inviate esclusivamente ai server di Classeviva.") {
             ValueRow("Versione", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
             Button {
                 openURL(URL(string: "https://web.spaggiari.eu")!)
@@ -523,6 +526,11 @@ struct AccountsSettingsPane: View {
         AccountsSection {
             addingAccount = true
         }
+        .sheet(isPresented: $addingAccount) {
+            AddAccountSheet { addingAccount = false }
+        }
+        ClassevivaLinksSection()
+        CloudAccountSection()
         if model.isDemo {
             ListGroup {
                 ListRow(model.demoExitMessage)
@@ -535,6 +543,8 @@ struct AccountView: View {
     @Environment(AppModel.self) private var model
     @State private var confirmSignOut = false
     @State private var addingAccount = false
+    @State private var unlinking: SavedAccount?
+    @State private var unlinkError: String?
 
     var body: some View {
         ScrollView {
@@ -583,9 +593,22 @@ struct AccountView: View {
                     }
                 }
 
-                ListGroup(footer: signOutFooter) {
-                    ButtonRow(model.isDemo ? "Esci dalla demo" : "Esci da questo account", icon: "logout", destructive: true) {
-                        confirmSignOut = true
+                ClassevivaLinksSection()
+                CloudAccountSection()
+
+                if model.isCloud && !model.isDemo {
+                    if let account = model.activeAccount {
+                        ListGroup(footer: "\(account.name) non sarà più disponibile con l'account BCW \(model.cloud?.user.username ?? "") e il suo orario verrà eliminato dal server.") {
+                            ButtonRow("Scollega da BCW", icon: "minusCircle", destructive: true) {
+                                unlinking = account
+                            }
+                        }
+                    }
+                } else {
+                    ListGroup(footer: signOutFooter) {
+                        ButtonRow(model.isDemo ? "Esci dalla demo" : "Esci da questo account", icon: "logout", destructive: true) {
+                            confirmSignOut = true
+                        }
                     }
                 }
             }
@@ -604,6 +627,25 @@ struct AccountView: View {
         .sheet(isPresented: $addingAccount) {
             AddAccountSheet { addingAccount = false }
         }
+        .m3Dialog("Scollegare \(unlinking?.name ?? "l'account")?",
+                  isPresented: Binding(get: { unlinking != nil }, set: { if !$0 { unlinking = nil } }),
+                  message: "\(unlinking?.name ?? "L'account") non sarà più disponibile con l'account BCW \(model.cloud?.user.username ?? ""), su nessun dispositivo, e il suo orario verrà eliminato dal server. Il registro su Classeviva non cambia.") {
+            let account = unlinking
+            return [.cancel(), DialogAction(title: "Scollega", style: .destructive) {
+                guard let account else { return }
+                Task {
+                    do {
+                        try await model.unlinkAccount(account.id)
+                    } catch {
+                        unlinkError = error.localizedDescription
+                    }
+                }
+            }]
+        }
+        .m3Dialog("Scollegamento non riuscito", isPresented: Binding(get: { unlinkError != nil }, set: { if !$0 { unlinkError = nil } }),
+                  message: unlinkError) {
+            [.cancel("OK")]
+        }
     }
 
     private var signOutTitle: String {
@@ -618,33 +660,36 @@ struct AccountView: View {
     }
 }
 
-/// Foglio per aggiungere un account (la schermata di accesso, con Annulla).
+/// Foglio per aggiungere un account (la schermata di accesso, con Annulla). Con l'account BCW
+/// l'account viene abbinato sul server.
 struct AddAccountSheet: View {
+    @Environment(AppModel.self) private var model
     let dismiss: () -> Void
 
     var body: some View {
         NavigationStack {
             LoginView(isAddingAccount: true)
-                .sheetChrome("Aggiungi account", leading: .cancel(action: dismiss))
+                .sheetChrome(model.isCloud ? "Abbina account" : "Aggiungi account", leading: .cancel(action: dismiss))
         }
         .m3Sheet()
     }
 }
 
-/// Sezione "Account" della pagina Account: account salvati, aggiunta di un account e demo.
-/// È anche il contenuto del popup per cambiare account (`AccountSwitcherSheet`).
+/// Sezione "Account" della pagina Account: account salvati (o, con l'account BCW, quelli
+/// abbinati), aggiunta di un account e demo. È anche il contenuto del popup per cambiare
+/// account (`AccountSwitcherSheet`).
 struct AccountsSection: View {
     @Environment(AppModel.self) private var model
     /// Nel popup il titolo è già nella barra: l'intestazione della sezione si ripeterebbe.
     var showsHeader = true
     let addAccount: () -> Void
     @State private var removing: SavedAccount?
+    @State private var removalError: String?
 
     var body: some View {
-        ListGroup(showsHeader ? "Account" : nil,
-                  footer: model.accounts.count > 1
-                  ? "Tocca un account per passare ad esso. Usa il cestino per rimuoverlo"
-                  : "Puoi aggiungere altri account Classeviva (ad esempio quelli di fratelli o sorelle) e passare dall'uno all'altro.") {
+        let cloud = model.isCloud
+        let removeLabel = cloud ? "Scollega" : "Rimuovi"
+        ListGroup(showsHeader ? (cloud ? "Account Classeviva abbinati" : "Account") : nil, footer: footer) {
             ForEach(model.accounts) { account in
                 let isActive = !model.isDemo && account.id == model.activeAccountID
                 HStack(spacing: 0) {
@@ -654,15 +699,17 @@ struct AccountsSection: View {
                         AccountRow(account: account, isActive: isActive)
                     }
                     .buttonStyle(.listRow)
-                    IconButton("trash", label: "Rimuovi") { removing = account }
+                    IconButton(cloud ? "minusCircle" : "trash", label: removeLabel) { removing = account }
                         .padding(.trailing, 8)
-                        .help("Rimuovi l'account e le sue credenziali da questo dispositivo")
+                        .help(cloud ? "Scollega l'account dal tuo account BCW" : "Rimuovi l'account e le sue credenziali da questo dispositivo")
                 }
                 .contextMenu {
-                    Button(role: .destructive) { removing = account } label: { Label("Rimuovi", icon: "trash") }
+                    Button(role: .destructive) { removing = account } label: {
+                        Label(removeLabel, icon: cloud ? "minusCircle" : "trash")
+                    }
                 }
             }
-            ButtonRow("Aggiungi account", icon: "userPlus", action: addAccount)
+            ButtonRow(cloud ? "Abbina un account Classeviva" : "Aggiungi account", icon: "userPlus", action: addAccount)
             if !model.isDemo {
                 // Uscendo dalla demo si torna a questo account.
                 ButtonRow("Prova la demo", icon: "sparkles") {
@@ -670,13 +717,42 @@ struct AccountsSection: View {
                 }
             }
         }
-        .m3Dialog("Rimuovere \(removing?.name ?? "l'account")?",
+        .m3Dialog("\(removeLabel) \(removing?.name ?? "l'account")?",
                   isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
-                  message: "Le credenziali di questo account verranno rimosse da questo dispositivo.") {
-            [.cancel(), DialogAction(title: "Rimuovi", style: .destructive) {
-                if let id = removing?.id { withAnimation { model.removeAccount(id) } }
+                  message: cloud
+                  ? "\(removing?.name ?? "L'account") non sarà più disponibile con l'account BCW \(model.cloud?.user.username ?? ""), su nessun dispositivo, e il suo orario verrà eliminato dal server. Il registro su Classeviva non cambia."
+                  : "Le credenziali di questo account verranno rimosse da questo dispositivo.") {
+            let account = removing
+            return [.cancel(), DialogAction(title: removeLabel, style: .destructive) {
+                guard let account else { return }
+                if cloud {
+                    Task {
+                        do {
+                            try await model.unlinkAccount(account.id)
+                        } catch {
+                            removalError = error.localizedDescription
+                        }
+                    }
+                } else {
+                    withAnimation { model.removeAccount(account.id) }
+                }
             }]
         }
+        .m3Dialog("Scollegamento non riuscito", isPresented: Binding(get: { removalError != nil }, set: { if !$0 { removalError = nil } }),
+                  message: removalError) {
+            [.cancel("OK")]
+        }
+    }
+
+    private var footer: String {
+        let tap = "Tocca un account per passare ad esso."
+        if model.isCloud {
+            let base = "Gli account Classeviva abbinati all'account BCW \(model.cloud?.user.username ?? ""): li ritrovi accedendo con l'account BCW su qualsiasi dispositivo."
+            return model.accounts.count > 1 ? "\(base) \(tap)" : base
+        }
+        return model.accounts.count > 1
+            ? "\(tap) Usa il cestino per rimuoverlo."
+            : "Puoi aggiungere altri account Classeviva (ad esempio quelli di fratelli o sorelle) e passare dall'uno all'altro."
     }
 }
 

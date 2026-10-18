@@ -205,27 +205,31 @@ final class ThemeStore {
     static let shared = ThemeStore()
 
     @ObservationIgnored private let defaults = UserDefaults.standard
+    /// Avvisato quando cambia un'impostazione sincronizzata con l'account BCW (`CloudSync`).
+    @ObservationIgnored var onSyncedChange: (() -> Void)?
+    /// `true` mentre si applicano le impostazioni arrivate dal server: niente avvisi.
+    @ObservationIgnored private var applyingRemote = false
 
     private(set) var colors: SchemeColors
     private(set) var radii: CornerRadii
 
     var accentColor: String {
-        didSet { defaults.set(accentColor, forKey: "accentColor"); regenerate() }
+        didSet { defaults.set(accentColor, forKey: "accentColor"); regenerate(); syncedChanged() }
     }
     var colorStyle: ColorStyle {
-        didSet { defaults.set(colorStyle.rawValue, forKey: "colorStyle"); regenerate() }
+        didSet { defaults.set(colorStyle.rawValue, forKey: "colorStyle"); regenerate(); syncedChanged() }
     }
     var contrast: ContrastLevel {
-        didSet { defaults.set(contrast.rawValue, forKey: "contrast"); regenerate() }
+        didSet { defaults.set(contrast.rawValue, forKey: "contrast"); regenerate(); syncedChanged() }
     }
     var corners: CornerStyle {
-        didSet { defaults.set(corners.rawValue, forKey: "corners"); radii = .of(corners) }
+        didSet { defaults.set(corners.rawValue, forKey: "corners"); radii = .of(corners); syncedChanged() }
     }
     var motion: MotionStyle {
-        didSet { defaults.set(motion.rawValue, forKey: "motion") }
+        didSet { defaults.set(motion.rawValue, forKey: "motion"); syncedChanged() }
     }
     var roundedText: RoundedText {
-        didSet { defaults.set(roundedText.rawValue, forKey: "roundedText"); configureSystemBars() }
+        didSet { defaults.set(roundedText.rawValue, forKey: "roundedText"); configureSystemBars(); syncedChanged() }
     }
     /// Liquid Glass: barre e pulsanti dei menu di sistema invece di quelli di Material.
     var liquidGlass: Bool {
@@ -266,6 +270,38 @@ final class ThemeStore {
         // Le barre di sistema si configurano dopo (`BCWApp.init`): qui leggerebbero `shared`,
         // che non esiste ancora.
         regenerate(configuringBars: false)
+    }
+
+    private func syncedChanged() {
+        if !applyingRemote { onSyncedChange?() }
+    }
+
+    /// Aspetto sincronizzato con l'account BCW (Liquid Glass resta del dispositivo).
+    var syncedValues: [String: JSONValue] {
+        [
+            "accentColor": .string(Self.normalize(accentColor) ?? defaultAccent),
+            "colorStyle": .string(colorStyle.rawValue),
+            "contrast": .string(contrast.rawValue),
+            "corners": .string(corners.rawValue),
+            "motion": .string(motion.rawValue),
+            "roundedText": .string(roundedText.rawValue),
+        ]
+    }
+
+    /// Applica l'aspetto arrivato dall'account BCW (i valori non validi si saltano).
+    func applySynced(_ values: [String: JSONValue]) {
+        applyingRemote = true
+        defer { applyingRemote = false }
+        if let value = values["accentColor"]?.string.flatMap(Self.normalize), value != Self.normalize(accentColor) {
+            accentColor = value
+        }
+        if let value = values["colorStyle"]?.string.flatMap(ColorStyle.init(rawValue:)), value != colorStyle { colorStyle = value }
+        if let value = values["contrast"]?.string.flatMap(ContrastLevel.init(rawValue:)), value != contrast { contrast = value }
+        if let value = values["corners"]?.string.flatMap(CornerStyle.init(rawValue:)), value != corners { corners = value }
+        if let value = values["motion"]?.string.flatMap(MotionStyle.init(rawValue:)), value != motion { motion = value }
+        if let value = values["roundedText"]?.string.flatMap(RoundedText.init(rawValue:)), value != roundedText {
+            roundedText = value
+        }
     }
 
     static func normalize(_ value: String) -> String? {

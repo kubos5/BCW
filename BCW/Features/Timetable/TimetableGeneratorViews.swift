@@ -218,7 +218,7 @@ struct TimetableDraftBanner: View {
 
 // MARK: - Impostazioni
 
-/// Impostazioni dell'orario: allineamento, backup e (in arrivo) iCloud.
+/// Impostazioni dell'orario: allineamento, backup e sincronizzazione con l'account BCW.
 struct TimetableSettingsSection: View {
     @Environment(AppModel.self) private var model
     @State private var exportDocument: TimetableBackupDocument?
@@ -228,6 +228,7 @@ struct TimetableSettingsSection: View {
     @State private var secondConfirmation = false
     @State private var confirmingDeleteAll = false
     @State private var result: (title: String, message: String)?
+    @State private var signingIn = false
 
     private var store: TimetableStore { model.timetable }
 
@@ -237,7 +238,7 @@ struct TimetableSettingsSection: View {
             ToggleRow("Mostra le verifiche nella lista", icon: "test", isOn: Bindable(model.preferences).timetableShowsTests)
         }
 
-        ListGroup("Backup dell'orario", footer: "L'orario è salvato solo su questo dispositivo, separato per ogni account. Il backup contiene eventi, colori, palette, note, verifiche segnate e file allegati; importandolo sostituisce l'orario attuale. È compatibile con la versione web di BCW.") {
+        ListGroup("Backup dell'orario", footer: "\(model.isCloud ? "L'orario di ogni account abbinato si sincronizza con il tuo account BCW." : "L'orario è salvato solo su questo dispositivo, separato per ogni account.") Il backup contiene eventi, colori, palette, note, verifiche segnate e file allegati; importandolo sostituisce l'orario attuale. È compatibile con la versione web di BCW.") {
             ButtonRow("Esporta un backup dell'orario", icon: "upload") { export() }
                 .disabled(store.owner == nil)
             ButtonRow("Importa un backup…", icon: "download") { importing = true }
@@ -296,21 +297,23 @@ struct TimetableSettingsSection: View {
             [.cancel(), DialogAction(title: "Elimina l'orario", style: .destructive) { store.deleteAll() }]
         }
 
-        ListGroup("iCloud", footer: "Work in progress: la sincronizzazione dell'orario tra i tuoi dispositivi con iCloud non è ancora disponibile. Nel frattempo puoi spostare l'orario con un backup.") {
-            Toggle(isOn: .constant(false)) {
-                HStack(spacing: 16) {
-                    FormIcon("cloud")
-                    Text("Sincronizza con iCloud")
-                        .font(.m3(16, weight: 500))
-                        .foregroundStyle(Theme.ink)
-                    Pill(text: "Work in progress", short: "WIP", color: Theme.fair, small: true)
+        if model.isCloud {
+            ListGroup("Sincronizzazione", footer: model.isDemo
+                      ? "L'orario della demo non si sincronizza."
+                      : "L'orario di questo account, con i file allegati, si sincronizza con l'account BCW \(model.cloud?.user.username ?? "").") {
+                ButtonRow("Sincronizza ora", icon: "refresh") {
+                    Task {
+                        await model.cloudSync.flush()
+                        await model.refreshCloud(force: true)
+                    }
                 }
+                .disabled(model.isDemo || model.cloudSync.status == .syncing)
             }
-            .toggleStyle(.m3)
-            .disabled(true)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .frame(minHeight: 56)
+        } else {
+            ListGroup("Sincronizzazione", footer: "Con un account BCW l'orario di ogni account Classeviva abbinato, con i file allegati, si sincronizza tra i tuoi dispositivi (versione web compresa).") {
+                ButtonRow("Accedi con un account BCW…", icon: "cloud") { signingIn = true }
+            }
+            .sheet(isPresented: $signingIn) { CloudLoginSheet(registering: false) }
         }
     }
 

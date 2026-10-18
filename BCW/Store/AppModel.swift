@@ -16,8 +16,25 @@ final class AppModel {
     private(set) var isDemo = false
     private(set) var client: ClassevivaClient?
     let preferences = Preferences()
-    /// Orario settimanale dell'account attivo (salvato solo sul dispositivo).
+    /// Orario settimanale dell'account attivo (sul dispositivo; con l'account BCW anche sul server).
     let timetable = TimetableStore()
+    /// Sincronizzazione di impostazioni e orario con l'account BCW.
+    let cloudSync = CloudSync()
+
+    // Account BCW
+    /// Sessione dell'account BCW. Con l'account BCW `accounts` sono gli account Classeviva
+    /// abbinati sul server (con il loro id), altrimenti quelli salvati sul dispositivo.
+    private(set) var cloud: BCWSession?
+    /// Avviso per la schermata di accesso (es. sessione BCW scaduta).
+    var cloudNotice: String?
+    /// Nome utente dell'ultimo account BCW, per riempire il campo dopo l'uscita.
+    private(set) var lastCloudUsername: String?
+    /// Account del dispositivo da proporre di abbinare dopo l'accesso con l'account BCW.
+    var localAccountsToLink: [SavedAccount] = []
+    /// Account del dispositivo che non è stato possibile abbinare, con il motivo.
+    var linkFailureMessage: String?
+    @ObservationIgnored private var cloudRefreshedAt = Date.distantPast
+    @ObservationIgnored private var cloudRefreshing = false
 
     // Account salvati
     private(set) var accounts: [SavedAccount] = []
@@ -71,7 +88,25 @@ final class AppModel {
 
     private static let demoKey = "demoMode"
     private static let activeAccountKey = "activeAccount"
+    private static let activeCloudAccountKey = "activeCloudAccount"
     static let gradePaths = ["grades", "grades2324", "grades2"]
+
+    init() {
+        cloudSync.model = self
+        preferences.onSyncedChange = { [weak self] in self?.cloudSync.settingsChanged() }
+        timetable.onSaved = { [weak self] owner in self?.cloudSync.timetableChanged(owner: owner) }
+    }
+
+    /// Account attivo salvato: separato per gli account del dispositivo e per l'account BCW.
+    private var activeKey: String { cloud == nil ? Self.activeAccountKey : Self.activeCloudAccountKey }
+
+    private func saveAccounts() {
+        if cloud == nil {
+            Keychain.saveAccounts(accounts)
+        } else {
+            Keychain.saveCloudAccounts(accounts)
+        }
+    }
 
     // MARK: Sessione
 
@@ -93,14 +128,19 @@ final class AppModel {
     }
 
     func bootstrap() {
-        accounts = Keychain.loadAccounts()
+        // L'aspetto è in `ThemeStore`: anche i suoi cambi vanno all'account BCW.
+        ThemeStore.shared.onSyncedChange = { [weak self] in self?.cloudSync.settingsChanged() }
+        cloud = Keychain.loadCloudSession()
+        accounts = cloud == nil ? Keychain.loadAccounts() : Keychain.loadCloudAccounts()
+        // Con l'account BCW gli account abbinati arrivano dal server: intanto si usano quelli salvati.
+        if cloud != nil { Task { await refreshCloud(force: true) } }
         // Cache delle versioni precedenti: ora ogni account (e la demo) ha la sua.
         DiskCache.remove(namespace: "live")
         for year in ArchiveModel.availableStartYears {
             DiskCache.remove(namespace: "archive-\(year)")
             DiskCache.remove(namespace: "archive-\(year)-demo")
         }
-        let storedID = UserDefaults.standard.string(forKey: Self.activeAccountKey)
+        let storedID = UserDefaults.standard.string(forKey: activeKey)
         if UserDefaults.standard.bool(forKey: Self.demoKey) {
             // La demo può essere aperta da un account: uscendo si torna a quello.
             activeAccountID = accounts.first { $0.id == storedID }?.id
@@ -128,7 +168,11 @@ final class AppModel {
         let name = [response.firstName, response.lastName].compactMap { $0 }.joined(separator: " ").nameCased
 
         var account: SavedAccount
-        if let index = accounts.firstIndex(where: { $0.matches(stored) }) {
+        if let cloud {
+            // Con l'account BCW l'account viene abbinato sul server, che verifica le credenziali.
+            let linked = try await linkOnServer(stored, token: cloud.token)
+            account = upsertCloudAccount(linked)
+        } else if let index = accounts.firstIndex(where: { $0.matches(stored) }) {
             accounts[index].credentials = stored
             if !name.isEmpty { accounts[index].name = name }
             account = accounts[index]
@@ -136,7 +180,7 @@ final class AppModel {
             account = SavedAccount(credentials: stored, name: name.isEmpty ? stored.username : name)
             accounts.append(account)
         }
-        Keychain.saveAccounts(accounts)
+        saveAccounts()
         if phase == .signedIn {
             // Account aggiunto mentre l'app è aperta: stessa dissolvenza del cambio di account.
             let added = account
@@ -191,9 +235,10 @@ final class AppModel {
         isDemo = false
         UserDefaults.standard.set(false, forKey: Self.demoKey)
         activeAccountID = account.id
-        UserDefaults.standard.set(account.id, forKey: Self.activeAccountKey)
+        UserDefaults.standard.set(account.id, forKey: activeKey)
         loginName = account.name
         timetable.load(owner: account.id)
+        if cloud != nil { cloudSync.pullTimetable(account.id) }
         client = ClassevivaClient(transport: URLSessionTransport(baseURL: ClassevivaClient.officialBaseURL),
                                   cacheNamespace: "live-\(account.id)", credentials: account.credentials)
         loadFromCache()
@@ -232,6 +277,10 @@ final class AppModel {
     /// Esce dall'account attivo (o dalla demo). Se ci sono altri account salvati
     /// passa al successivo, altrimenti torna alla schermata di accesso.
     func signOut() {
+        if cloud != nil, !isDemo {
+            Task { await cloudSignOut() }
+            return
+        }
         if isDemo {
             if let next = accountAfterDemo {
                 changeSession {
@@ -277,8 +326,13 @@ final class AppModel {
         guard accounts.contains(where: { $0.id == id }) else { return }
         if id == activeAccountID, !isDemo { resetData() }
         removeCaches(owner: account.id)
+        if cloud != nil {
+            // L'orario di un account abbinato è sul server: dal dispositivo se ne va con l'account.
+            TimetableStore.removeData(owner: account.id)
+            cloudSync.forgetTimetable(account.id)
+        }
         accounts.removeAll { $0.id == id }
-        Keychain.saveAccounts(accounts)
+        saveAccounts()
         guard id == activeAccountID, !isDemo else { return }
         if let next = accounts.first {
             activate(next)
@@ -291,7 +345,7 @@ final class AppModel {
         resetData()
         activeAccountID = nil
         timetable.load(owner: nil)
-        UserDefaults.standard.removeObject(forKey: Self.activeAccountKey)
+        UserDefaults.standard.removeObject(forKey: activeKey)
         Task { await Reminders.reschedule(events: [], hour: 18, enabled: false, completed: []) }
         withAnimation { phase = .signedOut }
     }
@@ -321,7 +375,11 @@ final class AppModel {
         guard (!name.isEmpty && accounts[index].name != name) || accounts[index].school != school else { return }
         if !name.isEmpty { accounts[index].name = name }
         accounts[index].school = school
-        Keychain.saveAccounts(accounts)
+        saveAccounts()
+        if let cloud {
+            let account = accounts[index]
+            Task { try? await BCWAPI.updateAccount(token: cloud.token, id: account.id, name: account.name, school: account.school) }
+        }
     }
 
     var credentialsForArchive: Credentials? { client?.credentials }
@@ -355,6 +413,249 @@ final class AppModel {
             .appendingPathComponent("BCWFiles", isDirectory: true))
     }
 
+    // MARK: Account BCW
+
+    var isCloud: Bool { cloud != nil }
+
+    /// Accede all'account BCW (o lo crea con `register`) e passa agli account Classeviva abbinati.
+    /// Gli account del dispositivo non ancora abbinati finiscono in `localAccountsToLink`.
+    func cloudSignIn(username: String, password: String, register: Bool) async throws {
+        let session = try await BCWAPI.signIn(username: username.trimmingCharacters(in: .whitespaces),
+                                              password: password, register: register)
+        let remote = try await BCWAPI.accounts(token: session.token).compactMap(\.savedAccount)
+        let local = cloud == nil ? Keychain.loadAccounts() : []
+        let candidates = local.filter { account in !remote.contains { $0.isSameProfile(as: account) } }
+        cloudNotice = nil
+        cloudRefreshedAt = .now
+        changeSession {
+            if self.isDemo { self.leaveDemo() }
+            self.cloudSync.reset()
+            self.cloud = session
+            Keychain.saveCloudSession(session)
+            self.accounts = remote
+            self.saveAccounts()
+            if let first = remote.first {
+                self.activate(first)
+            } else {
+                self.endSession()
+            }
+            self.cloudSync.pullSettings()
+            // La proposta arriva quando l'account BCW è già aperto (dopo la dissolvenza).
+            self.localAccountsToLink = candidates
+        }
+    }
+
+    private func linkOnServer(_ credentials: Credentials, token: String) async throws -> SavedAccount {
+        do {
+            let remote = try await BCWAPI.link(token: token, credentials: credentials)
+            guard let account = remote.savedAccount else {
+                throw BCWError(code: "decoding", message: "Risposta inattesa dal server BCW.")
+            }
+            return account
+        } catch let error as BCWError where error.isUnauthorized {
+            cloudSessionExpired()
+            throw error
+        }
+    }
+
+    /// Aggiunge o aggiorna un account abbinato (stesso id del server).
+    @discardableResult
+    private func upsertCloudAccount(_ remote: SavedAccount) -> SavedAccount {
+        guard let index = accounts.firstIndex(where: { $0.id == remote.id }) else {
+            accounts.append(remote)
+            return remote
+        }
+        accounts[index].credentials = remote.credentials
+        accounts[index].name = remote.name
+        if let school = remote.school { accounts[index].school = school }
+        return accounts[index]
+    }
+
+    /// Abbina all'account BCW gli account del dispositivo, copiandone l'orario.
+    func linkLocalAccounts(_ locals: [SavedAccount]) async {
+        var failures: [String] = []
+        for local in locals {
+            guard let cloud else { return }
+            do {
+                let linked = try await linkOnServer(local.credentials, token: cloud.token)
+                let account = upsertCloudAccount(linked)
+                saveAccounts()
+                TimetableStore.copyData(from: local.id, to: account.id)
+                cloudSync.pullTimetable(account.id)
+            } catch {
+                guard self.cloud != nil else { return }
+                failures.append("\(local.name): \(error.localizedDescription)")
+            }
+        }
+        if phase == .signedOut, let first = accounts.first { activate(first) }
+        if !failures.isEmpty { linkFailureMessage = failures.joined(separator: "\n") }
+    }
+
+    /// Aggiorna gli account abbinati e sincronizza impostazioni e orario dell'account attivo
+    /// (all'avvio, aggiornando, tornando nell'app; al massimo ogni 30 secondi senza `force`).
+    func refreshCloud(force: Bool = false) async {
+        guard let session = cloud, !cloudRefreshing else { return }
+        guard force || Date().timeIntervalSince(cloudRefreshedAt) > 30 else { return }
+        cloudRefreshing = true
+        defer { cloudRefreshing = false }
+        do {
+            let remote = try await BCWAPI.accounts(token: session.token).compactMap(\.savedAccount)
+            guard cloud == session else { return }
+            cloudRefreshedAt = .now
+            applyRemoteAccounts(remote)
+        } catch let error as BCWError where error.isUnauthorized {
+            if cloud == session { cloudSessionExpired() }
+            return
+        } catch {
+            // Senza rete restano gli account salvati; si riprova al prossimo aggiornamento.
+            return
+        }
+        cloudSync.pullSettings()
+        if let active = activeAccount, !isDemo { cloudSync.pullTimetable(active.id) }
+    }
+
+    /// Allinea gli account abbinati a quelli del server (aggiunti o tolti da un altro dispositivo).
+    private func applyRemoteAccounts(_ list: [SavedAccount]) {
+        let active = isDemo ? nil : activeAccount
+        let removed = accounts.filter { account in !list.contains { $0.id == account.id } }
+        var next: [SavedAccount] = []
+        for remote in list {
+            if var existing = accounts.first(where: { $0.id == remote.id }) {
+                existing.credentials = remote.credentials
+                existing.name = remote.name
+                if let school = remote.school { existing.school = school }
+                next.append(existing)
+            } else {
+                next.append(remote)
+            }
+        }
+        if next != accounts {
+            accounts = next
+            saveAccounts()
+        }
+        for account in removed {
+            removeCaches(owner: account.id)
+            TimetableStore.removeData(owner: account.id)
+            cloudSync.forgetTimetable(account.id)
+        }
+        // Password cambiata da un altro dispositivo: il prossimo accesso usa quella nuova.
+        if let active, let fresh = next.first(where: { $0.id == active.id }), fresh.credentials != active.credentials {
+            client?.credentials = fresh.credentials
+        }
+        guard !isDemo else { return }
+        if let active, !next.contains(where: { $0.id == active.id }) {
+            if let first = next.first {
+                changeSession { self.activate(first) }
+            } else {
+                endSession()
+            }
+        } else if phase == .signedOut, let first = next.first {
+            activate(first)
+        }
+    }
+
+    /// Scollega un account Classeviva dall'account BCW (con il suo orario sul server).
+    func unlinkAccount(_ id: String) async throws {
+        guard let cloud else {
+            removeAccount(id)
+            return
+        }
+        do {
+            try await BCWAPI.unlink(token: cloud.token, id: id)
+        } catch let error as BCWError where error.isUnauthorized {
+            cloudSessionExpired()
+            return
+        } catch let error as BCWError where error.code == "not_found" {
+            // Già scollegato, ad esempio da un altro dispositivo.
+        }
+        removeAccount(id)
+    }
+
+    /// Esce dall'account BCW: gli account abbinati, le loro cache e i loro orari spariscono dal
+    /// dispositivo (restano sul server) e tornano quelli salvati sul dispositivo.
+    func cloudSignOut() async {
+        guard let session = cloud else { return }
+        // Le ultime modifiche in attesa partono prima di uscire (al massimo 3 secondi).
+        await cloudSync.flush(timeout: .seconds(3))
+        Task { try? await BCWAPI.signOut(token: session.token) }
+        leaveCloud()
+    }
+
+    func cloudSessionExpired() {
+        guard cloud != nil else { return }
+        leaveCloud(notice: "La sessione dell'account BCW è scaduta o è stata chiusa: accedi di nuovo.")
+    }
+
+    private func leaveCloud(notice: String? = nil) {
+        guard let session = cloud else { return }
+        let cloudAccounts = accounts
+        cloudNotice = notice
+        lastCloudUsername = session.user.username
+        localAccountsToLink = []
+        changeSession {
+            guard self.cloud != nil else { return }
+            if self.isDemo { self.leaveDemo() } else { self.resetData() }
+            for account in cloudAccounts {
+                self.removeCaches(owner: account.id)
+                TimetableStore.removeData(owner: account.id)
+            }
+            Keychain.saveCloudSession(nil)
+            Keychain.saveCloudAccounts([])
+            UserDefaults.standard.removeObject(forKey: Self.activeCloudAccountKey)
+            self.cloudSync.reset()
+            self.cloud = nil
+            self.accounts = Keychain.loadAccounts()
+            let storedID = UserDefaults.standard.string(forKey: Self.activeAccountKey)
+            if let next = self.accounts.first(where: { $0.id == storedID }) ?? self.accounts.first {
+                self.activate(next)
+            } else {
+                self.endSession()
+            }
+        }
+    }
+
+    func changeCloudPassword(current: String, new: String) async throws {
+        guard let session = cloud else { return }
+        let token = try await BCWAPI.changePassword(token: session.token, current: current, new: new)
+        let updated = BCWSession(token: token, user: session.user)
+        cloud = updated
+        Keychain.saveCloudSession(updated)
+    }
+
+    func deleteCloudAccount(password: String) async throws {
+        guard let session = cloud else { return }
+        try await BCWAPI.deleteAccount(token: session.token, password: password)
+        leaveCloud()
+    }
+
+    /// Le impostazioni sono cambiate da un altro dispositivo.
+    func settingsApplied() {
+        guard phase == .signedIn else { return }
+        Task { await rescheduleReminders() }
+    }
+
+    // MARK: Lato Classeviva
+
+    /// Profilo e token di Classeviva dell'account attivo, che provano a BCW-api l'accesso.
+    private func classevivaIdentity() async throws -> (ident: String, token: String) {
+        guard let client, !isDemo else { throw BCWError(code: "demo", message: "Non disponibile nella demo.") }
+        return try await client.currentSession()
+    }
+
+    /// Gli account BCW a cui è abbinato il profilo Classeviva attivo.
+    func classevivaLinks() async throws -> [BCWLink] {
+        let identity = try await classevivaIdentity()
+        return try await BCWAPI.links(ident: identity.ident, classevivaToken: identity.token)
+    }
+
+    /// Scollega il profilo attivo da un account BCW (`nil` = da tutti).
+    func removeClassevivaLink(_ id: String?) async throws {
+        let identity = try await classevivaIdentity()
+        try await BCWAPI.removeLink(id: id, ident: identity.ident, classevivaToken: identity.token)
+        // Se era un abbinamento di questo account BCW, l'elenco degli account cambia.
+        if cloud != nil { await refreshCloud(force: true) }
+    }
+
     // MARK: Caricamento
 
     private var schoolYear: (start: Date, end: Date, startYear: Int) { CVDate.schoolYear() }
@@ -379,6 +680,7 @@ final class AppModel {
 
     func refreshAll() async {
         guard let client, refreshingClient !== client else { return }
+        if cloud != nil { Task { await refreshCloud() } }
         refreshingClient = client
         isRefreshing = true
         lastError = nil
