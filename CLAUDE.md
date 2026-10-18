@@ -252,8 +252,15 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `.m3Dialog`, toast; con Liquid Glass i menu sono `Menu` di sistema), `Page.swift`.
 - Selettore della data (`DatePicker.swift`, `M3DatePickerSheet`): modale di Material 3 con la data in grande,
   griglia del mese (scorrendo di lato si cambia mese) e griglia di mesi e anni; Oggi, Annulla, OK. Lo apre anche
-  `DateField` (pillola con la data, `Controls.swift`; riporta nel suo `range` la data scelta). Niente `DatePicker` di
-  sistema nascosto sopra i campi: si intravedeva il suo testo.
+  `DateField` (pillola con la data, `Controls.swift`; riporta nel suo `range` la data scelta).
+- Selettore dell'orario (`DatePicker.swift`, `M3TimePickerSheet`): modale di Material 3 a 24 ore, ore e minuti in due
+  riquadri e quadrante (ore su due anelli, fuori 0–11 e dentro 12–23; scelta l'ora si passa ai minuti), con l'icona
+  della tastiera per scriverli. Lo apre `TimeField` (editor degli eventi, generatore, intervalli).
+- Niente controlli di sistema invisibili sopra un campo (`DatePicker`, `ColorPicker` con opacità quasi zero): non si
+  aprivano più al tocco e se ne intravedeva il testo. Un pulsante apre un foglio (selettori di Material 3; per il
+  colore d'accento qualsiasi `UIColorPickerViewController` in `SettingsView`).
+- Login (`LoginView`): con la tastiera aperta (un campo attivo) la disposizione è compatta e in alto, con logo piccolo
+  e titolo su una riga, campi e "Accedi"; "Prova la demo" e le note tornano chiudendo la tastiera.
 - Componenti propri di M3 Expressive (`Expressive.swift`): `SearchAppBar`, `AccountAvatarButton`, `FABMenu` (con
   Liquid Glass `GlassFABMenu`: pulsante di vetro tinto di 60 punti, come il pulsante di ricerca della barra delle
   schede e allineato sopra di esso, da cui escono le voci come pillole di vetro con `glassEffectID` nello stesso

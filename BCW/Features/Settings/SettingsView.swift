@@ -387,6 +387,7 @@ private struct ThemePreview: View {
 private struct AccentPicker: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var customColor: Color = .red
+    @State private var pickingColor = false
 
     var body: some View {
         let theme = ThemeStore.shared
@@ -407,17 +408,19 @@ private struct AccentPicker: View {
                     .accessibilityAddTraits(preset.hex == accent ? .isSelected : [])
                     .help(preset.name)
                 }
-                // Un colore qualsiasi: il selettore di sistema sta sopra al campione, quasi invisibile.
-                ZStack {
+                // Un colore qualsiasi: il selettore dei colori di sistema in un foglio (un
+                // `ColorPicker` invisibile sopra il campione non si apriva più).
+                Button { pickingColor = true } label: {
                     AccentSwatch(colors: isPreset ? nil : theme.swatch(accent, dark: colorScheme == .dark),
                                  selected: !isPreset, icon: isPreset ? "colorize" : "check")
-                    ColorPicker("Scegli un colore qualsiasi", selection: $customColor, supportsOpacity: false)
-                        .labelsHidden()
-                        .scaleEffect(2.2)
-                        .opacity(0.011)
                 }
+                .buttonStyle(SwatchButtonStyle())
                 .frame(width: 44, height: 44)
-                .help("Scegli un colore qualsiasi")
+                .accessibilityLabel("Scegli un colore qualsiasi")
+                .sheet(isPresented: $pickingColor) {
+                    SystemColorPicker(color: $customColor)
+                        .ignoresSafeArea()
+                }
             }
             HStack(spacing: 10) {
                 Circle()
@@ -690,6 +693,34 @@ struct AccountRow: View {
                 Icon("check")
                     .foregroundStyle(Theme.primary)
             }
+        }
+    }
+}
+
+/// Selettore dei colori di sistema (`UIColorPickerViewController`), senza trasparenza.
+private struct SystemColorPicker: UIViewControllerRepresentable {
+    @Binding var color: Color
+
+    func makeCoordinator() -> Coordinator { Coordinator(color: $color) }
+
+    func makeUIViewController(context: Context) -> UIColorPickerViewController {
+        let picker = UIColorPickerViewController()
+        picker.supportsAlpha = false
+        picker.selectedColor = UIColor(color)
+        picker.title = "Colore d'accento"
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ picker: UIColorPickerViewController, context: Context) {}
+
+    final class Coordinator: NSObject, UIColorPickerViewControllerDelegate {
+        let color: Binding<Color>
+        init(color: Binding<Color>) { self.color = color }
+
+        func colorPickerViewController(_ picker: UIColorPickerViewController, didSelect color: UIColor,
+                                       continuously: Bool) {
+            self.color.wrappedValue = Color(uiColor: color)
         }
     }
 }

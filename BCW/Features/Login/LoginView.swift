@@ -14,10 +14,14 @@ struct LoginView: View {
 
     private enum Field { case username, password }
 
+    /// Tastiera aperta (un campo attivo): disposizione compatta, in alto, con logo piccolo accanto
+    /// al titolo, campi e "Accedi" subito sotto; demo e note tornano chiudendo la tastiera.
+    private var compact: Bool { focused != nil }
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
-                header
+            VStack(spacing: compact ? 20 : 24) {
+                if compact { compactHeader } else { header }
 
                 VStack(spacing: 12) {
                     VStack(spacing: 10) {
@@ -67,23 +71,27 @@ struct LoginView: View {
                     .buttonStyle(.m3(.filled, size: .m, wide: true))
                     .disabled(username.isEmpty || password.isEmpty || isLoading)
 
-                    if !isAddingAccount {
+                    if !isAddingAccount && !compact {
                         Button {
                             model.startDemo()
                         } label: {
                             Label { Text("Prova la demo") } icon: { Icon("sparkles") }
                         }
                         .buttonStyle(.m3(.tonal, size: .m, wide: true))
+                        .transition(.opacity)
                     }
                 }
 
-                footer
+                if !compact {
+                    footer
+                        .transition(.opacity)
+                }
             }
             .padding(.horizontal, 24)
-            .padding(.vertical, 32)
+            .padding(.vertical, compact ? 16 : 32)
             .frame(maxWidth: 440)
             .frame(maxWidth: .infinity)
-            .containerRelativeFrame(.vertical, alignment: .center) { length, _ in length }
+            .containerRelativeFrame(.vertical, alignment: compact ? .top : .center) { length, _ in length }
         }
         .scrollBounceBehavior(.basedOnSize)
         .scrollDismissesKeyboard(.interactively)
@@ -110,6 +118,21 @@ struct LoginView: View {
         .background {
             if !isAddingAccount { LoginArt() }
         }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Intestazione con la tastiera aperta: logo piccolo e titolo su una riga.
+    private var compactHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 14) {
+            BCWLogo(size: 30)
+            Text(isAddingAccount ? "Aggiungi un account" : "Better ClasseViVa")
+                .font(.m3(16, weight: 500))
+                .foregroundStyle(Theme.secondaryInk)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 8)
+        .transition(.opacity)
         .accessibilityElement(children: .combine)
     }
 

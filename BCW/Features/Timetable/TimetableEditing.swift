@@ -113,15 +113,18 @@ struct TimetableEditToolbar: View {
     }
 }
 
-/// Campo con un orario (pillola piena): toccandolo si apre il selettore di sistema.
+/// Campo con un orario (pillola piena): toccandolo si apre il selettore dell'orario di Material 3
+/// (`M3TimePickerSheet`). Prima c'era un `DatePicker` di sistema quasi invisibile sopra il campo,
+/// che non si apriva più (e se ne intravedeva il testo).
 struct TimeField: View {
     @Binding var minutes: Int
     var minWidth: CGFloat = 96
     /// Occupa tutta la larghezza (campi dei moduli).
     var expands = false
+    @State private var picking = false
 
     var body: some View {
-        ZStack(alignment: expands ? .leading : .center) {
+        Button { picking = true } label: {
             Text(TimeOfDay.string(minutes))
                 .font(.m3(expands ? 15 : 16).monospacedDigit())
                 .foregroundStyle(Theme.ink)
@@ -129,16 +132,15 @@ struct TimeField: View {
                 .frame(maxWidth: expands ? .infinity : nil, minHeight: 44, alignment: expands ? .leading : .center)
                 .frame(minWidth: minWidth)
                 .background(Theme.surfaceContainerHighest, in: .rect(cornerRadius: Theme.radii.l, style: .continuous))
-            // Il selettore di sistema sta sopra, quasi invisibile: lo apre un tocco sul campo.
-            DatePicker("Orario", selection: Binding { TimeOfDay.date(minutes) } set: { minutes = TimeOfDay.minutes(of: $0) },
-                       displayedComponents: .hourAndMinute)
-                .labelsHidden()
-                .frame(maxWidth: expands ? .infinity : nil, minHeight: 44)
-                .frame(minWidth: minWidth)
-                .scaleEffect(x: 1.6, y: 1)
-                .opacity(0.011)
-                .clipped()
+                .contentShape(.rect(cornerRadius: Theme.radii.l))
         }
+        .buttonStyle(.pressable(radius: Theme.radii.l, pressed: Theme.radii.m))
         .fixedSize(horizontal: !expands, vertical: true)
+        .accessibilityLabel("Orario")
+        .accessibilityValue(TimeOfDay.string(minutes))
+        .accessibilityHint("Sceglie un orario")
+        .sheet(isPresented: $picking) {
+            M3TimePickerSheet(minutes: minutes) { minutes = $0 }
+        }
     }
 }

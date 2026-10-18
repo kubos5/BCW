@@ -246,3 +246,269 @@ struct M3DatePickerSheet: View {
         month = start
     }
 }
+
+// MARK: - Selettore dell'orario
+
+/// Selettore dell'orario di Material 3 (modale, 24 ore): in alto ore e minuti in due riquadri
+/// (quello che si sta scegliendo è nel contenitore primario), sotto il quadrante. Per le ore il
+/// quadrante ha due anelli (fuori 0–11, dentro 12–23); scelta l'ora si passa da soli ai minuti
+/// (etichette ogni 5, trascinando si sceglie qualsiasi minuto). L'icona della tastiera passa
+/// all'inserimento con i numeri. Lo apre `TimeField`.
+struct M3TimePickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let onPick: (Int) -> Void
+    @State private var hour: Int
+    @State private var minute: Int
+    @State private var choosingMinutes = false
+    @State private var typing = false
+    @State private var hourText = ""
+    @State private var minuteText = ""
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case hour, minute }
+
+    private static let dial: CGFloat = 276
+
+    /// `minutes`: minuti dalla mezzanotte.
+    init(minutes: Int, onPick: @escaping (Int) -> Void) {
+        self.onPick = onPick
+        let value = max(0, min(minutes, 24 * 60 - 1))
+        _hour = State(initialValue: value / 60)
+        _minute = State(initialValue: value % 60)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text(typing ? "Inserisci un orario" : "Scegli un orario")
+                .font(.m3(14, weight: 550))
+                .foregroundStyle(Theme.onSurfaceVariant)
+            if typing { inputRow } else { boxes }
+            if !typing {
+                dial
+                    .frame(maxWidth: .infinity)
+                    .transition(.opacity)
+            }
+            HStack(spacing: 4) {
+                IconButton(typing ? "schedule" : "keyboard",
+                           label: typing ? "Scegli dal quadrante" : "Inserisci con la tastiera") {
+                    withAnimation(Motion.spatial) { setTyping(!typing) }
+                }
+                .padding(.leading, -8)
+                Spacer()
+                Button("Annulla") { dismiss() }
+                    .buttonStyle(.m3(.text))
+                Button("OK") {
+                    if typing { commitTyped() }
+                    onPick(hour * 60 + minute)
+                    dismiss()
+                }
+                .buttonStyle(.m3(.text))
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 24)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.surfaceContainerHigh.ignoresSafeArea())
+        .presentationBackground(Theme.surfaceContainerHigh)
+        .presentationDetents([.height(typing ? 260 : 540)])
+        .presentationDragIndicator(.hidden)
+        .sensoryFeedback(.selection, trigger: hour * 60 + minute)
+    }
+
+    // MARK: Riquadri
+
+    private var boxes: some View {
+        HStack(spacing: 6) {
+            box(String(format: "%02d", hour), selected: !choosingMinutes, label: "Ore") {
+                withAnimation(Motion.spatial) { choosingMinutes = false }
+            }
+            Text(":")
+                .font(.numeral(52, weight: 400))
+                .foregroundStyle(Theme.ink)
+                .frame(width: 24)
+            box(String(format: "%02d", minute), selected: choosingMinutes, label: "Minuti") {
+                withAnimation(Motion.spatial) { choosingMinutes = true }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func box(_ text: String, selected: Bool, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(text)
+                .font(.numeral(52, weight: 400))
+                .contentTransition(.numericText())
+                .foregroundStyle(selected ? Theme.onPrimaryContainer : Theme.ink)
+                .frame(width: 96, height: 80)
+                .background(selected ? Theme.primaryContainer : Theme.surfaceContainerHighest,
+                            in: .rect(cornerRadius: Theme.radii.m, style: .continuous))
+        }
+        .buttonStyle(.pressable(radius: Theme.radii.m, pressed: Theme.radii.s))
+        .accessibilityLabel("\(label): \(text)")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    // MARK: Inserimento con la tastiera
+
+    private var inputRow: some View {
+        HStack(alignment: .top, spacing: 6) {
+            field("Ore", text: $hourText, placeholder: String(format: "%02d", hour), field: .hour)
+            Text(":")
+                .font(.numeral(52, weight: 400))
+                .foregroundStyle(Theme.ink)
+                .frame(width: 24, height: 80)
+            field("Minuti", text: $minuteText, placeholder: String(format: "%02d", minute), field: .minute)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Campo di ore o minuti: selezionato si svuota e mostra il valore attuale come suggerimento
+    /// (le cifre scritte lo sostituiscono; lasciato vuoto resta quello di prima).
+    private func field(_ label: String, text: Binding<String>, placeholder: String, field: Field) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField(placeholder, text: text)
+                .keyboardType(.numberPad)
+                .focused($focusedField, equals: field)
+                .multilineTextAlignment(.center)
+                .font(.numeral(52, weight: 400))
+                .foregroundStyle(focusedField == field ? Theme.onPrimaryContainer : Theme.ink)
+                .frame(width: 96, height: 80)
+                .background(focusedField == field ? Theme.primaryContainer : Theme.surfaceContainerHighest,
+                            in: .rect(cornerRadius: Theme.radii.m, style: .continuous))
+                .onChange(of: text.wrappedValue) { _, value in
+                    let digits = String(value.filter(\.isNumber).prefix(2))
+                    if digits != value { text.wrappedValue = digits }
+                    // Al giro dopo: spostando il campo attivo durante la battuta la cifra finiva
+                    // anche nei minuti.
+                    if field == .hour && digits.count == 2 {
+                        DispatchQueue.main.async { focusedField = .minute }
+                    }
+                }
+                .onChange(of: focusedField) { old, new in
+                    // Lasciando il campo vale quanto scritto; tornandoci si ricomincia.
+                    if old == field { commit(field) }
+                    if new == field { text.wrappedValue = "" }
+                }
+            Text(label)
+                .font(.m3(12))
+                .foregroundStyle(Theme.onSurfaceVariant)
+        }
+    }
+
+    private func setTyping(_ on: Bool) {
+        if on {
+            hourText = ""
+            minuteText = ""
+            typing = true
+            focusedField = .hour
+        } else {
+            commitTyped()
+            focusedField = nil
+            typing = false
+        }
+    }
+
+    /// Ore e minuti scritti, riportati negli intervalli validi.
+    private func commitTyped() {
+        commit(.hour)
+        commit(.minute)
+    }
+
+    /// Il valore scritto in un campo (se c'è), che poi si svuota e lo mostra come suggerimento.
+    private func commit(_ field: Field) {
+        switch field {
+        case .hour:
+            if let h = Int(hourText) { hour = min(max(h, 0), 23) }
+            hourText = ""
+        case .minute:
+            if let m = Int(minuteText) { minute = min(max(m, 0), 59) }
+            minuteText = ""
+        }
+    }
+
+    // MARK: Quadrante
+
+    private var dial: some View {
+        let size = Self.dial
+        let center = CGPoint(x: size / 2, y: size / 2)
+        // Anelli a 48 punti di distanza: il cerchio della lancetta (44) non copre le etichette vicine.
+        let outer = size / 2 - 26
+        let inner = outer - 48
+        let value = choosingMinutes ? minute : hour
+        let handRadius = choosingMinutes || hour < 12 ? outer : inner
+        let handAngle = choosingMinutes ? Double(minute) / 60 : Double(hour % 12) / 12
+        let handPoint = point(center: center, radius: handRadius, fraction: handAngle)
+        return ZStack {
+            Circle().fill(Theme.surfaceContainerHighest)
+            // Lancetta: linea dal centro e cerchio pieno sul valore.
+            Path { path in
+                path.move(to: center)
+                path.addLine(to: handPoint)
+            }
+            .stroke(Theme.primary, lineWidth: 2)
+            Circle().fill(Theme.primary).frame(width: 8, height: 8).position(center)
+            Circle().fill(Theme.primary).frame(width: 44, height: 44).position(handPoint)
+            if choosingMinutes {
+                ForEach(0..<12, id: \.self) { index in
+                    label(String(format: "%02d", index * 5), selected: minute == index * 5, small: false)
+                        .position(point(center: center, radius: outer, fraction: Double(index) / 12))
+                }
+            } else {
+                ForEach(0..<12, id: \.self) { index in
+                    label(index == 0 ? "00" : "\(index)", selected: hour == index, small: false)
+                        .position(point(center: center, radius: outer, fraction: Double(index) / 12))
+                    label("\(index + 12)", selected: hour == index + 12, small: true)
+                        .position(point(center: center, radius: inner, fraction: Double(index) / 12))
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .animation(Motion.spatialFast, value: value)
+        .animation(Motion.spatialFast, value: choosingMinutes)
+        .contentShape(.circle)
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { drag in select(at: drag.location, center: center, inner: inner, outer: outer) }
+                .onEnded { _ in
+                    // Scelta l'ora si passa ai minuti, come in Material 3.
+                    if !choosingMinutes { withAnimation(Motion.spatial) { choosingMinutes = true } }
+                }
+        )
+        .accessibilityElement()
+        .accessibilityLabel(choosingMinutes ? "Minuti" : "Ore")
+        .accessibilityValue(choosingMinutes ? "\(minute)" : "\(hour)")
+        .accessibilityAdjustableAction { direction in
+            let step = direction == .increment ? 1 : -1
+            if choosingMinutes { minute = (minute + step + 60) % 60 } else { hour = (hour + step + 24) % 24 }
+        }
+    }
+
+    private func label(_ text: String, selected: Bool, small: Bool) -> some View {
+        Text(text)
+            .font(.m3(small ? 14 : 16, weight: selected ? 650 : 500).monospacedDigit())
+            .foregroundStyle(selected ? Theme.onPrimary : (small ? Theme.onSurfaceVariant : Theme.ink))
+            .frame(width: 40, height: 40)
+            .allowsHitTesting(false)
+    }
+
+    /// Punto del quadrante: `fraction` del giro in senso orario partendo dall'alto.
+    private func point(center: CGPoint, radius: CGFloat, fraction: Double) -> CGPoint {
+        let angle = fraction * 2 * .pi
+        return CGPoint(x: center.x + radius * sin(angle), y: center.y - radius * cos(angle))
+    }
+
+    private func select(at location: CGPoint, center: CGPoint, inner: CGFloat, outer: CGFloat) {
+        let dx = location.x - center.x, dy = location.y - center.y
+        var angle = atan2(dx, -dy)
+        if angle < 0 { angle += 2 * .pi }
+        let fraction = angle / (2 * .pi)
+        if choosingMinutes {
+            minute = Int((fraction * 60).rounded()) % 60
+        } else {
+            let index = Int((fraction * 12).rounded()) % 12
+            let distance = hypot(dx, dy)
+            hour = distance < (inner + outer) / 2 ? index + 12 : index
+        }
+    }
+}
