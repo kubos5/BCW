@@ -23,6 +23,20 @@ struct SavedAccount: Codable, Identifiable, Equatable {
         self.school = school
     }
 
+    /// Account con un id già assegnato (gli account abbinati a un account BCW usano quello del server).
+    init(id: String, credentials: Credentials, name: String, school: String?) {
+        self.id = id
+        self.credentials = credentials
+        self.name = name
+        self.school = school
+    }
+
+    /// Stesso profilo Classeviva (l'ident è unico), anche con nomi utente diversi.
+    func isSameProfile(as other: SavedAccount) -> Bool {
+        guard let ident = credentials.ident?.uppercased(), !ident.isEmpty else { return false }
+        return ident == other.credentials.ident?.uppercased()
+    }
+
     var initials: String {
         let parts = name.split(separator: " ").prefix(2)
         let letters = parts.compactMap(\.first).map(String.init).joined()
@@ -71,6 +85,40 @@ enum Keychain {
         }
         guard let data = try? JSONEncoder().encode(accounts) else { return }
         write(data, for: accountsKey)
+    }
+
+    // MARK: Account BCW
+
+    private static let cloudSessionKey = "bcw.session"
+    private static let cloudAccountsKey = "bcw.accounts"
+
+    /// Sessione dell'account BCW (token e utente).
+    static func loadCloudSession() -> BCWSession? {
+        guard let data = read(cloudSessionKey) else { return nil }
+        return try? JSONDecoder().decode(BCWSession.self, from: data)
+    }
+
+    static func saveCloudSession(_ session: BCWSession?) {
+        guard let session, let data = try? JSONEncoder().encode(session) else {
+            remove(cloudSessionKey)
+            return
+        }
+        write(data, for: cloudSessionKey)
+    }
+
+    /// Account Classeviva abbinati all'account BCW (con le credenziali ricevute dal server),
+    /// per aprire l'app anche senza rete.
+    static func loadCloudAccounts() -> [SavedAccount] {
+        guard let data = read(cloudAccountsKey) else { return [] }
+        return (try? JSONDecoder().decode([SavedAccount].self, from: data)) ?? []
+    }
+
+    static func saveCloudAccounts(_ accounts: [SavedAccount]) {
+        guard !accounts.isEmpty, let data = try? JSONEncoder().encode(accounts) else {
+            remove(cloudAccountsKey)
+            return
+        }
+        write(data, for: cloudAccountsKey)
     }
 
     // MARK: Primitive

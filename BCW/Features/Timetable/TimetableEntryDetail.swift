@@ -300,7 +300,7 @@ struct TimetableEntryDetail: View {
         ForEach(attachments) { attachment in
             HStack(spacing: 4) {
                 Button {
-                    previewURL = store.shareableURL(for: attachment)
+                    openAttachment(attachment)
                 } label: {
                     ListRow(attachment.name,
                             subtitle: ByteCountFormatter.string(fromByteCount: Int64(attachment.size), countStyle: .file),
@@ -318,6 +318,23 @@ struct TimetableEntryDetail: View {
                     withAnimation(Motion.spatial) { store.removeAttachment(attachment, from: entry, scope: scope) }
                 }
                 .padding(.trailing, 8)
+            }
+        }
+    }
+
+    /// Apre l'anteprima di un allegato. Con l'account BCW il file può essere solo sul server
+    /// (aggiunto da un altro dispositivo): in quel caso si scarica prima.
+    private func openAttachment(_ attachment: TimetableAttachment) {
+        if let url = store.url(for: attachment), FileManager.default.fileExists(atPath: url.path) {
+            previewURL = store.shareableURL(for: attachment)
+            return
+        }
+        guard let owner = store.owner else { return }
+        Task {
+            if await model.cloudSync.downloadFile(owner: owner, name: attachment.storedName) {
+                previewURL = store.shareableURL(for: attachment)
+            } else {
+                errorMessage = "Il file «\(attachment.name)» non è disponibile su questo dispositivo."
             }
         }
     }

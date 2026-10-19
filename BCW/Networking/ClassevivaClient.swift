@@ -191,6 +191,13 @@ final class ClassevivaClient {
         try await login()
     }
 
+    /// Profilo e token validi (rinnovato se serve): provano a BCW-api l'accesso a questo profilo.
+    func currentSession() async throws -> (ident: String, token: String) {
+        try await ensureToken()
+        guard let ident, let token else { throw APIError.notAuthenticated }
+        return (ident, token)
+    }
+
     static func errorMessage(from data: Data) -> String? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         if let message = json["message"] as? String, !message.isEmpty { return message }

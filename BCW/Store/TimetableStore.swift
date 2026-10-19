@@ -16,6 +16,8 @@ final class TimetableStore {
 
     /// Indice degli eventi per giorno della settimana, ricostruito quando cambiano gli eventi.
     @ObservationIgnored private var byWeekday: [Int: [TimetableEntry]] = [:]
+    /// Avvisato dopo ogni salvataggio, con il proprietario (sincronizzazione con l'account BCW).
+    @ObservationIgnored var onSaved: ((String) -> Void)?
 
     // MARK: Caricamento e salvataggio
 
@@ -60,6 +62,39 @@ final class TimetableStore {
         try? FileManager.default.removeItem(at: directory(owner: owner))
     }
 
+    /// Il JSON salvato dell'orario di un proprietario (`nil` se non c'è).
+    static func storedData(owner: String) -> Data? {
+        try? Data(contentsOf: directory(owner: owner).appendingPathComponent("timetable.json"))
+    }
+
+    /// Dove sta un file allegato di un proprietario.
+    static func fileURL(owner: String, name: String) -> URL {
+        directory(owner: owner).appendingPathComponent("Files", isDirectory: true).appendingPathComponent(name)
+    }
+
+    /// Salva un file allegato arrivato dal server (solo nomi semplici, niente cartelle).
+    static func writeFile(_ data: Data, owner: String, name: String) throws {
+        guard !name.isEmpty, (name as NSString).lastPathComponent == name, !name.hasPrefix(".") else {
+            throw CocoaError(.fileWriteInvalidFileName)
+        }
+        let url = fileURL(owner: owner, name: name)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: url, options: .atomic)
+    }
+
+    /// Copia orario e file da un proprietario a un altro che non ha ancora un orario (es. un
+    /// account del dispositivo abbinato a un account BCW, che sul server ha un altro id).
+    static func copyData(from source: String, to target: String) {
+        let fileManager = FileManager.default
+        let from = directory(owner: source)
+        let to = directory(owner: target)
+        guard fileManager.fileExists(atPath: from.appendingPathComponent("timetable.json").path),
+              !fileManager.fileExists(atPath: to.appendingPathComponent("timetable.json").path) else { return }
+        try? fileManager.removeItem(at: to)
+        try? fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+        try? fileManager.copyItem(at: from, to: to)
+    }
+
     private func save() {
         guard let directory, let url = dataURL else { return }
         do {
@@ -69,7 +104,30 @@ final class TimetableStore {
             saveError = nil
         } catch {
             saveError = error.localizedDescription
+            return
         }
+        if let owner { onSaved?(owner) }
+    }
+
+    /// Sostituisce l'orario di un proprietario con quello arrivato dal server, senza avvisare
+    /// `onSaved`. Restituisce il JSON salvato (`nil` se il documento non è un orario valido).
+    @discardableResult
+    func applyRemote(owner: String, data: Data) -> Data? {
+        guard let remote = try? TimetableBackup.decoder().decode(Timetable.self, from: data),
+              let encoded = try? TimetableBackup.encoder().encode(remote) else { return nil }
+        let folder = Self.directory(owner: owner)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try encoded.write(to: folder.appendingPathComponent("timetable.json"), options: .atomic)
+        } catch {
+            return nil
+        }
+        if owner == self.owner {
+            timetable = remote
+            rebuildIndex()
+            removeUnreferencedFiles()
+        }
+        return encoded
     }
 
     /// Applica una modifica all'orario e la salva.

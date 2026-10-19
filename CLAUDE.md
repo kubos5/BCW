@@ -17,7 +17,7 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   modifiche estese agli eventi con lo stesso nome, gruppi di eventi uguali accostati, eventi contemporanei
   affiancati, intervalli in primo piano, colori e
   palette (anche su una serie di eventi di una giornata), bozza generata dalle lezioni con anteprima tratteggiata,
-  backup esportabile/importabile (due conferme) e iCloud segnato come Work in progress nelle Impostazioni.
+  backup esportabile/importabile (due conferme) e sincronizzazione con l'account BCW.
   "Modifica orario" (menu del pulsante d'azione flottante) apre la modifica grafica, sempre nella vista Giorno: spostare e
   ridimensionare gli eventi, doppio tocco per crearli, tocco per l'editor. Lì si sceglie l'allineamento, che vale
   per tutto l'orario (non solo per il trascinamento): automatico = eventi da 30/60 minuti alla mezz'ora (anche gli
@@ -70,6 +70,33 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Simulatori: sono disponibili iOS 26.3 e iOS 27. Lo strumento del simulatore di Claude Code (tocchi, pressioni lunghe,
   screenshot) funziona con il simulatore acceso; per le animazioni registrare con `simctl io … recordVideo`. Quello di iOS 27 appena avviato satura la CPU per minuti e fa
   bloccare `simctl install/launch`: tenerne acceso uno alla volta.
+
+## Account BCW (backend BCW-api, https://github.com/kubos5/BCW-api)
+- Richiesta dell'utente (ottobre 2026): account BCW (nome utente e password) a cui abbinare uno o più account
+  Classeviva; entrando con l'account BCW si accede a tutti. Con l'account BCW si aggiungono e tolgono account
+  Classeviva; entrando con un account Classeviva ci si scollega da qualsiasi account BCW. Nella schermata di accesso
+  un gruppo di pulsanti sceglie tra Classeviva e Account BCW. Si sincronizzano impostazioni, aspetto, orario e file.
+  Scelte dell'utente: Cloudflare Workers + D1, credenziali di Classeviva cifrate sul server, nome utente (niente email).
+- Stessa logica della versione web (`js/cloud.js`): `Networking/BCWClient.swift` (`BCWServer` con `defaultURL`, cambiabile
+  in Impostazioni › Account › Server BCW; `BCWAPI` con tutte le richieste; `BCWError` con il codice del server),
+  `Store/CloudSync.swift` (coda delle operazioni, `JSONValue`, sincronizzazione), metodi `cloud…` di `AppModel`.
+- `model.cloud` (`BCWSession`, nel Portachiavi `bcw.session`): con l'account BCW `accounts` sono gli account abbinati
+  (id del server, nel Portachiavi `bcw.accounts`, attivo in `activeCloudAccount`); quelli del dispositivo restano in
+  `classeviva.accounts` e tornano uscendo (`leaveCloud`). Senza account abbinati `LoginView` chiede di abbinare il primo
+  (`linkingFirst`). `signIn` con l'account BCW abbina sul server; il cestino diventa "Scollega" (`unlinkAccount`).
+  `refreshCloud` (avvio, Aggiorna, ritorno nell'app; al massimo ogni 30 s) allinea gli account; un 401 fa uscire con
+  `cloudNotice`. Dopo l'accesso `localAccountsToLink` propone (dialogo in `RootView`) di abbinare gli account del
+  dispositivo (`linkLocalAccounts`, copia l'orario con `TimetableStore.copyData`).
+- Sincronizzazione: impostazioni sincronizzate in `Preferences.syncedValues`/`applySynced` e
+  `ThemeStore.syncedValues`/`applySynced` (stessi nomi del web; blocco, promemoria, notifiche e Liquid Glass restano
+  locali), avvisi con `onSyncedChange` (spenti durante `applySynced`); unione a tre vie. Orario: `TimetableStore.onSaved`
+  avvisa, `applyRemote` sostituisce senza avvisare; vince il lato cambiato (entrambi = questo dispositivo, la prima
+  volta il server); i file si caricano prima dell'orario e si scaricano dopo (`downloadFile`, anche aprendo un allegato).
+  In secondo piano le modifiche in attesa partono subito (`flushCloudChanges` in `RootView`).
+- Lato Classeviva: `ClassevivaLinksSection` (Impostazioni › Account) con `model.classevivaLinks()` e
+  `removeClassevivaLink(_:)`, che inviano a BCW-api ident e token di Classeviva (`ClassevivaClient.currentSession()`);
+  senza account BCW l'elenco si carica solo toccando "Mostra gli account BCW abbinati".
+- Il codice non è stato compilato da Claude (niente Xcode nel suo ambiente): va provato su Xcode.
 
 ## Architettura
 - `BCW.xcodeproj` usa **cartelle sincronizzate** (objectVersion 77): i file in `BCW/` entrano nel target da soli.
@@ -252,8 +279,19 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `.m3Dialog`, toast; con Liquid Glass i menu sono `Menu` di sistema), `Page.swift`.
 - Selettore della data (`DatePicker.swift`, `M3DatePickerSheet`): modale di Material 3 con la data in grande,
   griglia del mese (scorrendo di lato si cambia mese) e griglia di mesi e anni; Oggi, Annulla, OK. Lo apre anche
-  `DateField` (pillola con la data, `Controls.swift`; riporta nel suo `range` la data scelta). Niente `DatePicker` di
-  sistema nascosto sopra i campi: si intravedeva il suo testo.
+  `DateField` (pillola con la data, `Controls.swift`; riporta nel suo `range` la data scelta).
+- Selettore dell'orario (`DatePicker.swift`, `M3TimePickerSheet`): modale di Material 3 a 24 ore, ore e minuti in due
+  riquadri e quadrante (ore su due anelli, fuori 0–11 e dentro 12–23; scelta l'ora si passa ai minuti), con l'icona
+  della tastiera per scriverli. Lo apre `TimeField` (editor degli eventi, generatore, intervalli).
+- Niente controlli di sistema invisibili sopra un campo (`DatePicker`, `ColorPicker` con opacità quasi zero): non si
+  aprivano più al tocco e se ne intravedeva il testo. Un pulsante apre un foglio (selettori di Material 3; per il
+  colore d'accento qualsiasi `UIColorPickerViewController` in `SettingsView`).
+- Login (`LoginView`): con la tastiera aperta la disposizione è compatta e in alto, con logo piccolo e titolo su una
+  riga, il gruppo Classeviva/Account BCW, campi e "Accedi"; "Prova la demo" e le note tornano chiudendo la tastiera.
+  La disposizione segue la tastiera visibile (notifiche di UIKit), non il campo attivo: cambiando modulo con la
+  tastiera aperta il cursore passa al campo corrispondente (al giro dopo) e la tastiera resta. Un tocco nello spazio
+  vuoto la chiude. Le note in basso occupano sempre l'altezza delle più lunghe tra i due moduli (copie nascoste in uno
+  `ZStack` allineato in alto): cambiando Classeviva/Account BCW il resto, centrato, non si sposta.
 - Componenti propri di M3 Expressive (`Expressive.swift`): `SearchAppBar`, `AccountAvatarButton`, `FABMenu` (con
   Liquid Glass `GlassFABMenu`: pulsante di vetro tinto di 60 punti, come il pulsante di ricerca della barra delle
   schede e allineato sopra di esso, da cui escono le voci come pillole di vetro con `glassEffectID` nello stesso

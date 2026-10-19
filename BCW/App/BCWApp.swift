@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import UserNotifications
 
 @main
@@ -56,6 +57,22 @@ struct RootView: View {
             }
         }
         .animation(Motion.effects, value: model.phase)
+        // Dopo l'accesso con l'account BCW: abbinare anche gli account del dispositivo?
+        .m3Dialog(linkOfferTitle,
+                  isPresented: Binding(get: { !model.localAccountsToLink.isEmpty },
+                                       set: { if !$0 { model.localAccountsToLink = [] } }),
+                  message: linkOfferMessage) {
+            let accounts = model.localAccountsToLink
+            return [DialogAction.cancel("Non ora"), DialogAction(title: "Abbina", style: .strong) {
+                Task { await model.linkLocalAccounts(accounts) }
+            }]
+        }
+        .m3Dialog("Alcuni account non sono stati abbinati",
+                  isPresented: Binding(get: { model.linkFailureMessage != nil },
+                                       set: { if !$0 { model.linkFailureMessage = nil } }),
+                  message: model.linkFailureMessage) {
+            [.cancel("OK")]
+        }
         .appTheme()
         .overlayHost()
         .task {
@@ -69,9 +86,41 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { NewsNotifications.scheduleBackgroundRefresh(model: model) }
+            if model.isCloud {
+                // Tornando nell'app arrivano le modifiche degli altri dispositivi; uscendo partono
+                // subito quelle in attesa.
+                if phase == .active { Task { await model.refreshCloud() } }
+                if phase == .background { flushCloudChanges() }
+            }
             guard model.preferences.useBiometrics, model.phase == .signedIn else { return }
             if phase == .background { lock.lock() }
             if phase == .active, lock.isLocked { Task { await lock.unlock() } }
+        }
+    }
+}
+
+extension RootView {
+    private var linkOfferTitle: String {
+        let accounts = model.localAccountsToLink
+        if accounts.count == 1, let account = accounts.first { return "Abbinare \(account.name) al tuo account BCW?" }
+        return "Abbinare \(accounts.count) account al tuo account BCW?"
+    }
+
+    private var linkOfferMessage: String {
+        let accounts = model.localAccountsToLink
+        let names = accounts.map(\.name).joined(separator: ", ")
+        let intro = accounts.count == 1
+            ? "Su questo dispositivo c'è un account Classeviva"
+            : "Su questo dispositivo ci sono \(accounts.count) account Classeviva"
+        return "\(intro) (\(names)). Abbinandoli li ritroverai con il tuo account BCW su ogni dispositivo, insieme al loro orario."
+    }
+
+    /// Invia le modifiche in attesa per l'account BCW anche se l'app va in secondo piano.
+    private func flushCloudChanges() {
+        let task = UIApplication.shared.beginBackgroundTask(withName: "BCW-sync", expirationHandler: nil)
+        Task {
+            await model.cloudSync.flush()
+            UIApplication.shared.endBackgroundTask(task)
         }
     }
 }

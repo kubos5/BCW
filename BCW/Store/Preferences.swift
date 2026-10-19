@@ -90,28 +90,32 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
 @Observable
 final class Preferences {
     private let defaults = UserDefaults.standard
+    /// Avvisato quando cambia un'impostazione sincronizzata con l'account BCW (`CloudSync`).
+    @ObservationIgnored var onSyncedChange: (() -> Void)?
+    /// `true` mentre si applicano le impostazioni arrivate dal server: niente avvisi.
+    @ObservationIgnored private var applyingRemote = false
 
-    var averageMode: AverageMode { didSet { defaults.set(averageMode.rawValue, forKey: "averageMode") } }
-    var weightedAverage: Bool { didSet { defaults.set(weightedAverage, forKey: "weightedAverage") } }
-    var targetAverage: Double { didSet { defaults.set(targetAverage, forKey: "targetAverage") } }
+    var averageMode: AverageMode { didSet { defaults.set(averageMode.rawValue, forKey: "averageMode"); syncedChanged() } }
+    var weightedAverage: Bool { didSet { defaults.set(weightedAverage, forKey: "weightedAverage"); syncedChanged() } }
+    var targetAverage: Double { didSet { defaults.set(targetAverage, forKey: "targetAverage"); syncedChanged() } }
     var useBiometrics: Bool { didSet { defaults.set(useBiometrics, forKey: "useBiometrics") } }
     var homeworkReminders: Bool { didSet { defaults.set(homeworkReminders, forKey: "homeworkReminders") } }
     var reminderHour: Int { didSet { defaults.set(reminderHour, forKey: "reminderHour") } }
-    var dashboardMode: DashboardMode { didSet { defaults.set(dashboardMode.rawValue, forKey: "dashboardMode") } }
+    var dashboardMode: DashboardMode { didSet { defaults.set(dashboardMode.rawValue, forKey: "dashboardMode"); syncedChanged() } }
     /// Verifiche nella vista Lista dell'orario (spente di serie).
-    var timetableShowsTests: Bool { didSet { defaults.set(timetableShowsTests, forKey: "timetableShowsTests") } }
-    var timetableMode: TimetableMode { didSet { defaults.set(timetableMode.rawValue, forKey: "timetableMode") } }
-    var appearance: AppearanceMode { didSet { defaults.set(appearance.rawValue, forKey: "appearance") } }
-    var hideCompletedHomework: Bool { didSet { defaults.set(hideCompletedHomework, forKey: "hideCompletedHomework") } }
-    var showUpcomingDays: Bool { didSet { defaults.set(showUpcomingDays, forKey: "showUpcomingDays") } }
+    var timetableShowsTests: Bool { didSet { defaults.set(timetableShowsTests, forKey: "timetableShowsTests"); syncedChanged() } }
+    var timetableMode: TimetableMode { didSet { defaults.set(timetableMode.rawValue, forKey: "timetableMode"); syncedChanged() } }
+    var appearance: AppearanceMode { didSet { defaults.set(appearance.rawValue, forKey: "appearance"); syncedChanged() } }
+    var hideCompletedHomework: Bool { didSet { defaults.set(hideCompletedHomework, forKey: "hideCompletedHomework"); syncedChanged() } }
+    var showUpcomingDays: Bool { didSet { defaults.set(showUpcomingDays, forKey: "showUpcomingDays"); syncedChanged() } }
     var titleAbbreviation: TitleAbbreviation {
-        didSet { defaults.set(titleAbbreviation.rawValue, forKey: "titleAbbreviation") }
+        didSet { defaults.set(titleAbbreviation.rawValue, forKey: "titleAbbreviation"); syncedChanged() }
     }
     var collapsedSections: Set<String> {
-        didSet { defaults.set(Array(collapsedSections), forKey: "collapsedSections") }
+        didSet { defaults.set(Array(collapsedSections), forKey: "collapsedSections"); syncedChanged() }
     }
     var completedHomework: Set<Int> {
-        didSet { defaults.set(Array(completedHomework), forKey: "completedHomework") }
+        didSet { defaults.set(Array(completedHomework), forKey: "completedHomework"); syncedChanged() }
     }
     /// Tipi di novità per cui arriva una notifica (`NewsNotifications`).
     var newsNotifications: Set<NewsKind> {
@@ -138,6 +142,68 @@ final class Preferences {
         titleAbbreviation = TitleAbbreviation(rawValue: defaults.string(forKey: "titleAbbreviation") ?? "") ?? .automatic
         collapsedSections = Set(defaults.stringArray(forKey: "collapsedSections") ?? [])
         newsNotifications = Set((defaults.stringArray(forKey: "newsNotifications") ?? []).compactMap(NewsKind.init(rawValue:)))
+    }
+
+    private func syncedChanged() {
+        if !applyingRemote { onSyncedChange?() }
+    }
+
+    // MARK: Sincronizzazione con l'account BCW
+
+    /// Impostazioni che valgono su tutti i dispositivi, con gli stessi nomi della versione web.
+    /// Restano sul dispositivo blocco, promemoria e notifiche (vogliono un permesso ciascuno).
+    var syncedValues: [String: JSONValue] {
+        [
+            "averageMode": .string(averageMode.rawValue),
+            "weightedAverage": .bool(weightedAverage),
+            "targetAverage": .number(targetAverage),
+            "dashboardMode": .string(dashboardMode.rawValue),
+            "hideCompletedHomework": .bool(hideCompletedHomework),
+            "showUpcomingDays": .bool(showUpcomingDays),
+            "completedHomework": .array(completedHomework.sorted().map { .number(Double($0)) }),
+            "collapsedSections": .array(collapsedSections.sorted().map { .string($0) }),
+            "timetableMode": .string(timetableMode.rawValue),
+            "timetableShowsTests": .bool(timetableShowsTests),
+            "titleAbbreviation": .string(titleAbbreviation.rawValue),
+            "appearance": .string(appearance.rawValue),
+        ]
+    }
+
+    /// Applica le impostazioni arrivate dall'account BCW (i valori non validi si saltano).
+    func applySynced(_ values: [String: JSONValue]) {
+        applyingRemote = true
+        defer { applyingRemote = false }
+        if let value = values["averageMode"]?.string.flatMap(AverageMode.init(rawValue:)), value != averageMode {
+            averageMode = value
+        }
+        if let value = values["weightedAverage"]?.bool, value != weightedAverage { weightedAverage = value }
+        if let value = values["targetAverage"]?.number, (1...10).contains(value), value != targetAverage {
+            targetAverage = value
+        }
+        if let value = values["dashboardMode"]?.string.flatMap(DashboardMode.init(rawValue:)), value != dashboardMode {
+            dashboardMode = value
+        }
+        if let value = values["hideCompletedHomework"]?.bool, value != hideCompletedHomework { hideCompletedHomework = value }
+        if let value = values["showUpcomingDays"]?.bool, value != showUpcomingDays { showUpcomingDays = value }
+        if let list = values["completedHomework"]?.array {
+            let value = Set(list.compactMap { $0.number.flatMap { Int(exactly: $0) } })
+            if value != completedHomework { completedHomework = value }
+        }
+        if let list = values["collapsedSections"]?.array {
+            let value = Set(list.compactMap(\.string))
+            if value != collapsedSections { collapsedSections = value }
+        }
+        if let value = values["timetableMode"]?.string.flatMap(TimetableMode.init(rawValue:)),
+           TimetableMode.available.contains(value), value != timetableMode {
+            timetableMode = value
+        }
+        if let value = values["timetableShowsTests"]?.bool, value != timetableShowsTests { timetableShowsTests = value }
+        if let value = values["titleAbbreviation"]?.string.flatMap(TitleAbbreviation.init(rawValue:)), value != titleAbbreviation {
+            titleAbbreviation = value
+        }
+        if let value = values["appearance"]?.string.flatMap(AppearanceMode.init(rawValue:)), value != appearance {
+            appearance = value
+        }
     }
 
     func isCollapsed(_ section: DashboardSection) -> Bool { collapsedSections.contains(section.rawValue) }

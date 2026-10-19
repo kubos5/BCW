@@ -38,6 +38,7 @@ BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 - puoi consultare l'app anche offline, visualizzando i dati dell'ultima volta che era stata aperta
 - supporto agli account genitore con più figli
 - puoi aggiungere più account e passare dall'uno all'altro (dall'avatar in Dashboard o tenendo premuta la scheda Tu), con una dissolvenza tra i dati di un account e quelli dell'altro
+- account BCW: abbini uno o più account Classeviva ed entri in tutti con un solo accesso, su ogni dispositivo e anche nella versione web; impostazioni, aspetto e orario (con i file allegati) si sincronizzano
 - ricerca in compiti, voti, comunicazioni, materiale e note dalla barra in cima alla Dashboard
 - in Tu una sezione "Da vedere" raccoglie comunicazioni e note da leggere e assenze da giustificare
 - bacheca con adesione, firma e risposta alle comunicazioni e apertura degli allegati con Quick Look
@@ -68,7 +69,8 @@ La scheda Orario contiene l'orario settimanale, che si compila a mano o si gener
 - allineamento dell'orario, scelto in Modifica orario: automatico (eventi da 30 minuti o un'ora, alla mezz'ora, anche inserendo gli orari a mano) o libero (qualsiasi orario e durata); passando all'automatico gli eventi non allineati vengono allineati dopo una conferma; gli intervalli si posizionano sempre liberamente
 - colori: quelli delle lezioni, colori personalizzati salvati, colori presi dalle palette (anche personalizzate) oppure una palette a sfumatura applicata a una serie di eventi di una giornata
 - generazione automatica di una bozza dell'orario dalle lezioni registrate, mostrata in anteprima con i bordi tratteggiati prima di applicarla
-- backup dell'orario da esportare e reimportare dalle Impostazioni (con file allegati); la sincronizzazione con iCloud è in lavorazione
+- backup dell'orario da esportare e reimportare dalle Impostazioni (con file allegati)
+- con un account BCW l'orario di ogni account abbinato, con i file allegati, si sincronizza tra i dispositivi
 
 ### Design
 
@@ -88,9 +90,21 @@ In Impostazioni › Aspetto si può attivare Liquid Glass: barra di navigazione,
 
 BCW usa le stesse API REST usate dall'app ufficiale di Classeviva (`https://web.spaggiari.eu/rest/v1`), come il progetto per Windows [ClassevivaPCTO](https://github.com/Gabboxl/ClassevivaPCTO) a cui si ispira.
 
-Le credenziali sono salvate solo nel Portachiavi del dispositivo e inviate esclusivamente ai server di Classeviva.
+Le credenziali sono salvate nel Portachiavi del dispositivo e inviate ai server di Classeviva.
 Le risposte vengono salvate nella cache dell'app per l'uso offline.
-L'orario è salvato solo sul dispositivo, separato per ogni account.
+L'orario è salvato sul dispositivo, separato per ogni account.
+
+### Account BCW
+
+Nella schermata di accesso un gruppo di pulsanti sceglie tra Classeviva e Account BCW. Un account BCW (nome utente e password) vive sul server [BCW-api](https://github.com/kubos5/BCW-api), un Cloudflare Worker con un database D1:
+
+- gli account Classeviva abbinati sono salvati sul server, con le credenziali cifrate: entrando con l'account BCW l'app li riceve e accede a Classeviva come con un account del dispositivo; aggiungere o togliere un account lo abbina o lo scollega
+- impostazioni (tranne blocco, promemoria, notifiche e Liquid Glass), aspetto e orario di ogni account abbinato, con i file allegati, si sincronizzano con la versione web e con gli altri dispositivi
+- da Impostazioni › Account si accede o si crea un account BCW anche con un account Classeviva già aperto, e gli account del dispositivo si possono abbinare subito
+- chi entra con un account Classeviva vede in Impostazioni › Account a quali account BCW è abbinato e può scollegarsi da ognuno: il server verifica l'accesso con il token della sessione di Classeviva, senza la password
+- uscendo dall'account BCW gli account abbinati e i loro dati spariscono dal dispositivo e tornano quelli salvati sul dispositivo
+
+L'indirizzo predefinito del server è in `BCWServer.defaultURL` (`BCW/Networking/BCWClient.swift`) e si cambia da Impostazioni › Account › Server BCW.
 
 Per gli anni precedenti l'app scarica le pagelle dall'archivio di Classeviva (`webYY.spaggiari.eu`, es. `web25` per il 2025/26).
 Voti, assenze e note degli anni passati non sono disponibili tramite le API, quindi l'app apre il sito di Classeviva in un browser integrato.
@@ -100,9 +114,9 @@ Voti, assenze e note degli anni passati non sono disponibili tramite le API, qui
 ```
 BCW/
 ├── App/            Entry point, barra delle schede, blocco biometrico
-├── Networking/     Client Classeviva, cache su disco, Portachiavi
+├── Networking/     Client Classeviva e BCW-api, cache su disco, Portachiavi
 ├── Models/         Modelli decodificati in modo tollerante
-├── Store/          Stato dell'app, orario e sua generazione, calcolo medie, preferenze, promemoria, server demo
+├── Store/          Stato dell'app, sincronizzazione con l'account BCW, orario e sua generazione, calcolo medie, preferenze, promemoria, server demo
 ├── Design/         Material 3 Expressive: aspetto, font, forme, controlli, elenchi, menu e pagine
 ├── Theme/          Colori e stili
 ├── Utilities/      Date, decodifica e piccoli adattatori
