@@ -286,8 +286,12 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Niente controlli di sistema invisibili sopra un campo (`DatePicker`, `ColorPicker` con opacità quasi zero): non si
   aprivano più al tocco e se ne intravedeva il testo. Un pulsante apre un foglio (selettori di Material 3; per il
   colore d'accento qualsiasi `UIColorPickerViewController` in `SettingsView`).
-- Login (`LoginView`): con la tastiera aperta (un campo attivo) la disposizione è compatta e in alto, con logo piccolo
-  e titolo su una riga, campi e "Accedi"; "Prova la demo" e le note tornano chiudendo la tastiera.
+- Login (`LoginView`): con la tastiera aperta la disposizione è compatta e in alto, con logo piccolo e titolo su una
+  riga, il gruppo Classeviva/Account BCW, campi e "Accedi"; "Prova la demo" e le note tornano chiudendo la tastiera.
+  La disposizione segue la tastiera visibile (notifiche di UIKit), non il campo attivo: cambiando modulo con la
+  tastiera aperta il cursore passa al campo corrispondente (al giro dopo) e la tastiera resta. Un tocco nello spazio
+  vuoto la chiude. Le note in basso occupano sempre l'altezza delle più lunghe tra i due moduli (copie nascoste in uno
+  `ZStack` allineato in alto): cambiando Classeviva/Account BCW il resto, centrato, non si sposta.
 - Componenti propri di M3 Expressive (`Expressive.swift`): `SearchAppBar`, `AccountAvatarButton`, `FABMenu` (con
   Liquid Glass `GlassFABMenu`: pulsante di vetro tinto di 60 punti, come il pulsante di ricerca della barra delle
   schede e allineato sopra di esso, da cui escono le voci come pillole di vetro con `glassEffectID` nello stesso

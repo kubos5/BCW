@@ -23,6 +23,9 @@ struct LoginView: View {
     @State private var choices: [LoginChoice] = []
     @State private var editingServer = false
     @State private var confirmingCloudSignOut = false
+    /// Tastiera visibile (dalle notifiche di UIKit, non dal campo attivo: cambiando tra Classeviva e
+    /// Account BCW il campo attivo cambia ma la tastiera resta).
+    @State private var keyboardVisible = false
     @FocusState private var focused: Field?
 
     private enum Field { case username, password, bcwUsername, bcwPassword, bcwConfirm }
@@ -34,9 +37,9 @@ struct LoginView: View {
         _registering = State(initialValue: startsRegistering)
     }
 
-    /// Tastiera aperta (un campo attivo): disposizione compatta, in alto, con logo piccolo accanto
-    /// al titolo, campi e "Accedi" subito sotto; demo e note tornano chiudendo la tastiera.
-    private var compact: Bool { focused != nil }
+    /// Tastiera aperta: disposizione compatta, in alto, con logo piccolo accanto al titolo, il gruppo
+    /// Classeviva/Account BCW, campi e "Accedi" subito sotto; demo e note tornano chiudendo la tastiera.
+    private var compact: Bool { keyboardVisible }
 
     /// Con l'account BCW ma senza account abbinati: si abbina il primo.
     private var linkingFirst: Bool { !isAddingAccount && !cloudOnly && model.isCloud }
@@ -61,10 +64,9 @@ struct LoginView: View {
             VStack(spacing: compact ? 20 : 24) {
                 if compact { compactHeader } else { header }
 
-                if showsModePicker && !compact {
+                if showsModePicker {
                     SegmentedButtons(selection: $mode, options: [(Mode.classeviva, "Classeviva", nil), (Mode.bcw, "Account BCW", nil)],
                                      height: 48)
-                        .transition(.opacity)
                 }
 
                 if linkingFirst && !compact {
@@ -83,7 +85,7 @@ struct LoginView: View {
                 }
 
                 if !compact {
-                    footer
+                    footerArea
                         .transition(.opacity)
                 }
             }
@@ -92,6 +94,12 @@ struct LoginView: View {
             .frame(maxWidth: 440)
             .frame(maxWidth: .infinity)
             .containerRelativeFrame(.vertical, alignment: compact ? .top : .center) { length, _ in length }
+            // Un tocco nello spazio vuoto chiude la tastiera (campi e pulsanti hanno i loro tocchi).
+            .background {
+                Color.clear
+                    .contentShape(.rect)
+                    .onTapGesture { focused = nil }
+            }
         }
         .scrollBounceBehavior(.basedOnSize)
         .scrollDismissesKeyboard(.interactively)
@@ -105,7 +113,26 @@ struct LoginView: View {
             if showsModePicker, model.cloudNotice != nil { mode = .bcw }
             if bcwUsername.isEmpty { bcwUsername = model.lastCloudUsername ?? "" }
         }
-        .onChange(of: mode) { errorMessage = nil }
+        .onChange(of: mode) { _, mode in
+            errorMessage = nil
+            // Con la tastiera aperta il cursore passa al campo corrispondente dell'altro modulo, al giro
+            // dopo (quando c'è): la tastiera resta e niente si sposta.
+            guard let field = focused else { return }
+            let target: Field = switch (mode, field) {
+            case (.bcw, .username): .bcwUsername
+            case (.bcw, .password): .bcwPassword
+            case (.classeviva, .bcwUsername): .username
+            case (.classeviva, _): .password
+            default: field
+            }
+            DispatchQueue.main.async { focused = target }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            withAnimation(Motion.spatial) { keyboardVisible = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(Motion.spatial) { keyboardVisible = false }
+        }
         .sheet(isPresented: Binding(get: { !choices.isEmpty }, set: { if !$0 { choices = [] } })) {
             ProfileChoiceSheet(choices: choices) { choice in
                 choices = []
@@ -316,9 +343,24 @@ struct LoginView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var footer: some View {
+    /// Note in basso. Con il gruppo Classeviva/Account BCW occupano sempre l'altezza delle più lunghe
+    /// e sono allineate in alto: cambiando scelta il resto della pagina (centrato) non si sposta.
+    @ViewBuilder
+    private var footerArea: some View {
+        if showsModePicker {
+            ZStack(alignment: .top) {
+                footer(for: .classeviva).hidden()
+                footer(for: .bcw).hidden()
+                footer(for: currentMode)
+            }
+        } else {
+            footer(for: currentMode)
+        }
+    }
+
+    private func footer(for mode: Mode) -> some View {
         VStack(spacing: 8) {
-            if currentMode == .bcw {
+            if mode == .bcw {
                 Text("Con un account BCW entri in tutti i tuoi account Classeviva abbinati e ritrovi impostazioni e orario su ogni dispositivo. Le credenziali di Classeviva sono salvate cifrate sul server di BCW.")
             } else if model.isCloud {
                 Text("Usa le credenziali di Classeviva. Il server di BCW le verifica e le salva cifrate nel tuo account BCW.")
@@ -328,10 +370,12 @@ struct LoginView: View {
             if !isAddingAccount {
                 Text("BCW non è affiliata a Gruppo Spaggiari Parma.")
             }
-            if currentMode == .bcw || linkingFirst {
+            if mode == .bcw || linkingFirst {
                 HStack(spacing: 6) {
                     Icon("cloud", size: 16)
                     Text("Server BCW: \(BCWServer.host)")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                     Text("·")
                     Button("Modifica") { editingServer = true }
                         .buttonStyle(LinkButtonStyle())
@@ -345,6 +389,7 @@ struct LoginView: View {
         .foregroundStyle(Theme.secondaryInk)
         .multilineTextAlignment(.center)
         .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: Azioni
