@@ -263,7 +263,14 @@ final class CloudSync {
                     finishSettings(version: remote.version, data: data)
                     return
                 }
-                let changed = local.keys.filter { local[$0] != previous[$0] }
+                // Una chiave che l'ultima sincronizzazione non conosceva (impostazione arrivata con un
+                // aggiornamento, es. l'icona dell'app) conta come cambiata solo se il server non ce l'ha:
+                // altrimenti il valore predefinito di questo dispositivo cancellerebbe la scelta fatta
+                // su un altro.
+                let changed = local.keys.filter { key in
+                    guard let old = previous[key] else { return data[key] == nil }
+                    return local[key] != old
+                }
                 merged = data
                 for key in changed { merged[key] = local[key] }
                 if local.contains(where: { merged[$0.key] != $0.value }) { applySettings(merged) }

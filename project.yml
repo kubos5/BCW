@@ -23,6 +23,8 @@ targets:
         # iOS: aggiornamento in background per le notifiche delle novità.
         "INFOPLIST_FILE[sdk=iphone*]": Config/Info-iOS.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Icone alternative (Impostazioni › Aspetto › Icona dell'app, catalogo AppIcons.xcassets).
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
         INFOPLIST_KEY_CFBundleDisplayName: BCW
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.education

@@ -11,6 +11,7 @@ struct BCWApp: App {
         UNUserNotificationCenter.current().delegate = NotificationPresenter.shared
         #if DEBUG
         TimetableSelfTest.runIfRequested()
+        AppIconGenerator.runIfRequested()
         #endif
     }
 
@@ -74,11 +75,13 @@ struct RootView: View {
             [.cancel("OK")]
         }
         .appTheme()
+        .modifier(AppIconFailureReporter())
         .overlayHost()
         .task {
             // La finestra ora esiste: prende il colore d'accento del tema per i componenti di UIKit.
             Theme.applyTint()
             model.bootstrap()
+            AppIconController.shared.start()
             if model.preferences.useBiometrics && model.phase == .signedIn {
                 lock.lock()
                 await lock.unlock()
@@ -86,6 +89,7 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { NewsNotifications.scheduleBackgroundRefresh(model: model) }
+            if phase == .active { AppIconController.shared.sceneBecameActive() }
             if model.isCloud {
                 // Tornando nell'app arrivano le modifiche degli altri dispositivi; uscendo partono
                 // subito quelle in attesa.

@@ -236,6 +236,40 @@ final class ThemeStore {
         didSet { defaults.set(liquidGlass, forKey: "liquidGlass") }
     }
 
+    // Icona dell'app (Impostazioni › Aspetto › Icona dell'app), sincronizzata con l'account BCW.
+    // La applica `AppIconController`.
+    var appIconShape: AppIconShape {
+        didSet { defaults.set(appIconShape.rawValue, forKey: "appIconShape"); syncedChanged() }
+    }
+    var appIconColor: AppIconColor {
+        didSet { defaults.set(appIconColor.rawValue, forKey: "appIconColor"); syncedChanged() }
+    }
+    var appIconAppearance: AppIconAppearance {
+        didSet { defaults.set(appIconAppearance.rawValue, forKey: "appIconAppearance"); syncedChanged() }
+    }
+    var appIconDarkBackground: AppIconDarkBackground {
+        didSet { defaults.set(appIconDarkBackground.rawValue, forKey: "appIconDarkBackground"); syncedChanged() }
+    }
+
+    /// Icona scelta, con il colore del tema già risolto (il colore proposto più vicino all'accento).
+    var appIconChoice: AppIconChoice {
+        AppIconChoice(shape: appIconShape,
+                      color: appIconColor == .theme ? AppIconColor.nearest(to: accentColor) : appIconColor,
+                      variant: AppIconVariant(appearance: appIconAppearance, darkBackground: appIconDarkBackground))
+    }
+
+    var appIconIsDefault: Bool {
+        appIconShape == .circle && appIconColor == .theme && appIconAppearance == .automatic && appIconDarkBackground == .material
+    }
+
+    /// Ripristina l'icona di BCW (cerchio, colore del tema, automatica, sfondo scuro Material).
+    func resetAppIcon() {
+        appIconShape = .circle
+        appIconColor = .theme
+        appIconAppearance = .automatic
+        appIconDarkBackground = .material
+    }
+
     /// Asse ROND dei titoli e del testo.
     var rond: CGFloat { roundedText == .none ? 0 : 100 }
     var rondBody: CGFloat {
@@ -262,6 +296,10 @@ final class ThemeStore {
         motion = MotionStyle(rawValue: defaults.string(forKey: "motion") ?? "") ?? .expressive
         roundedText = RoundedText(rawValue: defaults.string(forKey: "roundedText") ?? "") ?? .titles
         liquidGlass = defaults.object(forKey: "liquidGlass") as? Bool ?? false
+        appIconShape = AppIconShape(rawValue: defaults.string(forKey: "appIconShape") ?? "") ?? .circle
+        appIconColor = AppIconColor(rawValue: defaults.string(forKey: "appIconColor") ?? "") ?? .theme
+        appIconAppearance = AppIconAppearance(rawValue: defaults.string(forKey: "appIconAppearance") ?? "") ?? .automatic
+        appIconDarkBackground = AppIconDarkBackground(rawValue: defaults.string(forKey: "appIconDarkBackground") ?? "") ?? .material
         #if DEBUG
         // Per le prove: `-BCWLiquidGlass YES` attiva Liquid Glass, `-BCWAccent #2f6db5` un altro colore.
         if defaults.object(forKey: "BCWLiquidGlass") != nil { liquidGlass = defaults.bool(forKey: "BCWLiquidGlass") }
@@ -285,6 +323,10 @@ final class ThemeStore {
             "corners": .string(corners.rawValue),
             "motion": .string(motion.rawValue),
             "roundedText": .string(roundedText.rawValue),
+            "appIconShape": .string(appIconShape.rawValue),
+            "appIconColor": .string(appIconColor.rawValue),
+            "appIconAppearance": .string(appIconAppearance.rawValue),
+            "appIconDarkBackground": .string(appIconDarkBackground.rawValue),
         ]
     }
 
@@ -301,6 +343,21 @@ final class ThemeStore {
         if let value = values["motion"]?.string.flatMap(MotionStyle.init(rawValue:)), value != motion { motion = value }
         if let value = values["roundedText"]?.string.flatMap(RoundedText.init(rawValue:)), value != roundedText {
             roundedText = value
+        }
+        // Icona dell'app: i valori sconosciuti (es. una forma di una versione più recente) si saltano.
+        if let value = values["appIconShape"]?.string.flatMap(AppIconShape.init(rawValue:)), value != appIconShape {
+            appIconShape = value
+        }
+        if let value = values["appIconColor"]?.string.flatMap(AppIconColor.init(rawValue:)), value != appIconColor {
+            appIconColor = value
+        }
+        if let value = values["appIconAppearance"]?.string.flatMap(AppIconAppearance.init(rawValue:)),
+           value != appIconAppearance {
+            appIconAppearance = value
+        }
+        if let value = values["appIconDarkBackground"]?.string.flatMap(AppIconDarkBackground.init(rawValue:)),
+           value != appIconDarkBackground {
+            appIconDarkBackground = value
         }
     }
 
@@ -408,6 +465,21 @@ final class ColorEngine {
               let json = try? JSONDecoder().decode([String: [String: String]].self, from: data),
               let light = json["light"], let dark = json["dark"] else { return nil }
         return (SchemeValues(roles: light), SchemeValues(roles: dark))
+    }
+
+    private var hueChromas: [String: (hue: Double, chroma: Double)] = [:]
+
+    /// Tonalità e croma (HCT di Material) di un colore `#rrggbb`.
+    func hueChroma(_ hex: String) -> (hue: Double, chroma: Double)? {
+        if let cached = hueChromas[hex] { return cached }
+        guard hex.count == 7, hex.dropFirst().allSatisfy(\.isHexDigit),
+              let result = context?.evaluateScript(
+                "(function(){var h=MCU.Hct.fromInt(MCU.argbFromHex('\(hex)'));return h.hue+','+h.chroma})()")?.toString()
+        else { return nil }
+        let parts = result.split(separator: ",").compactMap { Double($0) }
+        guard parts.count == 2 else { return nil }
+        hueChromas[hex] = (parts[0], parts[1])
+        return (parts[0], parts[1])
     }
 
     func swatch(accent: String, style: String, dark: Bool) -> [String] {
