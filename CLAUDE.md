@@ -230,8 +230,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Impostazioni: elenco di sottopagine (Generale, Aspetto, Voti, Dashboard, Orario, Notifiche, Account).
 - Dashboard, "Nei prossimi giorni": ogni giorno (`UpcomingDayCard`) ha a sinistra la data (`DateBadge`, tocco = vai al
   giorno) e a destra il nome, che comprime, e gli elementi in una lista segmentata.
-  Toccando un elemento si va a quel giorno, ma i tocchi propri vincono: la casella del compito e il testo
-  tagliato di una riga (che si apre); `AgendaEventRow.onPlainTap` misura se il testo è tagliato.
+  Si va al giorno solo dalla data: gli elementi hanno soltanto i loro tocchi (casella del compito, testo
+  tagliato che si apre, menu contestuale).
 - Notifiche delle novità (`Store/NewsNotifications.swift`): dopo ogni `refreshAll` confronta voti, comunicazioni,
   note, assenze e compiti/verifiche futuri con gli id già visti per account (`UserDefaults`), e notifica solo i tipi
   attivi in Impostazioni › Notifiche (`Preferences.newsNotifications`); la prima volta ricorda senza notificare; più
@@ -260,7 +260,7 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Misure che cambiano a ogni fotogramma e servono solo in certi momenti vanno in
   `UnobservedValue`, non in uno `@State` osservato: altrimenti l'intera pagina si ricalcola a ogni fotogramma.
 - `.card()` mette l'ombra sulla sola forma di sfondo: un'ombra sull'intera vista va ricalcolata dal contenuto.
-- Le viste con chiusure tra i parametri (righe dell'agenda, giorni successivi, giorni dell'orario) sono `Equatable` e
+- Le viste con chiusure tra i parametri (giorni successivi, giorni dell'orario) sono `Equatable` e
   usate con `.equatable()`: altrimenti ogni aggiornamento della pagina le ricalcolava tutte.
 - Per misurare: build Release per il simulatore con `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG`, un aggancio temporaneo
   che ripete l'interazione e `sample <pid> 8` sul processo del simulatore, poi sommare i campioni per funzione dell'app.

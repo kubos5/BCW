@@ -257,10 +257,9 @@ extension UpcomingDays: Equatable {
 }
 
 /// Un giorno in "Nei prossimi giorni", come nella vista Programma di Google Calendar: a sinistra
-/// la data in un riquadro (toccandola si va a quel giorno), a destra il nome del giorno, che
-/// comprime gli elementi, e gli elementi in una lista segmentata. Toccando un elemento che non fa
-/// già qualcosa si va al giorno: non la casella di un compito, né il testo tagliato di un evento
-/// (che si apre). Lo stato compresso resta finché la Dashboard è aperta.
+/// la data in un riquadro (solo toccandola si va a quel giorno), a destra il nome del giorno, che
+/// comprime gli elementi, e gli elementi in una lista segmentata, con i loro tocchi (casella del
+/// compito, testo che si apre, menu). Lo stato compresso resta finché la Dashboard è aperta.
 private struct UpcomingDayCard: View {
     let day: Date
     let events: [AgendaEvent]
@@ -304,18 +303,14 @@ private struct UpcomingDayCard: View {
                     ListGroup {
                         ForEach(events) { event in
                             SegmentCell(padding: 14) {
-                                AgendaEventRow(event: event, onPlainTap: onSelect)
+                                AgendaEventRow(event: event)
                                     .equatable()
                             }
-                            .contentShape(.rect)
-                            // Solo negli spazi vuoti (margini compresi): i tocchi della riga vincono.
-                            .onTapGesture(perform: onSelect)
                         }
                     }
                 }
             }
         }
-        .accessibilityAction(named: "Vai a \(day.relativeDayName)", onSelect)
     }
 
     private var summary: String {
