@@ -67,6 +67,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   passaggio dall'allineamento libero all'automatico;
   stampa `BCW-SELFTEST PASS/FAIL` ed esce. Sul simulatore: `simctl launch --console-pty booted com.bcw-classeviva.app
   -demoMode YES -BCWTimetableSelfTest YES`.
+- Autotest dei widget (solo DEBUG): `-BCWWidgetSelfTest YES` prova la regola del giorno predefinito dell'orario, le voci
+  della linea temporale, lezione in corso e prossima, i collegamenti `bcw://`, la codifica dell'istantanea e l'App Group;
+  stampa `BCW-WIDGET-SELFTEST PASS/FAIL` ed esce.
 - Simulatori: sono disponibili iOS 26.3 e iOS 27. Lo strumento del simulatore di Claude Code (tocchi, pressioni lunghe,
   screenshot) funziona con il simulatore acceso; per le animazioni registrare con `simctl io … recordVideo`. Quello di iOS 27 appena avviato satura la CPU per minuti e fa
   bloccare `simctl install/launch`: tenerne acceso uno alla volta.
@@ -100,7 +103,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 
 ## Architettura
 - `BCW.xcodeproj` usa **cartelle sincronizzate** (objectVersion 77): i file in `BCW/` entrano nel target da soli.
-- Un solo target iOS (iPhone e iPad; `SUPPORTED_PLATFORMS = iphoneos iphonesimulator`).
+- Target iOS dell'app (iPhone e iPad; `SUPPORTED_PLATFORMS = iphoneos iphonesimulator`) più l'estensione dei widget
+  `BCWWidgets` (vedi "Widget e attività in diretta").
 - `Utilities/Platform.swift`: piccoli adattatori (`Platform.copy`, `screenTitle`, `pagePadding`, `CardGrid`, `ChipRow`,
   `PlatformNavigationStack`, `localSearchable`, `UnobservedValue`).
 - iOS, ricerca senza Liquid Glass: la barra delle schede Material ha quattro destinazioni e la ricerca è
@@ -246,6 +250,62 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `FlowLayout`, che calcola le righe allo stesso modo nelle due fasi (larghezza proposta, mezzo punto di tolleranza):
   prima, con una fila piena al punto, l'ultimo chip sotto il giorno saltava tra la riga e una riga a capo.
 - Rotelle in pulsanti e righe: `InlineProgress`.
+
+## Widget e attività in diretta
+- Richiesta dell'utente (ottobre 2026): widget per iOS, tra cui l'orario di oggi che, passato l'ultimo evento, mostra
+  quello del giorno successivo come l'Orario; altri widget utili. Stile Material dell'app adattato a iOS.
+- Target `BCWWidgets` (`com.bcw-classeviva.app.widgets`, estensione WidgetKit incorporata in `BCW.app/PlugIns` con
+  "Embed Foundation Extensions"), cartella sincronizzata `BCWWidgets/` (bundle dei widget, linea temporale, catalogo
+  `Assets.xcassets/Material` con una copia delle sole icone usate). `Shared/` è una cartella sincronizzata aggiunta a
+  entrambi i target: `BCWShared.swift` (App Group, calendario, `TimetableDefaultDay`, `DeepLink`), `WidgetSnapshot.swift`,
+  `TimeOfDay.swift`, `ThemeDefaults.swift` (schema predefinito e toni dei voti), forme (`MaterialShape*`, `RingShape`,
+  `WavyLine`) e `Shared/Widgets/` (viste, `BCWWidgetKind` con nomi, dimensioni e voci della linea temporale, stile).
+  Info.plist dell'estensione: `Config/Info-Widgets.plist` (solo `NSExtension`) unito a quello generato.
+- Isolamento: anche l'estensione ha `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; i tipi di dati e il fornitore della
+  linea temporale sono `nonisolated` (`WidgetSnapshot`, `BCWShared`, `TimetableDefaultDay`, `DeepLink`, `BCWWidgetKind`,
+  `BCWTimelineProvider`), le viste restano sull'attore principale.
+- App Group `group.com.bcw-classeviva.app` (`Config/BCW.entitlements`, `Config/BCWWidgets.entitlements`). Sul simulatore i
+  diritti stanno nella sezione `__entitlements` del binario ("Simulated"): `codesign -d --entitlements` li mostra vuoti,
+  ma funziona (verificato: l'estensione legge l'istantanea scritta dall'app).
+- Dati: `WidgetExporter` (`AppModel.widgets`, avviato da `bootstrap`) costruisce `WidgetSnapshot` (JSON in
+  `<App Group>/Widgets/snapshot.json`, niente credenziali): eventi dell'orario risolti per 8 giorni (come la vista Lista:
+  verifiche solo con "Mostra le verifiche"), orario settimanale per i giorni oltre, agenda di 14 giorni, medie come nei
+  Voti, ruoli del tema chiaro e scuro, angoli, nome, demo. Segue con `withObservationTracking` tutto ciò che legge e
+  ricostruisce dopo 700 ms (unisce le modifiche ravvicinate), non durante `refreshAll` o un cambio di sessione; scrive e
+  chiama `reloadAllTimelines` solo se il contenuto cambia. Anche a mezzanotte (`significantTimeChange`), tornando
+  nell'app, andando in secondo piano (`flush`) e dopo l'aggiornamento in background.
+- Giorno predefinito dell'orario (`TimetableDefaultDay`, una sola implementazione per app e widget, stessa regola del
+  web): oggi se c'è un evento dell'orario non ancora finito, altrimenti il primo giorno con eventi entro 7 giorni,
+  altrimenti oggi; contano gli eventi dell'utente, non intervalli né verifiche di Classeviva. L'Orario lo applica solo
+  all'apertura (`adjustInitialDay`): se l'ultimo evento finisce mentre lo si guarda resta su oggi. La Dashboard non ha
+  un meccanismo per il ritorno nell'app dopo un po', quindi nemmeno l'Orario. "Oggi" porta sempre a oggi.
+- Widget: Orario (piccolo, medio, grande), Lezione in corso (piccolo e accessori rettangolare, circolare, in linea),
+  Compiti e verifiche (medio, grande), Prossima verifica (piccolo, rettangolare, in linea), Media (piccolo, circolare, in
+  linea). Linea temporale: adesso, ogni inizio e fine degli eventi da oggi a dopodomani e le due mezzanotti
+  (`.atEnd`); tempo che manca e avanzamento con `Text(timerInterval:)` e `ProgressView(timerInterval:)`.
+- Colori: `WidgetPalette` legge i ruoli dell'istantanea secondo `colorScheme`; con le icone colorate o trasparenti
+  (`accented`) e nella schermata di blocco (`vibrant`) tutto è bianco con opacità diverse e le parti in evidenza
+  (tinte, icone, anelli) sono `widgetAccentable`, senza grandi riempimenti. Verificati sulla Home (anche "Tinted") e
+  sulla schermata di blocco del simulatore.
+- Font: `WidgetFonts` registra Google Sans Flex dal bundle dell'app che contiene l'estensione (niente copia del file);
+  verificato sui widget veri.
+- Collegamenti: `bcw://orario?giorno=AAAA-MM-GG`, `bcw://dashboard?giorno=…`, `bcw://voti` (`CFBundleURLTypes` in
+  `Config/Info-iOS.plist`). `RootView.onOpenURL` → `AppModel.open` (accettato anche durante l'avvio) → `openedLink`:
+  `MainTabView` sceglie la scheda, `TimetableView`/`DashboardView` il giorno. Verificati a freddo e a caldo, con e senza
+  Liquid Glass.
+- Limiti verificati: sull'iPhone 17 i widget misurano 164 (piccolo), 350 × 164 (medio), 350 × 365 (grande) con margini
+  di 16 punti, meno del previsto: le viste scelgono con `ViewThatFits` quante righe e quali dettagli mostrare. Una
+  parola sola non va a capo (veniva troncata accanto a un'icona): i titoli prendono tutta la larghezza. Negli accessori
+  in linea entrano solo un testo e un'immagine e il sistema taglia la fine: l'ora va prima della materia. Nell'elenco
+  dei widget del simulatore le app compaiono solo dopo aver toccato il campo di ricerca.
+- Niente attività in diretta (Live Activity): senza notifiche push il contenuto si aggiorna solo con l'app aperta e la
+  lezione mostrata resterebbe vecchia; il widget "Lezione in corso" nella schermata di blocco copre lo stesso bisogno.
+- Prove (solo DEBUG): `-BCWWidgetGallery YES` apre nell'app la galleria dei widget (stesse viste, dimensioni reali) con
+  `-BCWWidgetGalleryScheme light|dark`, `-BCWWidgetGalleryLook fullColor|accented|vibrant`,
+  `-BCWWidgetGalleryKind timetable|now|agenda|average|nextTest`, `-BCWWidgetGallerySource app|sample|signedOut|empty`
+  (stati vuoti) e `-BCWNowMinute N` (i timer seguono comunque l'ora vera). `-BCWWidgetNowLesson YES` sposta gli orari
+  dell'istantanea perché la prima lezione di oggi sia cominciata da 20 minuti: così i widget veri mostrano la lezione
+  in corso a qualsiasi ora (rilanciare l'app senza l'argomento per tornare ai dati veri).
 
 ## Prestazioni
 - Eventi, assenze e giorni del calendario per giorno: usare `model.events(on:)`, `absences(on:)`, `calendarStatus(on:)`,

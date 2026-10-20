@@ -9,10 +9,16 @@ targets:
   BCW:
     type: application
     supportedDestinations: [iOS]
-    sources: [BCW]
+    # `Shared`: codice comune all'app e ai widget (dati dei widget, giorno dell'orario, viste).
+    sources: [BCW, Shared]
+    dependencies:
+      # L'estensione dei widget, incorporata nell'app (PlugIns).
+      - target: BCWWidgets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.bcw.app
+        # App Group condiviso con i widget (group.com.bcw-classeviva.app).
+        CODE_SIGN_ENTITLEMENTS: Config/BCW.entitlements
         MARKETING_VERSION: "3.1"
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "5.0"
@@ -31,5 +37,27 @@ targets:
         INFOPLIST_KEY_NSHumanReadableCopyright: "BCW non è affiliata a Gruppo Spaggiari Parma."
         "INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphone*]": YES
         "INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphone*]": YES
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+  BCWWidgets:
+    type: app-extension
+    supportedDestinations: [iOS]
+    sources: [BCWWidgets, Shared]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bcw.app.widgets
+        MARKETING_VERSION: "3.1"
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "5.0"
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # NSExtension (com.apple.widgetkit-extension) unito all'Info.plist generato.
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Config/Info-Widgets.plist
+        INFOPLIST_KEY_CFBundleDisplayName: BCW
+        INFOPLIST_KEY_NSHumanReadableCopyright: "BCW non è affiliata a Gruppo Spaggiari Parma."
+        CODE_SIGN_ENTITLEMENTS: Config/BCWWidgets.entitlements
+        SKIP_INSTALL: YES
         SUPPORTS_MACCATALYST: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
