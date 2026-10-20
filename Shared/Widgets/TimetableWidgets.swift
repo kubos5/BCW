@@ -351,7 +351,8 @@ private struct TimetableDayHeading: View {
             Text(dateLine)
                 .font(palette.font(compact ? 12 : 13, weight: 500))
                 .foregroundStyle(palette.secondaryInk)
-                .lineLimit(compact ? 2 : 1)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
             if compact {
                 Spacer(minLength: 6)
                 chips
@@ -359,9 +360,12 @@ private struct TimetableDayHeading: View {
         }
     }
 
+    /// Sotto "Oggi" e "Domani" la data con il giorno della settimana (abbreviato nel medio, dove
+    /// sta su una riga), sotto il nome di un altro giorno solo la data.
     private var dateLine: String {
         let relative = WidgetDates.offset(of: day.day, from: day.now)
-        return (0...1).contains(relative) ? WidgetDates.long(day.day) : WidgetDates.dayMonth(day.day)
+        guard (0...1).contains(relative) else { return WidgetDates.dayMonth(day.day) }
+        return compact ? "\(WidgetDates.weekdayShort(day.day)) \(WidgetDates.dayMonth(day.day))" : WidgetDates.long(day.day)
     }
 
     @ViewBuilder
@@ -398,6 +402,15 @@ private struct TimetableRowList: View {
     enum Style {
         case regular, relaxed, compact
         var isOneLine: Bool { self != .regular }
+
+        /// Altezza massima di una riga quando avanza spazio (le righe crescono fin qui).
+        var maxHeight: CGFloat {
+            switch self {
+            case .regular: 60
+            case .relaxed: 44
+            case .compact: 34
+            }
+        }
     }
 
     let day: TimetableWidgetDay
@@ -548,6 +561,8 @@ private struct TimetableLessonRow: View {
         .padding(.vertical, style == .regular ? 7 : (style == .relaxed ? 8 : 5))
         .padding(.leading, 4)
         .padding(.trailing, 10)
+        // Lo spazio che avanza si divide tra le righe, fino a un'altezza comoda.
+        .frame(maxHeight: style.maxHeight)
         .background(isCurrent ? palette.container("primary") : palette.eventFill(block.first.tint),
                     in: UnevenRoundedRectangle(topLeadingRadius: corners.top, bottomLeadingRadius: corners.bottom,
                                                bottomTrailingRadius: corners.bottom, topTrailingRadius: corners.top,

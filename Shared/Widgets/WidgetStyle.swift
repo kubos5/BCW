@@ -279,27 +279,34 @@ struct WidgetEmptyState: View {
     var message: String?
     let palette: WidgetPalette
     var compact = false
+    /// Ruolo del contenitore che fa da sfondo al widget (es. `primary` per "Lezione in corso"):
+    /// la forma prende il colore pieno del ruolo e il testo quello sul contenitore.
+    var onContainer: String?
 
     var body: some View {
+        let shapeFill: Color = if let onContainer, palette.isFullColor { palette.role(onContainer) } else { palette.container("primary") }
+        let iconColor: Color = if !palette.isFullColor { palette.accent } else if let onContainer { palette.role("on-\(onContainer)") } else { palette.onContainer("primary") }
+        let titleColor = onContainer.map(palette.onContainer) ?? palette.ink
+        let messageColor = onContainer.map { palette.onContainer($0).opacity(0.85) } ?? palette.secondaryInk
         VStack(alignment: .leading, spacing: compact ? 6 : 8) {
             ZStack {
                 MaterialShape(.cookie9Sided)
-                    .fill(palette.container("primary"))
+                    .fill(shapeFill)
                 WidgetIcon(icon, size: compact ? 18 : 22)
-                    .foregroundStyle(palette.isFullColor ? palette.onContainer("primary") : palette.accent)
+                    .foregroundStyle(iconColor)
             }
             .frame(width: compact ? 36 : 44, height: compact ? 36 : 44)
             .widgetAccentable()
             Spacer(minLength: 0)
             Text(title)
                 .font(palette.font(compact ? 15 : 17, weight: 600, rounded: true))
-                .foregroundStyle(palette.ink)
+                .foregroundStyle(titleColor)
                 .lineLimit(2)
                 .minimumScaleFactor(0.85)
             if let message {
                 Text(message)
                     .font(palette.font(12))
-                    .foregroundStyle(palette.secondaryInk)
+                    .foregroundStyle(messageColor)
                     .lineLimit(3)
                     .minimumScaleFactor(0.85)
             }

@@ -7,7 +7,8 @@ import WidgetKit
 /// dell'istantanea che l'app scrive per i widget (o con quelli di esempio), in chiaro o scuro e
 /// nelle modalità di resa. Argomenti: `-BCWWidgetGalleryScheme light|dark`,
 /// `-BCWWidgetGalleryLook fullColor|accented|vibrant`, `-BCWWidgetGalleryKind timetable|now|…`,
-/// `-BCWWidgetGallerySample YES`; `-BCWNowMinute N` sposta l'ora.
+/// `-BCWWidgetGallerySource app|sample|signedOut|empty` (dati, esempio o stati vuoti);
+/// `-BCWNowMinute N` sposta l'ora.
 struct WidgetGalleryView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -16,10 +17,37 @@ struct WidgetGalleryView: View {
     @State private var scheme: ColorScheme? = WidgetGalleryView.argument("BCWWidgetGalleryScheme")
         .flatMap { $0 == "dark" ? .dark : ($0 == "light" ? .light : nil) }
     @State private var look = WidgetGalleryView.argument("BCWWidgetGalleryLook").flatMap(WidgetLook.init(rawValue:)) ?? .fullColor
-    @State private var sample = UserDefaults.standard.bool(forKey: "BCWWidgetGallerySample")
+    @State private var source = WidgetGalleryView.argument("BCWWidgetGallerySource").flatMap(Source.init(rawValue:))
+        ?? (UserDefaults.standard.bool(forKey: "BCWWidgetGallerySample") ? .sample : .app)
     private let only = WidgetGalleryView.argument("BCWWidgetGalleryKind").flatMap(BCWWidgetKind.init(rawValue:))
 
     static func argument(_ key: String) -> String? { UserDefaults.standard.string(forKey: key) }
+
+    /// Dati mostrati: quelli dell'app, l'esempio della galleria di iOS o gli stati vuoti.
+    enum Source: String, CaseIterable {
+        case app, sample, signedOut, empty
+
+        var title: String {
+            switch self {
+            case .app: "App"
+            case .sample: "Esempio"
+            case .signedOut: "Senza account"
+            case .empty: "Vuoto"
+            }
+        }
+
+        func snapshot(model: AppModel, now: Date) -> WidgetSnapshot {
+            switch self {
+            case .app: model.widgets.current ?? .sample(now: now)
+            case .sample: .sample(now: now)
+            case .signedOut: WidgetSnapshot(generatedAt: now, signedIn: false, theme: model.widgets.current?.theme ?? .init())
+            case .empty:
+                // Con l'account ma senza orario, compiti, verifiche e voti.
+                WidgetSnapshot(generatedAt: now, signedIn: true, accountName: "Prova",
+                               theme: model.widgets.current?.theme ?? .init())
+            }
+        }
+    }
 
     /// Adesso, o il minuto di `-BCWNowMinute` di oggi.
     private var now: Date {
@@ -30,7 +58,7 @@ struct WidgetGalleryView: View {
 
     var body: some View {
         let now = now
-        let snapshot = sample ? WidgetSnapshot.sample(now: now) : (model.widgets.current ?? WidgetSnapshot.sample(now: now))
+        let snapshot = source.snapshot(model: model, now: now)
         let colorScheme = scheme ?? systemScheme
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -60,7 +88,7 @@ struct WidgetGalleryView: View {
             SegmentedButtons(selection: $look, options: [(WidgetLook.fullColor, "Colori", nil),
                                                           (WidgetLook.accented, "Colorate", nil),
                                                           (WidgetLook.vibrant, "Blocco", nil)])
-            SegmentedButtons(selection: $sample, options: [(false, "Dati dell'app", nil), (true, "Esempio", nil)])
+            SegmentedButtons(selection: $source, options: Source.allCases.map { ($0, $0.title, nil) })
         }
     }
 
@@ -130,7 +158,7 @@ private struct WidgetFrame: View {
                 .frame(width: size.width, height: size.height)
                 .background {
                     if palette.look == .fullColor {
-                        kind.background(palette, snapshot: snapshot)
+                        kind.background(palette)
                     } else {
                         // Icone colorate o trasparenti: al posto dello sfondo il vetro del sistema.
                         Color.white.opacity(0.08)

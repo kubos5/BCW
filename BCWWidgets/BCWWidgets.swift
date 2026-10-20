@@ -82,7 +82,7 @@ struct BCWWidgetEntryView: View {
                 if family.isAccessory {
                     Color.clear
                 } else {
-                    kind.background(palette, snapshot: entry.snapshot)
+                    kind.background(palette)
                 }
             }
     }

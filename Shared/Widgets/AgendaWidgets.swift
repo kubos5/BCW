@@ -133,43 +133,46 @@ private struct AgendaItemIcon: View {
     }
 }
 
-/// Medio: righe di una riga raggruppate sotto il nome del giorno, quante ne entrano.
+/// Medio: righe di una riga, con il giorno nella colonna a sinistra (solo sulla prima riga di
+/// ogni giorno, in evidenza se c'è una verifica), quante ne entrano.
 private struct AgendaCompactList: View {
     let days: [AgendaDay]
     let now: Date
     let palette: WidgetPalette
 
-    private enum Line: Identifiable {
-        case day(Date, Bool)
-        case item(WidgetSnapshot.AgendaItem)
-        var id: String {
-            switch self {
-            case let .day(day, _): "d-\(day.timeIntervalSince1970)"
-            case let .item(item): "i-\(item.id)"
-            }
-        }
+    private struct Line: Identifiable {
+        let day: Date
+        let item: WidgetSnapshot.AgendaItem
+        /// Prima riga del giorno (con il nome del giorno), e il giorno ha una verifica.
+        let isFirst: Bool
+        let hasTest: Bool
+        var id: Int { item.id }
     }
+
+    /// Colonna dei giorni ("Oggi", "Domani", "Ven 23").
+    private static let dayWidth: CGFloat = 50
 
     var body: some View {
         let lines = days.flatMap { day in
-            [Line.day(day.day, day.items.contains { $0.kind == .test })] + day.items.map(Line.item)
+            let hasTest = day.items.contains { $0.kind == .test }
+            return day.items.enumerated().map { index, item in
+                Line(day: day.day, item: item, isFirst: index == 0, hasTest: hasTest)
+            }
         }
-        let total = days.reduce(0) { $0 + $1.items.count }
         ViewThatFits(in: .vertical) {
             ForEach((1...max(1, lines.count)).reversed(), id: \.self) { count in
-                let shown = Self.trimmed(Array(lines.prefix(count)))
-                let shownItems = shown.filter { if case .item = $0 { true } else { false } }.count
-                VStack(alignment: .leading, spacing: 3) {
-                    ForEach(shown) { line in
-                        switch line {
-                        case let .day(day, hasTest): dayLine(day, hasTest: hasTest)
-                        case let .item(item): itemLine(item)
-                        }
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(lines.prefix(count).enumerated()), id: \.element.id) { index, line in
+                        itemLine(line)
+                            // Tra un giorno e l'altro un po' più di spazio.
+                            .padding(.top, index == 0 ? 0 : (line.isFirst ? 7 : 3))
                     }
-                    if shownItems < total {
-                        Text("+\(total - shownItems) dopo")
+                    if count < lines.count {
+                        Text("+\(lines.count - count) dopo")
                             .font(palette.font(11, weight: 600))
                             .foregroundStyle(palette.secondaryInk)
+                            .padding(.leading, Self.dayWidth + 8)
+                            .padding(.top, 4)
                     }
                 }
             }
@@ -177,34 +180,29 @@ private struct AgendaCompactList: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
-    /// Senza il nome di un giorno in fondo, se i suoi elementi non entrano.
-    private static func trimmed(_ lines: [Line]) -> [Line] {
-        var lines = lines
-        while let last = lines.last, case .day = last { lines.removeLast() }
-        return lines
-    }
-
-    private func dayLine(_ day: Date, hasTest: Bool) -> some View {
-        Text(WidgetDates.relativeName(day, now: now) + (WidgetDates.offset(of: day, from: now) > 1 ? " \(BCWShared.calendar.component(.day, from: day))" : ""))
-            .font(palette.font(11, weight: 750))
-            .tracking(0.4)
-            .foregroundStyle(hasTest ? palette.accent : palette.secondaryInk)
-            .padding(.top, 2)
-    }
-
-    private func itemLine(_ item: WidgetSnapshot.AgendaItem) -> some View {
-        HStack(spacing: 6) {
-            AgendaItemIcon(item: item, palette: palette, size: 14)
-            Text(item.title)
-                .font(palette.font(12.5, weight: 650))
-                .foregroundStyle(item.isDone ? palette.secondaryInk : palette.ink)
+    private func itemLine(_ line: Line) -> some View {
+        let item = line.item
+        return HStack(spacing: 8) {
+            Text(line.isFirst ? WidgetDates.relativeShort(line.day, now: now) : "")
+                .font(palette.font(11.5, weight: 700))
+                .foregroundStyle(line.hasTest ? palette.accent : palette.secondaryInk)
                 .lineLimit(1)
-                .layoutPriority(1)
-            Text(item.text.isEmpty ? "Nessuna descrizione" : item.text)
-                .font(palette.font(12))
-                .foregroundStyle(palette.secondaryInk)
-                .strikethrough(item.isDone)
-                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(width: Self.dayWidth, alignment: .leading)
+                .widgetAccentable(line.hasTest)
+            HStack(spacing: 6) {
+                AgendaItemIcon(item: item, palette: palette, size: 14)
+                Text(item.title)
+                    .font(palette.font(12.5, weight: 650))
+                    .foregroundStyle(item.isDone ? palette.secondaryInk : palette.ink)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Text(item.text.isEmpty ? "Nessuna descrizione" : item.text)
+                    .font(palette.font(12))
+                    .foregroundStyle(palette.secondaryInk)
+                    .strikethrough(item.isDone)
+                    .lineLimit(1)
+            }
         }
     }
 }
@@ -377,13 +375,14 @@ struct NextTestWidgetView: View {
     @ViewBuilder
     private func small(_ test: WidgetSnapshot.AgendaItem?) -> some View {
         if !snapshot.signedIn {
-            WidgetEmptyState(icon: "test", title: "Apri BCW per accedere", palette: palette, compact: true)
+            WidgetEmptyState(icon: "test", title: "Apri BCW per accedere", palette: palette, compact: true,
+                             onContainer: "tertiary")
         } else if let test {
             let count = countdown(test)
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .top, spacing: 6) {
                     WidgetEyebrow(text: "Verifica", color: ink.opacity(0.8), palette: palette, size: 10.5)
-                        .padding(.top, 4)
+                        .padding(.top, 2)
                     Spacer(minLength: 0)
                     // Il conto alla rovescia in un biscotto di M3 Expressive.
                     ZStack {
@@ -401,20 +400,20 @@ struct NextTestWidgetView: View {
                         .foregroundStyle(palette.isFullColor ? palette.role("on-tertiary") : .white)
                         .padding(5)
                     }
-                    .frame(width: 50, height: 50)
+                    .frame(width: 46, height: 46)
                     .widgetAccentable()
                 }
                 Text(test.title)
                     .font(palette.font(18, weight: 600, rounded: true))
                     .foregroundStyle(ink)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.75)
-                    .padding(.top, -6)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .padding(.top, 4)
                 Text(test.text.isEmpty ? "Verifica" : test.text)
                     .font(palette.font(12))
                     .foregroundStyle(ink.opacity(0.9))
                     .lineLimit(2)
-                    .padding(.top, 2)
+                    .padding(.top, 1)
                 Spacer(minLength: 4)
                 Text(dateLine(test))
                     .font(palette.font(11, weight: 650))
@@ -455,7 +454,7 @@ struct NextTestWidgetView: View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 4) {
                 WidgetIcon("test", size: 14)
-                Text(test.map { "Verifica di \($0.title)" } ?? "Nessuna verifica")
+                Text(test?.title ?? "Nessuna verifica")
                     .font(palette.font(15, weight: 700, rounded: true))
                     .lineLimit(1)
             }
@@ -464,10 +463,14 @@ struct NextTestWidgetView: View {
                 Text(test.text.isEmpty ? "Verifica" : test.text)
                     .font(palette.font(13))
                     .lineLimit(1)
-                Text("\(relative(test).capitalizedFirstLetter) · \(dateLine(test))")
-                    .font(palette.font(13))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                // "Tra 5 giorni · Lun 26" (l'ora c'è solo se entra).
+                ViewThatFits(in: .horizontal) {
+                    Text("\(relative(test).capitalizedFirstLetter) · \(dateLine(test))")
+                    Text("\(relative(test).capitalizedFirstLetter) · \(WidgetDates.weekdayShort(test.begin)) \(BCWShared.calendar.component(.day, from: test.begin))")
+                }
+                .font(palette.font(13))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
             } else {
                 Text(snapshot.signedIn ? "Nei prossimi giorni" : "Apri BCW per accedere")
                     .font(palette.font(13))

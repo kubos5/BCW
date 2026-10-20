@@ -55,10 +55,10 @@ nonisolated enum BCWWidgetKind: String, CaseIterable, Identifiable, Sendable {
 
     /// Sfondo del widget nella schermata Home (con le icone colorate o trasparenti lo toglie iOS).
     @MainActor
-    func background(_ palette: WidgetPalette, snapshot: WidgetSnapshot) -> Color {
+    func background(_ palette: WidgetPalette) -> Color {
         switch self {
-        case .now where snapshot.signedIn: NowWidgetView.background(palette)
-        case .nextTest where snapshot.signedIn: NextTestWidgetView.background(palette)
+        case .now: NowWidgetView.background(palette)
+        case .nextTest: NextTestWidgetView.background(palette)
         default: palette.background
         }
     }

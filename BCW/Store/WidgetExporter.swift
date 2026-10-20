@@ -114,10 +114,12 @@ final class WidgetExporter {
                 events: entries.map { event($0, store: store, isTest: tests.contains($0.id)) },
                 isHoliday: model.calendarStatus(on: day)?.isHoliday ?? false))
         }
-        let week = (1...7).map { weekday in
+        var week = (1...7).map { weekday in
             store.entries(weekday: weekday, includingDraft: false)
                 .map { event($0, store: store, isTest: showsTests && $0.isWeeklyTest) }
         }
+
+        applyTestShift(days: &days, week: &week, now: now)
 
         return WidgetSnapshot(
             generatedAt: now,
@@ -131,6 +133,26 @@ final class WidgetExporter {
             agenda: agenda(model: model, from: today),
             grades: grades(model: model, now: now),
             theme: theme)
+    }
+
+    /// Solo DEBUG, `-BCWWidgetNowLesson YES`: per provare i widget veri a qualsiasi ora, gli orari
+    /// dell'istantanea si spostano in modo che la prima lezione di oggi sia cominciata da 20 minuti.
+    private static func applyTestShift(days: inout [WidgetSnapshot.Day], week: inout [[WidgetSnapshot.Event]], now: Date) {
+        #if DEBUG
+        guard UserDefaults.standard.bool(forKey: "BCWWidgetNowLesson"),
+              let first = days.first?.events.filter({ !$0.isBreak }).map(\.start).min() else { return }
+        let shift = BCWShared.minutes(of: now) - 20 - first
+        func shifted(_ events: [WidgetSnapshot.Event]) -> [WidgetSnapshot.Event] {
+            events.compactMap { event in
+                var event = event
+                event.start = min(max(event.start + shift, 0), 24 * 60)
+                event.end = min(max(event.end + shift, 0), 24 * 60)
+                return event.end > event.start ? event : nil
+            }
+        }
+        for index in days.indices { days[index].events = shifted(days[index].events) }
+        week = week.map(shifted)
+        #endif
     }
 
     /// Eventi del giorno con una verifica: segnata a mano o di Classeviva (non nascosta),

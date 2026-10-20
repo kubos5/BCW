@@ -421,9 +421,10 @@ final class AppModel {
     // MARK: Collegamenti
 
     /// Apre un collegamento `bcw://` (dai widget): `MainTabView` sceglie la scheda e la scheda il
-    /// giorno. Senza sessione non fa nulla.
+    /// giorno. All'avvio dell'app da un widget può arrivare prima della sessione: resta in attesa
+    /// finché le schede non compaiono. Senza account non fa nulla.
     func open(_ url: URL) {
-        guard let link = DeepLink(url: url), phase == .signedIn else { return }
+        guard let link = DeepLink(url: url), phase != .signedOut else { return }
         openedLink = link
     }
 

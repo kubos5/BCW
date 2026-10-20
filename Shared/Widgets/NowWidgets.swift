@@ -39,52 +39,59 @@ private struct NowSmallView: View {
 
     var body: some View {
         if !snapshot.signedIn {
-            onContainer(WidgetEmptyState(icon: "timetable", title: "Apri BCW per accedere", palette: palette, compact: true))
+            WidgetEmptyState(icon: "timetable", title: "Apri BCW per accedere", palette: palette, compact: true,
+                             onContainer: "primary")
         } else if !snapshot.hasTimetable {
-            onContainer(WidgetEmptyState(icon: "calendarPlus", title: "Crea il tuo orario",
-                                         message: "Tocca per aprire BCW.", palette: palette, compact: true))
+            WidgetEmptyState(icon: "calendarPlus", title: "Crea il tuo orario", message: "Tocca per aprire BCW.",
+                             palette: palette, compact: true, onContainer: "primary")
         } else if let current = day.current {
             lesson(current, isCurrent: true)
         } else if let next = day.next {
             lesson(next, isCurrent: false)
         } else {
-            onContainer(WidgetEmptyState(icon: "sun", title: "Nessuna lezione",
-                                         message: "Niente in orario nei prossimi giorni.", palette: palette, compact: true))
+            WidgetEmptyState(icon: "sun", title: "Nessuna lezione", message: "Niente in orario nei prossimi giorni.",
+                             palette: palette, compact: true, onContainer: "primary")
         }
     }
 
-    private func onContainer(_ content: WidgetEmptyState) -> some View { content }
-
+    /// Con la successiva in fondo se c'è posto (il titolo può andare su due righe).
     private func lesson(_ event: WidgetSnapshot.Event, isCurrent: Bool) -> some View {
+        ViewThatFits(in: .vertical) {
+            lessonContent(event, isCurrent: isCurrent, showsFollowing: true)
+            lessonContent(event, isCurrent: isCurrent, showsFollowing: false)
+        }
+    }
+
+    private func lessonContent(_ event: WidgetSnapshot.Event, isCurrent: Bool, showsFollowing: Bool) -> some View {
         let interval = day.interval(event)
-        let following = day.following.first
+        let following = showsFollowing ? day.following.first : nil
         return VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 6) {
-                VStack(alignment: .leading, spacing: 1) {
-                    WidgetEyebrow(text: eyebrow(event, isCurrent: isCurrent), color: ink.opacity(0.8), palette: palette,
-                                  size: 10.5)
-                    Text(event.title)
-                        .font(palette.font(19, weight: 600, rounded: true))
-                        .foregroundStyle(ink)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.75)
-                }
+            // In alto l'etichetta e l'icona in una forma di M3 Expressive; sotto il titolo, largo
+            // quanto il widget.
+            HStack(alignment: .center, spacing: 6) {
+                WidgetEyebrow(text: eyebrow(event, isCurrent: isCurrent), color: ink.opacity(0.8), palette: palette,
+                              size: 10.5)
                 Spacer(minLength: 0)
                 ZStack {
                     MaterialShape(isCurrent ? .cookie12Sided : .sunny)
                         .fill(ink.opacity(palette.isFullColor ? 0.12 : 0.18))
-                    WidgetIcon(isCurrent ? "timetableFill" : "schedule", size: 17)
+                    WidgetIcon(isCurrent ? "timetableFill" : "schedule", size: 15)
                         .foregroundStyle(ink)
                 }
-                .frame(width: 34, height: 34)
+                .frame(width: 30, height: 30)
                 .widgetAccentable()
             }
-            Text(event.room.isEmpty ? event.teacher.isEmpty ? TimeOfDay.string(event.start) + "–" + TimeOfDay.string(event.end) : event.teacher
-                 : event.room)
+            Text(event.title)
+                .font(palette.font(19, weight: 600, rounded: true))
+                .foregroundStyle(ink)
+                .lineLimit(2)
+                .minimumScaleFactor(0.75)
+                .padding(.top, 1)
+            Text(detail(event))
                 .font(palette.font(12))
                 .foregroundStyle(ink.opacity(0.85))
                 .lineLimit(1)
-                .padding(.top, 2)
+                .padding(.top, 1)
             Spacer(minLength: 4)
             if isCurrent {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -136,6 +143,13 @@ private struct NowSmallView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// Aula, o docente, o l'orario.
+    private func detail(_ event: WidgetSnapshot.Event) -> String {
+        if !event.room.isEmpty { return event.room }
+        if !event.teacher.isEmpty { return event.teacher }
+        return "\(TimeOfDay.string(event.start))–\(TimeOfDay.string(event.end))"
     }
 
     private func eyebrow(_ event: WidgetSnapshot.Event, isCurrent: Bool) -> String {
