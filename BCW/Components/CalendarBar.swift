@@ -178,6 +178,8 @@ private struct CalendarDayButton: View {
     }
 }
 
+/// Alla pressione il giorno si rimpicciolisce con il velo; gli altri giorni stringono anche gli
+/// angoli, quello scelto resta una pillola (come `.cb-day.selected` sul web, che vince su `:active`).
 private struct CalendarDayStyle: ButtonStyle {
     let selected: Bool
     let today: Bool
@@ -186,7 +188,7 @@ private struct CalendarDayStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         let full: CGFloat = compact ? 22 : 34
-        let radius = configuration.isPressed ? Theme.radii.s : (selected ? full : (compact ? Theme.radii.m : Theme.radii.l))
+        let radius = selected ? full : (configuration.isPressed ? Theme.radii.s : (compact ? Theme.radii.m : Theme.radii.l))
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         configuration.label
             .background {

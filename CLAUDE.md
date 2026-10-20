@@ -206,6 +206,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   Calendario = sempre il mese, vista Lista = sempre la settimana (scelta dell'utente, ottobre 2026: niente passaggio
   tra i due scorrendo né pulsante per chiudere il mese).
   Frecce e scorrimento di lato sulla barra cambiano settimana (o mese); il titolo apre `M3DatePickerSheet`.
+  Alla pressione i giorni si rimpiccioliscono con il velo e stringono gli angoli, tranne quello scelto, che resta
+  una pillola (come sul web, dove `.cb-day.selected` vince su `:active`).
   La settimana sta alla stessa altezza nelle due schede (verificato al pixel): con Material la barra di ricerca della
   Dashboard è 4 punti più alta del titolo grande dell'Orario, che per questo ha 4 punti in più sopra la barra.
 - Vista Giorno dell'Orario con Liquid Glass: la barra di sistema segue il primo scorrimento che trova e la vista parte
