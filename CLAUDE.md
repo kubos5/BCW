@@ -294,6 +294,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   tastiera aperta il cursore passa al campo corrispondente (al giro dopo) e la tastiera resta. Un tocco nello spazio
   vuoto la chiude. Le note in basso occupano sempre l'altezza delle più lunghe tra i due moduli (copie nascoste in uno
   `ZStack` allineato in alto): cambiando Classeviva/Account BCW il resto, centrato, non si sposta.
+  Nella disposizione compatta logo e titolo sono centrati sulle maiuscole (allineamento `capCenter`, verificato
+  al pixel): con le linee di base allineate il titolo, più piccolo, stava in basso.
 - Componenti propri di M3 Expressive (`Expressive.swift`): `SearchAppBar`, `AccountAvatarButton`, `FABMenu` (con
   Liquid Glass `GlassFABMenu`: pulsante di vetro tinto di 60 punti, come il pulsante di ricerca della barra delle
   schede e allineato sopra di esso, da cui escono le voci come pillole di vetro con `glassEffectID` nello stesso
