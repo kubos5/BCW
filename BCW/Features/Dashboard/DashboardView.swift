@@ -185,6 +185,13 @@ struct DashboardView: View {
                 select(selectedDay.adding(days: direction))
             }
         }
+        // Un widget ha aperto la Dashboard su un giorno.
+        .onChange(of: model.openedLink, initial: true) { _, link in
+            guard case let .dashboard(day) = link else { return }
+            model.openedLink = nil
+            if searching { searching = false }
+            if let day { select(day) }
+        }
         .onChange(of: reselection) {
             if !isAtTop {
                 withAnimation(Motion.spatialSlow) { scrollPosition.scrollTo(edge: .top) }

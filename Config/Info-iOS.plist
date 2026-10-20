@@ -6,6 +6,17 @@
 	<array>
 		<string>com.bcw.app.refresh</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.bcw-classeviva.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>bcw</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

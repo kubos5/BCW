@@ -133,6 +133,8 @@ struct TimetableView: View {
                 .onChange(of: reselection) {
                     select(Date().startOfDay)
                 }
+                // Un widget ha aperto l'orario su un giorno.
+                .onChange(of: model.openedLink) { consumeLink() }
                 // Con una bozza in anteprima non si modifica l'orario.
                 .onChange(of: store.draft == nil) { _, noDraft in if !noDraft { setEditing(false) } }
                 .onChange(of: isEditing, initial: true) { _, editing in tabChrome?.hidesBar = editing }
@@ -144,7 +146,8 @@ struct TimetableView: View {
         }
     }
 
-    /// Nel fine settimana senza lezioni l'orario si apre sul lunedì successivo.
+    /// All'apertura l'orario sceglie da solo il giorno (`defaultDay`), o quello chiesto da un widget.
+    /// Dopo non lo cambia più da solo: se finisce l'ultimo evento mentre lo si guarda resta su oggi.
     private func adjustInitialDay() {
         guard !adjustedInitialDay else { return }
         adjustedInitialDay = true
@@ -163,10 +166,31 @@ struct TimetableView: View {
             return
         }
         #endif
-        let today = Date().startOfDay
-        if today.isWeekend && store.entries(on: today).isEmpty && !store.timetable.isEmpty {
-            selectedDay = today.startOfWeek.adding(days: 7)
+        selectedDay = defaultDay
+        if case let .timetable(day) = model.openedLink {
+            model.openedLink = nil
+            selectedDay = (day ?? defaultDay).startOfDay
         }
+    }
+
+    /// Il giorno che l'orario mostra da solo: oggi finché c'è un evento non ancora finito, poi il
+    /// primo giorno successivo con eventi (`TimetableDefaultDay`, la stessa regola dei widget e
+    /// della versione web). Il pulsante "Oggi" porta invece sempre a oggi.
+    private var defaultDay: Date {
+        let now = Date()
+        return TimetableDefaultDay.day(now: now, nowMinute: TimeOfDay.nowMinutes(of: now)) { day in
+            store.entries(weekday: day.timetableWeekday, includingDraft: false)
+                .filter { !$0.isBreak }
+                .map { TimetableDefaultDay.Span(start: $0.start, end: $0.end) }
+        }
+    }
+
+    /// Apre il giorno chiesto da un widget (`bcw://orario?giorno=…`); senza giorno quello predefinito.
+    private func consumeLink() {
+        guard case let .timetable(day) = model.openedLink else { return }
+        model.openedLink = nil
+        if isEditing { setEditing(false) }
+        select(day ?? defaultDay)
     }
 
     private func setEditing(_ editing: Bool) {
