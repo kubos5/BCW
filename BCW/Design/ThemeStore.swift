@@ -149,33 +149,11 @@ struct SchemeColors {
     }
 }
 
-/// Colori predefiniti di BCW (gli stessi di `css/bcw.css`): schema Tonal Spot dal rosso mattone.
+/// Colori predefiniti di BCW (gli stessi di `css/bcw.css`): schema Tonal Spot dal rosso mattone,
+/// in `ThemeDefaults` (cartella `Shared`, usata anche dai widget).
 private enum DefaultScheme {
-    static let light = SchemeValues(roles: [
-        "primary": "#8c4e43", "on-primary": "#fff7f6", "primary-container": "#faaa9d", "on-primary-container": "#602b22",
-        "secondary": "#785751", "on-secondary": "#fff7f6", "secondary-container": "#ffdad4", "on-secondary-container": "#694a45",
-        "tertiary": "#795927", "on-tertiary": "#fff8f2", "tertiary-container": "#f6cb8d", "on-tertiary-container": "#5f4211",
-        "error": "#a8364b", "on-error": "#fff7f7", "error-container": "#f97386", "on-error-container": "#6e0523",
-        "surface": "#fff8f6", "surface-dim": "#edd5d1", "surface-bright": "#fff8f6",
-        "surface-container-lowest": "#fffcfb", "surface-container-low": "#fff0ee", "surface-container": "#fee9e6",
-        "surface-container-high": "#fae3df", "surface-container-highest": "#f6ddd9",
-        "on-surface": "#3e2f2c", "on-surface-variant": "#6d5b58", "outline": "#8a7673", "outline-variant": "#e3cdc9",
-        "inverse-surface": "#392e2c", "inverse-on-surface": "#ffedea", "inverse-primary": "#faaa9d",
-        "brand": "#a23e2f", "shadow": "#1d110f",
-    ])
-
-    static let dark = SchemeValues(roles: [
-        "primary": "#f9b6ab", "on-primary": "#61342c", "primary-container": "#76453d", "on-primary-container": "#ffdbd5",
-        "secondary": "#e7bdb6", "on-secondary": "#563934", "secondary-container": "#51342f", "on-secondary-container": "#f2cbc4",
-        "tertiary": "#ffdaa8", "on-tertiary": "#694a19", "tertiary-container": "#6b4c1a", "on-tertiary-container": "#ffdeb0",
-        "error": "#f97386", "on-error": "#490013", "error-container": "#871c34", "on-error-container": "#ffb0bb",
-        "surface": "#130d0b", "surface-dim": "#130d0b", "surface-bright": "#372926",
-        "surface-container-lowest": "#0e0908", "surface-container-low": "#1a1110", "surface-container": "#221715",
-        "surface-container-high": "#291d1b", "surface-container-highest": "#302220",
-        "on-surface": "#f9e0dc", "on-surface-variant": "#bca6a2", "outline": "#84716e", "outline-variant": "#4a3a37",
-        "inverse-surface": "#f1dfdb", "inverse-on-surface": "#392e2c", "inverse-primary": "#8c4e43",
-        "brand": "#e3826a", "shadow": "#080403",
-    ])
+    static let light = SchemeValues(roles: ThemeDefaults.light)
+    static let dark = SchemeValues(roles: ThemeDefaults.dark)
 }
 
 // MARK: - Raggi degli angoli
@@ -211,6 +189,8 @@ final class ThemeStore {
     @ObservationIgnored private var applyingRemote = false
 
     private(set) var colors: SchemeColors
+    /// Valori esadecimali dei ruoli in uso (chiaro e scuro), per l'istantanea dei widget.
+    private(set) var values = (light: DefaultScheme.light, dark: DefaultScheme.dark)
     private(set) var radii: CornerRadii
 
     var accentColor: String {
@@ -330,17 +310,22 @@ final class ThemeStore {
     private func regenerate(configuringBars: Bool = true) {
         let signature = signature
         if signature == Self.defaultSignature {
-            colors = SchemeColors(light: DefaultScheme.light, dark: DefaultScheme.dark)
+            setScheme(light: DefaultScheme.light, dark: DefaultScheme.dark)
             defaults.removeObject(forKey: "themeCache")
         } else if let cached = cachedScheme(signature) {
-            colors = SchemeColors(light: cached.light, dark: cached.dark)
+            setScheme(light: cached.light, dark: cached.dark)
         } else if let built = ColorEngine.shared.build(signature: signature) {
-            colors = SchemeColors(light: built.light, dark: built.dark)
+            setScheme(light: built.light, dark: built.dark)
             if let data = try? JSONEncoder().encode(CachedScheme(signature: signature, light: built.light, dark: built.dark)) {
                 defaults.set(data, forKey: "themeCache")
             }
         }
         if configuringBars { configureSystemBars() }
+    }
+
+    private func setScheme(light: SchemeValues, dark: SchemeValues) {
+        colors = SchemeColors(light: light, dark: dark)
+        values = (light, dark)
     }
 
     private struct CachedScheme: Codable {
