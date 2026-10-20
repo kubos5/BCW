@@ -54,15 +54,19 @@ private struct NowSmallView: View {
         }
     }
 
-    /// Con la successiva in fondo se c'è posto (il titolo può andare su due righe).
+    /// Con aula (o docente) e la successiva in fondo se c'è posto; senza spazio va via prima
+    /// l'aula, poi la successiva (il titolo può andare su due righe).
     private func lesson(_ event: WidgetSnapshot.Event, isCurrent: Bool) -> some View {
         ViewThatFits(in: .vertical) {
-            lessonContent(event, isCurrent: isCurrent, showsFollowing: true)
-            lessonContent(event, isCurrent: isCurrent, showsFollowing: false)
+            lessonContent(event, isCurrent: isCurrent, showsDetail: true, showsFollowing: true)
+            lessonContent(event, isCurrent: isCurrent, showsDetail: false, showsFollowing: true)
+            lessonContent(event, isCurrent: isCurrent, showsDetail: true, showsFollowing: false)
+            lessonContent(event, isCurrent: isCurrent, showsDetail: false, showsFollowing: false)
         }
     }
 
-    private func lessonContent(_ event: WidgetSnapshot.Event, isCurrent: Bool, showsFollowing: Bool) -> some View {
+    private func lessonContent(_ event: WidgetSnapshot.Event, isCurrent: Bool, showsDetail: Bool,
+                               showsFollowing: Bool) -> some View {
         let interval = day.interval(event)
         let following = showsFollowing ? day.following.first : nil
         return VStack(alignment: .leading, spacing: 0) {
@@ -87,11 +91,13 @@ private struct NowSmallView: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.75)
                 .padding(.top, 1)
-            Text(detail(event))
-                .font(palette.font(12))
-                .foregroundStyle(ink.opacity(0.85))
-                .lineLimit(1)
-                .padding(.top, 1)
+            if showsDetail {
+                Text(detail(event))
+                    .font(palette.font(12))
+                    .foregroundStyle(ink.opacity(0.85))
+                    .lineLimit(1)
+                    .padding(.top, 1)
+            }
             Spacer(minLength: 4)
             if isCurrent {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -272,15 +278,16 @@ private struct NowInlineView: View {
         if !snapshot.signedIn {
             Text("BCW: accedi nell'app")
         } else if let current = day.current {
+            // L'ora prima della materia: se il testo non entra si taglia la materia.
             Label {
-                Text("\(current.title) fino alle \(TimeOfDay.string(current.end))")
+                Text("Fino alle \(TimeOfDay.string(current.end)) · \(current.title)")
             } icon: {
                 Image("m.timetableFill")
             }
         } else if let next = day.next {
             Label {
-                Text(day.isToday ? "\(next.title) alle \(TimeOfDay.string(next.start))"
-                     : "\(WidgetDates.relativeShort(day.day, now: day.now)): \(next.title) \(TimeOfDay.string(next.start))")
+                Text(day.isToday ? "\(TimeOfDay.string(next.start)) · \(next.title)"
+                     : "\(WidgetDates.relativeShort(day.day, now: day.now)) \(TimeOfDay.string(next.start)) · \(next.title)")
             } icon: {
                 Image("m.schedule")
             }

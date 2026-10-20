@@ -123,8 +123,8 @@ struct WidgetGalleryView: View {
     }
 }
 
-/// Un widget alle dimensioni dell'iPhone 17 (402 × 874 punti), con i margini del contenuto e
-/// gli angoli della schermata Home.
+/// Un widget alle dimensioni dell'iPhone 17 (402 × 874 punti, misurate sulla Home del simulatore),
+/// con i margini del contenuto e gli angoli della schermata Home.
 private struct WidgetFrame: View {
     let kind: BCWWidgetKind
     let family: WidgetFamily
@@ -134,13 +134,13 @@ private struct WidgetFrame: View {
 
     static func size(_ family: WidgetFamily) -> CGSize {
         switch family {
-        case .systemSmall: CGSize(width: 170, height: 170)
-        case .systemMedium: CGSize(width: 364, height: 170)
-        case .systemLarge: CGSize(width: 364, height: 382)
+        case .systemSmall: CGSize(width: 164, height: 164)
+        case .systemMedium: CGSize(width: 350, height: 164)
+        case .systemLarge: CGSize(width: 350, height: 365)
         case .accessoryCircular: CGSize(width: 76, height: 76)
         case .accessoryRectangular: CGSize(width: 172, height: 76)
         case .accessoryInline: CGSize(width: 257, height: 26)
-        default: CGSize(width: 170, height: 170)
+        default: CGSize(width: 164, height: 164)
         }
     }
 

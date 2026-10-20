@@ -11,6 +11,7 @@ struct BCWApp: App {
         UNUserNotificationCenter.current().delegate = NotificationPresenter.shared
         #if DEBUG
         TimetableSelfTest.runIfRequested()
+        WidgetSelfTest.runIfRequested()
         #endif
     }
 

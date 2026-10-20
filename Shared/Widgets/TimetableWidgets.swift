@@ -64,8 +64,8 @@ struct TimetableWidgetDay {
 
     var testCount: Int { lessons.filter(\.isTest).count }
 
-    /// Lezioni del giorno contando una volta le ore uguali di seguito.
-    var lessonCount: Int { TimetableBlock.blocks(lessons).count }
+    /// Lezioni del giorno (le ore, come il chip della scheda Orario).
+    var lessonCount: Int { lessons.count }
 
     func isPast(_ block: TimetableBlock) -> Bool {
         guard let minute else { return false }
