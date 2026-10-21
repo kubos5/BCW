@@ -81,12 +81,13 @@ struct CalendarBar: View {
         let compact = month != nil
         return WeightedRow(weights: days.indices.map { !compact && $0 == selectedIndex ? 1.45 : 1 }, spacing: 4) {
             ForEach(days, id: \.self) { day in
-                CalendarDayButton(day: day, isSelected: day.isSameDay(as: selectedDay), compact: compact,
+                CalendarDayButton(day: day, isSelected: day.isSameDay(as: selectedDay), isToday: day.isToday, compact: compact,
                                   outside: month.map { !CVDate.calendar.isDate(day, equalTo: $0, toGranularity: .month) } ?? false) {
                     guard !day.isSameDay(as: selectedDay) else { return }
                     Haptics.selection()
                     selectedDay = day
                 }
+                .equatable()
             }
         }
         .frame(height: compact ? 44 : 68)
@@ -130,6 +131,7 @@ private struct CalendarDayButton: View {
     @Environment(AppModel.self) private var model
     let day: Date
     let isSelected: Bool
+    let isToday: Bool
     let compact: Bool
     /// Giorno di un mese accanto (nel mese): attenuato.
     let outside: Bool
@@ -147,16 +149,16 @@ private struct CalendarDayButton: View {
                         .transition(.opacity)
                 }
                 Text(day.it("d"))
-                    .font(.numeral(compact ? 16 : 20, weight: isSelected || day.isToday ? 700 : 550))
+                    .font(.numeral(compact ? 16 : 20, weight: isSelected || isToday ? 700 : 550))
                 dots
             }
             .foregroundStyle(isSelected ? Theme.onPrimary
-                             : (day.isToday ? Theme.primary : (quiet ? Theme.onSurfaceVariant : Theme.ink)))
+                             : (isToday ? Theme.primary : (quiet ? Theme.onSurfaceVariant : Theme.ink)))
             .opacity(outside && !isSelected ? 0.45 : 1)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(.rect)
         }
-        .buttonStyle(CalendarDayStyle(selected: isSelected, today: day.isToday, compact: compact, outside: outside))
+        .buttonStyle(CalendarDayStyle(selected: isSelected, today: isToday, compact: compact, outside: outside))
         .accessibilityLabel(day.longDay)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -175,6 +177,16 @@ private struct CalendarDayButton: View {
 
     private func dot(_ color: Color, _ size: CGFloat) -> some View {
         Circle().fill(color).frame(width: size, height: size)
+    }
+}
+
+/// Si ricalcola solo se cambiano il giorno o il suo stato (`.equatable()`): la chiusura cambia a
+/// ogni aggiornamento della barra ma fa sempre la stessa cosa, e confrontandola si ricalcolavano
+/// tutti i giorni (42 nel mese) a ogni cambio di giorno. I dati letti dal modello li aggiornano comunque.
+extension CalendarDayButton: Equatable {
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.day == rhs.day && lhs.isSelected == rhs.isSelected && lhs.isToday == rhs.isToday
+            && lhs.compact == rhs.compact && lhs.outside == rhs.outside
     }
 }
 
