@@ -345,10 +345,12 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   predefinita (cerchio, Mattone, auto, Material) non ha un `.appiconset`: è `AppIcon.icon`, a lastre di vetro vere,
   e si applica con `setAlternateIconName(nil)`.
 - 8 forme (`AppIconShape`: circle, cookie4, cookie6, cookie9, clover4, clover8, sunny, gem; cookie4, cookie6 e
-  clover4 ruotate perché i lobi stiano ai lati della barra) più la classica (solo barra su crema, l'icona fino alla
+  clover4 ruotate perché i lobi stiano ai lati della barra, e rimpicciolite se ruotando escono dal riquadro della
+  forma: il quadrifoglio arrivava al 94% della tela) più la classica (solo barra su crema, l'icona fino alla
   3.1), 10 colori (`accentPresets`), 5 varianti: 404 icone. Scartate square, pentagon, arch, cookie12 e simili: con 12
   forme il catalogo cresceva di circa 63 MB.
-- Colori (Tonal Spot, contrasto standard, `AppIconPalette`): chiara = sfondo surface, forma primary, barra on-primary
+- Colori (Tonal Spot, contrasto standard, `AppIconPalette`; Ardesia con Neutral, perché Tonal Spot dà a tutti i
+  primari lo stesso croma e Ardesia diventava uguale a Blu): chiara = sfondo surface, forma primary, barra on-primary
   (la forma si stacca dallo sfondo anche in piccolo; surface-container-low + primary-container era troppo tenue);
   scura = surface-dim, primary-container e primary del tema scuro; `autoios` = le stesse forma e barra su sfondo
   trasparente, iOS ci mette il suo scuro; `scuroios` con le icone chiare = sfumatura #2E2E30 → #111112 come lo scuro
@@ -361,7 +363,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   barra, `icon.json`) e stampa `BCW-APPICONS OK 404`; poi ricompilare. I PNG sono a tavolozza (circa 14 KB).
 - `AppIconController` (avviato in `RootView`) cambia l'icona solo se cambia il nome e con l'app attiva: le scelte
   della pagina dopo 1 s; i cambi del solo accento con "Tema dell'app" aspettano l'uscita da Impostazioni › Aspetto
-  (`holdThemeChanges`), così provando i colori iOS mostra un solo avviso. Errori in un toast (`AppIconFailureReporter`).
+  (`holdThemeChanges`), così provando i colori iOS mostra un solo avviso; tornando nell'app con Aspetto aperta il
+  controllo si fa all'uscita. Errori in un toast (`AppIconFailureReporter`).
 - Sincronizzazione: `appIconShape`, `appIconColor`, `appIconAppearance`, `appIconDarkBackground` in
   `ThemeStore.syncedValues`/`applySynced` (valori sconosciuti ignorati). In `CloudSync.syncSettings` una chiave che
   l'ultima sincronizzazione non conosceva conta come cambiata solo se il server non ce l'ha: così il valore
