@@ -13,6 +13,10 @@ final class DaySwipe {
     fileprivate(set) var offset: CGFloat = 0
     /// Verso dell'ultimo cambio di giorno (+1 = avanti), letto dalla transizione.
     fileprivate(set) var direction = 1
+    /// Cresce a ogni cambio di giorno: la pagina che esce lo riconosce e resta dove l'ha lasciata il dito.
+    fileprivate(set) var page = 0
+    /// Spostamento al momento del cambio di giorno, per la pagina che esce.
+    @ObservationIgnored fileprivate var exitOffset: CGFloat = 0
     /// Falso nella modifica dell'orario.
     @ObservationIgnored var isEnabled = true
     /// Giorno precedente (-1) o successivo (+1), chiamato al rilascio.
@@ -33,8 +37,10 @@ final class DaySwipe {
     }
 
     private func apply(_ change: () -> Void) {
+        exitOffset = offset
         withAnimation(Motion.spatial) {
             offset = 0
+            page += 1
             change()
         }
     }
@@ -68,12 +74,26 @@ struct DayPage<Content: View>: View {
             // Lo spostamento del dito sta sulla pagina (non sul contenitore): al cambio di giorno la
             // pagina vecchia esce da dove l'ha lasciata il dito, quella nuova entra dal lato opposto.
             content(day)
-                .offset(x: swipe.offset)
-                .opacity(1 - min(abs(swipe.offset) / 420, 0.3))
+                .modifier(DayDragEffect(swipe: swipe, page: swipe.page))
                 .id(day)
                 .transition(.sharedAxisX(forward: swipe.direction > 0, distance: DaySwipe.travel))
         }
         .frame(maxWidth: .infinity, alignment: .top)
+    }
+}
+
+/// Spostamento (e attenuazione) della pagina mentre il dito trascina. Lo legge solo questo
+/// modificatore: letto nel corpo di `DayPage`, ogni movimento del dito ricostruiva e reimpaginava
+/// l'intero giorno. La pagina che esce (di un cambio precedente) resta dove l'ha lasciata il dito.
+private struct DayDragEffect: ViewModifier {
+    let swipe: DaySwipe
+    let page: Int
+
+    func body(content: Content) -> some View {
+        let offset = page == swipe.page ? swipe.offset : swipe.exitOffset
+        content
+            .offset(x: offset)
+            .opacity(1 - min(abs(offset) / 420, 0.3))
     }
 }
 

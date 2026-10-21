@@ -259,6 +259,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   fotogramma; misurare solo il passaggio che serve (`Bool`).
 - Misure che cambiano a ogni fotogramma e servono solo in certi momenti vanno in
   `UnobservedValue`, non in uno `@State` osservato: altrimenti l'intera pagina si ricalcola a ogni fotogramma.
+- Valori osservati che cambiano a ogni fotogramma (es. lo spostamento del dito di `DaySwipe`) si leggono in un
+  modificatore piccolo (`DayDragEffect`), non nel corpo del contenitore: lì ogni movimento ricostruiva e
+  reimpaginava l'intero giorno (Dashboard con il thread principale sempre occupato trascinando).
 - `.card()` mette l'ombra sulla sola forma di sfondo: un'ombra sull'intera vista va ricalcolata dal contenuto.
 - Le viste con chiusure tra i parametri (giorni successivi, giorni dell'orario) sono `Equatable` e
   usate con `.equatable()`: altrimenti ogni aggiornamento della pagina le ricalcolava tutte.
