@@ -289,7 +289,14 @@ final class ThemeStore {
         let corners = CornerStyle(rawValue: defaults.string(forKey: "corners") ?? "") ?? .standard
         colors = SchemeColors(light: DefaultScheme.light, dark: DefaultScheme.dark)
         radii = .of(corners)
+        #if DEBUG
+        // Per le prove: `-BCWAccent #2f6db5` usa un altro colore senza salvarlo. Va letto qui: una
+        // seconda assegnazione nell'init passa da `didSet`, che configura le barre e rilegge `shared`
+        // mentre si crea (crash all'avvio).
+        accentColor = defaults.string(forKey: "BCWAccent") ?? defaults.string(forKey: "accentColor") ?? defaultAccent
+        #else
         accentColor = defaults.string(forKey: "accentColor") ?? defaultAccent
+        #endif
         colorStyle = ColorStyle(rawValue: defaults.string(forKey: "colorStyle") ?? "") ?? .tonalSpot
         contrast = ContrastLevel(rawValue: defaults.string(forKey: "contrast") ?? "") ?? .standard
         self.corners = corners
@@ -301,9 +308,8 @@ final class ThemeStore {
         appIconAppearance = AppIconAppearance(rawValue: defaults.string(forKey: "appIconAppearance") ?? "") ?? .automatic
         appIconDarkBackground = AppIconDarkBackground(rawValue: defaults.string(forKey: "appIconDarkBackground") ?? "") ?? .material
         #if DEBUG
-        // Per le prove: `-BCWLiquidGlass YES` attiva Liquid Glass, `-BCWAccent #2f6db5` un altro colore.
+        // Per le prove: `-BCWLiquidGlass YES` attiva Liquid Glass.
         if defaults.object(forKey: "BCWLiquidGlass") != nil { liquidGlass = defaults.bool(forKey: "BCWLiquidGlass") }
-        if let accent = defaults.string(forKey: "BCWAccent") { accentColor = accent }
         #endif
         // Le barre di sistema si configurano dopo (`BCWApp.init`): qui leggerebbero `shared`,
         // che non esiste ancora.

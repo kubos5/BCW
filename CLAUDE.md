@@ -52,7 +52,7 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Per provare le modifiche visive usare "Prova la demo" (`DemoServer.swift`). Si avvia anche con l'argomento
   `-demoMode YES`.
 - Argomenti di avvio per le prove (solo DEBUG, con `simctl launch … <argomenti>`): `-BCWTab timetable|grades|you|search`
-  apre una scheda, `-BCWLiquidGlass YES|NO`, `-BCWAccent #RRGGBB`, `-BCWTimetableDemo YES` crea l'orario della demo
+  apre una scheda, `-BCWLiquidGlass YES|NO` (resta salvato), `-BCWAccent #RRGGBB` (non salvato), `-BCWTimetableDemo YES` crea l'orario della demo
   dalle lezioni se è vuoto, `-BCWHideTests YES` aggiunge una regola e una verifica nascosta,
   `-BCWTimetableSheet generator|hidden` apre il generatore (con `-BCWGeneratorBreaks N` intervalli) o le verifiche
   nascoste, `-BCWTimetableDraft YES` mostra la bozza in anteprima, `-timetableMode list|day` sceglie la vista,
