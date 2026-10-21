@@ -150,7 +150,8 @@ final class LiveActivityManager {
         let todayKey = BCWShared.dayKey(today)
         let defaults = UserDefaults.standard
         let stopped = defaults.string(forKey: Self.stoppedKey)
-        let manual = defaults.string(forKey: Self.manualKey) == todayKey || isDemo
+        // La prova parte da sola, ma si ferma con il pulsante della card come le altre.
+        let manual = defaults.string(forKey: Self.manualKey) == todayKey || (isDemo && stopped != todayKey)
         let automatic = model.preferences.liveActivities && !isDemo
         var wishes: [Wish] = []
 
@@ -172,14 +173,6 @@ final class LiveActivityManager {
                 wishes.append(Wish(dayKey: todayKey, start: plan.autoStart, plan: plan, content: content))
             }
         }
-        #if DEBUG
-        // `-BCWLiveActivityDemoPair YES`: una seconda attività uguale, perché la Dynamic Island usi la
-        // presentazione minima (con una sola attività resta compatta).
-        if isDemo, defaults.bool(forKey: "BCWLiveActivityDemoPair"),
-           let wish = wishes.first(where: { $0.dayKey == todayKey && $0.start == nil }) {
-            wishes.append(Wish(dayKey: todayKey + "-2", start: nil, plan: wish.plan, content: wish.content))
-        }
-        #endif
         // Il prossimo giorno di scuola parte da solo mezz'ora prima della prima lezione.
         if automatic {
             for offset in 1...TimetableDefaultDay.lookahead {
@@ -363,6 +356,8 @@ final class LiveActivityManager {
             start = now.addingTimeInterval(delay + unit)
             defaults.set([start.timeIntervalSinceReferenceDate, unit,
                           demoStart?.timeIntervalSinceReferenceDate ?? 0], forKey: Self.demoKey)
+            // Una prova nuova parte anche se oggi l'attività è stata fermata.
+            defaults.removeObject(forKey: Self.stoppedKey)
         } else if let saved = defaults.array(forKey: Self.demoKey) as? [Double], saved.count == 3 {
             start = Date(timeIntervalSinceReferenceDate: saved[0])
             unit = saved[1]
