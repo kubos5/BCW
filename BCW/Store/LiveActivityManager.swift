@@ -152,7 +152,9 @@ final class LiveActivityManager {
         let stopped = defaults.string(forKey: Self.stoppedKey)
         // La prova parte da sola, ma si ferma con il pulsante della card come le altre.
         let manual = defaults.string(forKey: Self.manualKey) == todayKey || (isDemo && stopped != todayKey)
-        let automatic = model.preferences.liveActivities && !isDemo
+        // Con "Prova la demo" niente avvio automatico (né programmato, con il suo avviso, per il
+        // giorno dopo): l'orario è di prova e la demo resta aperta anche riaprendo l'app. A mano sì.
+        let automatic = model.preferences.liveActivities && !isDemo && !snapshot.isDemo
         var wishes: [Wish] = []
 
         let todayPlan = plan(for: today, snapshot: snapshot)
