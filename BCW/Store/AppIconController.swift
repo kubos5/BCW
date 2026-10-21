@@ -47,8 +47,14 @@ final class AppIconController {
 
     /// L'app è tornata attiva: se l'icona non è quella scelta, la cambia.
     func sceneBecameActive() {
-        guard started, holds == 0 else { return }
+        guard started else { return }
         if failures > 1 { failures = 1 }
+        // Con Impostazioni › Aspetto aperta si controlla all'uscita: un cambio arrivato in secondo
+        // piano (es. dall'account BCW) altrimenti restava in sospeso fino al ritorno successivo.
+        guard holds == 0 else {
+            heldChange = true
+            return
+        }
         schedule(after: .milliseconds(600))
     }
 
