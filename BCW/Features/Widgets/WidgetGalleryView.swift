@@ -182,12 +182,12 @@ private struct LiveActivityGallery: View {
     var body: some View {
         let now = Date()
         let minute: TimeInterval = 60
-        // Orari finti attorno a adesso per mostrare ogni fase (lezioni da un'ora).
+        // Orari finti attorno a adesso per mostrare ogni fase (lezioni da un'ora, intervallo di mezz'ora).
         let cases: [(String, TimetableActivityState?)] = [
             ("Prima dell'inizio", state(start: now.addingTimeInterval(12 * minute), now: now)),
             ("Prima dell'inizio, più di un'ora", state(start: now.addingTimeInterval(95 * minute), now: now)),
             ("Lezione in corso", state(start: now.addingTimeInterval(-20 * minute), now: now)),
-            ("Intervallo", state(start: now.addingTimeInterval(-65 * minute), now: now)),
+            ("Intervallo", state(start: now.addingTimeInterval(-70 * minute), now: now)),
             ("Ultima lezione", state(start: now.addingTimeInterval(-170 * minute), now: now)),
             ("Lezioni finite", plan(start: now.addingTimeInterval(-300 * minute))?.finalContent(theme: theme).state),
         ]
@@ -214,7 +214,7 @@ private struct LiveActivityGallery: View {
     }
 
     private func plan(start: Date) -> TimetableActivityPlan? {
-        TimetableActivityPlan(day: start, items: TimetableActivityPlan.sampleItems(start: start, unit: 3600))
+        TimetableActivityPlan(day: start, items: TimetableActivityPlan.sampleItems(start: start, unit: 1800))
     }
 
     private func state(start: Date, now: Date) -> TimetableActivityState? {
@@ -243,9 +243,10 @@ private struct LiveActivityGallery: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .top, spacing: 0) {
                     island.expandedLeading
-                    island.expandedCenter
-                        .padding(.top, 30)
+                    Spacer(minLength: 130)
+                    island.expandedTrailing
                 }
+                .frame(height: 30, alignment: .top)
                 island.expandedBottom
             }
             .padding(.horizontal, 14)

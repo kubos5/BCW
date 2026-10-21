@@ -98,9 +98,12 @@ enum WidgetSelfTest {
             let early = plan.content(at: at(0, 7), theme: theme)
             check(early?.state.phases.first?.kind == .before && early?.staleDate == at(0, 8), "prima dell'inizio")
             let lesson = plan.content(at: at(0, 9, 30), theme: theme)
-            check(lesson?.state.phases.map(\.start) == [at(0, 9), at(0, 10)] && lesson?.staleDate == at(0, 10),
-                  "lezione in corso e successiva")
-            check(lesson?.state.phase(isStale: true)?.start == at(0, 10), "scaduta: la fase successiva")
+            check(lesson?.state.phases.map(\.start) == [at(0, 9), at(0, 10), at(0, 11), at(0, 11, 10)]
+                  && lesson?.staleDate == at(0, 10), "lezione in corso e successive")
+            check(lesson?.state.phase(isStale: false, now: at(0, 11, 5))?.start == at(0, 9), "non scaduta: la prima fase")
+            check(lesson?.state.phase(isStale: true, now: at(0, 9, 59))?.start == at(0, 10), "scaduta: la fase successiva")
+            check(lesson?.state.phase(isStale: true, now: at(0, 11, 5))?.kind == .pause,
+                  "scaduta e ridisegnata più tardi: la fase in corso")
             let pause = plan.content(at: at(0, 11, 5), theme: theme)?.state.phases.first
             check(pause?.kind == .pause && pause?.title == "Intervallo" && pause?.lesson?.start == at(0, 11, 10)
                   && pause?.position == 4, "intervallo con la lezione dopo")
@@ -127,6 +130,19 @@ enum WidgetSelfTest {
         check(TimetableActivityPlan(day: wednesday, items: [.init(title: "Intervallo", start: at(0, 11), end: at(0, 12),
                                                                     tint: tint, isBreak: true)]) == nil,
               "senza lezioni niente piano")
+        // Il caso peggiore per i 4 KB di ActivityKit: nomi lunghi in ogni ora, nessuna unita.
+        let long = String(repeating: "Lungo nome ", count: 6)
+        let crowded = TimetableActivityPlan(day: wednesday, items: (0..<8).map { hour in
+            .init(title: "\(long)\(hour)", room: long, teacher: long, start: at(0, 8 + hour), end: at(0, 8 + hour, 50),
+                  tint: tint, isTest: true)
+        })
+        if let state = crowded?.content(at: at(0, 9, 10), theme: TimetableActivityTheme(snapshot.theme))?.state,
+           let data = try? JSONEncoder().encode(state) {
+            check(state.phases.count == TimetableActivityPlan.carried && data.count < 4096,
+                  "stato dell'attività troppo grande con nomi lunghi: \(data.count) byte")
+        } else {
+            failures.append("piano con nomi lunghi mancante")
+        }
 
         print(failures.isEmpty ? "BCW-WIDGET-SELFTEST PASS" : "BCW-WIDGET-SELFTEST FAIL\n- " + failures.joined(separator: "\n- "))
         exit(failures.isEmpty ? 0 : 1)

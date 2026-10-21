@@ -18,18 +18,22 @@ nonisolated struct TimetableActivityAttributes: ActivityAttributes {
 }
 
 /// Contenuto dell'attività. Senza server l'app la aggiorna solo quando è in esecuzione, quindi lo
-/// stato porta la fase attuale e la successiva: passata la fine della prima (`staleDate`), iOS
-/// ridisegna l'attività con `isStale` e la vista mostra la seconda come attuale.
+/// stato porta la fase attuale e le successive: passata la fine della prima (`staleDate`), iOS
+/// ridisegna l'attività con `isStale` e la vista mostra la seconda come attuale (verificato sul
+/// simulatore con l'app chiusa). iOS ridisegna una volta sola: senza un nuovo aggiornamento, alla
+/// fine della seconda fase il conto alla rovescia resta a zero.
 nonisolated struct TimetableActivityState: Codable, Hashable, Sendable {
-    /// La fase attuale e quella dopo.
+    /// La fase attuale e le successive (al massimo `TimetableActivityPlan.carried`).
     var phases: [TimetableActivityPhase]
     /// Lezioni del giorno (ore uguali di seguito contano una volta).
     var lessonCount: Int
     var theme: TimetableActivityTheme
 
-    /// La fase da mostrare: la seconda quando la prima è finita (contenuto scaduto).
-    func phase(isStale: Bool) -> TimetableActivityPhase? {
-        isStale && phases.count > 1 ? phases[1] : phases.first
+    /// La fase da mostrare. Scaduto il contenuto, almeno la seconda; se iOS ridisegna più tardi
+    /// (es. riaccendendo lo schermo), quella in corso in quel momento.
+    func phase(isStale: Bool, now: Date = Date()) -> TimetableActivityPhase? {
+        guard isStale, phases.count > 1 else { return phases.first }
+        return phases[phases.indices.dropFirst().last { phases[$0].start <= now } ?? 1]
     }
 }
 
@@ -131,6 +135,9 @@ nonisolated struct TimetableActivityPlan {
 
     /// Anticipo dell'avvio automatico sulla prima lezione (fase "prima dell'inizio").
     static let lead: TimeInterval = 30 * 60
+    /// Fasi portate da ogni contenuto: quella in corso e le successive (lo stato resta sotto i 4 KB
+    /// che ActivityKit accetta).
+    static let carried = 4
 
     let day: Date
     let lessons: [TimetableActivityLesson]
@@ -204,12 +211,12 @@ nonisolated struct TimetableActivityPlan {
         phases.lastIndex { $0.start <= date } ?? 0
     }
 
-    /// Contenuto dell'attività a un certo istante: la fase in corso e la successiva, scaduto alla
+    /// Contenuto dell'attività a un certo istante: la fase in corso e le successive, scaduto alla
     /// fine della fase in corso. `nil` dopo l'ultima lezione.
     func content(at date: Date, theme: TimetableActivityTheme) -> ActivityContent<TimetableActivityState>? {
         guard date < end else { return nil }
         let index = phaseIndex(at: date)
-        let shown = Array(phases[index...].prefix(2))
+        let shown = Array(phases[index...].prefix(Self.carried))
         return ActivityContent(state: TimetableActivityState(phases: shown, lessonCount: lessons.count, theme: theme),
                                staleDate: phases[index].end)
     }

@@ -67,6 +67,23 @@ struct ActivityPhaseText {
         }
     }
 
+    /// Etichetta corta per la Dynamic Island espansa: accanto alla fotocamera entrano circa 90
+    /// punti ("PRIMA LEZIONE" veniva tagliata, verificato), la posizione va a destra (`ordinal`).
+    var shortEyebrow: String {
+        switch phase.kind {
+        case .before: "Prima ora"
+        case .lesson: phase.next == nil && lessonCount > 1 ? "Ultima ora" : "Adesso"
+        case .pause: "Adesso"
+        case .finished: "Oggi"
+        }
+    }
+
+    /// "2 di 5" durante una lezione (non l'ultima), se le lezioni sono più di una.
+    var ordinal: String? {
+        guard phase.kind == .lesson, phase.next != nil, lessonCount > 1 else { return nil }
+        return "\(phase.position) di \(lessonCount)"
+    }
+
     var title: String {
         switch phase.kind {
         case .before, .lesson: phase.lesson?.title ?? ""
@@ -205,7 +222,7 @@ struct ActivityTimer: View {
             .foregroundStyle(color)
             .multilineTextAlignment(.trailing)
             .lineLimit(1)
-            .frame(width: digitWidth * (hours ? 7 : 5), alignment: .trailing)
+            .frame(width: digitWidth * (hours ? 7.6 : 5.6), alignment: .trailing)
     }
 }
 
@@ -214,21 +231,23 @@ struct ActivityTimerColumn: View {
     let text: ActivityPhaseText
     let palette: ActivityPalette
     let color: Color
+    /// Corpo delle cifre (più piccolo nella Dynamic Island, dove l'altezza è poca).
+    var size: CGFloat = 24
 
     var body: some View {
         if let label = text.timerLabel {
             let long = text.longWait()
             VStack(alignment: .trailing, spacing: 0) {
                 Text(long?.label ?? label)
-                    .font(palette.font(12, weight: 550))
+                    .font(palette.font(size / 2, weight: 550))
                     .foregroundStyle(palette.secondary)
                 if let long {
                     Text(long.time)
-                        .font(palette.numeral(24, weight: 650))
+                        .font(palette.numeral(size, weight: 650))
                         .foregroundStyle(color)
                 } else {
-                    ActivityTimer(phase: text.phase, font: palette.numeral(24, weight: 650), color: color,
-                                  digitWidth: 14)
+                    ActivityTimer(phase: text.phase, font: palette.numeral(size, weight: 650), color: color,
+                                  digitWidth: size * 0.585)
                 }
             }
         }
@@ -264,6 +283,7 @@ struct ActivityNextPill: View {
     let lesson: TimetableActivityLesson
     let palette: ActivityPalette
     let background: Color
+    var height: CGFloat = 26
 
     var body: some View {
         HStack(spacing: 6) {
@@ -280,7 +300,7 @@ struct ActivityNextPill: View {
         }
         .foregroundStyle(palette.ink)
         .padding(.horizontal, 10)
-        .frame(height: 26)
+        .frame(height: height)
         .background(background, in: .capsule)
     }
 }
@@ -353,8 +373,10 @@ struct TimetableActivityLockView: View {
                         .foregroundStyle(palette.secondary)
                         .lineLimit(1)
                 }
-                Spacer(minLength: 4)
+                // Tutto lo spazio tra la forma e il tempo.
+                .frame(maxWidth: .infinity, alignment: .leading)
                 ActivityTimerColumn(text: text, palette: palette, color: palette.ink)
+                    .fixedSize()
             }
             if text.showsBar {
                 ActivityProgressRow(phase: phase, palette: palette, timeColor: palette.secondary)
@@ -427,69 +449,78 @@ struct TimetableActivityIsland {
         }
     }
 
-    // Espansa.
+    // Espansa. Le regioni ai lati della fotocamera hanno la stessa larghezza e quella al centro
+    // sta tra le due: con la forma a sinistra e il tempo a destra i testi restavano stretti e
+    // lontani dalla forma. Ai lati vanno quindi solo l'etichetta e la verifica, sotto (regione in
+    // basso, larga quanto l'isola) la scheda come nella schermata di blocco.
 
+    /// A sinistra della fotocamera: l'etichetta ("ADESSO · 2 DI 5").
     @ViewBuilder var expandedLeading: some View {
         if let phase {
-            ActivityPhaseShape(phase: phase, palette: palette, size: 44)
-                .padding(.leading, 4)
-                .padding(.top, 4)
+            Text(ActivityPhaseText(phase: phase, lessonCount: state.lessonCount).shortEyebrow.uppercased())
+                .font(palette.font(11, weight: 750))
+                .tracking(0.7)
+                .foregroundStyle(accent)
+                // Niente `minimumScaleFactor` nella Dynamic Island: invece di rimpicciolire, il
+                // testo veniva tagliato (verificato).
+                .lineLimit(1)
+                .padding(.leading, 8)
+                .padding(.top, 3)
         }
     }
 
-    /// Testi e conto alla rovescia sotto la fotocamera, accanto alla forma (la regione a destra
-    /// resta vuota: le regioni laterali hanno la stessa larghezza, e con il tempo lì i testi
-    /// partivano lontani dalla forma).
-    @ViewBuilder var expandedCenter: some View {
+    /// A destra della fotocamera: il chip della verifica, se c'è, o la posizione della lezione.
+    @ViewBuilder var expandedTrailing: some View {
         if let phase {
-            let text = ActivityPhaseText(phase: phase, lessonCount: state.lessonCount)
-            HStack(alignment: .top, spacing: 8) {
-                expandedTexts(phase, text: text)
-                Spacer(minLength: 0)
-                ActivityTimerColumn(text: text, palette: palette, color: accent)
-            }
-            .padding(.leading, 6)
-            .padding(.trailing, 4)
-        }
-    }
-
-    private func expandedTexts(_ phase: TimetableActivityPhase, text: ActivityPhaseText) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: 6) {
-                Text(text.eyebrow.uppercased())
+            if phase.kind != .pause, phase.lesson?.isTest == true {
+                ActivityTestChip(palette: palette, color: accent)
+                    .padding(.trailing, 8)
+                    .padding(.top, 1)
+            } else if let ordinal = ActivityPhaseText(phase: phase, lessonCount: state.lessonCount).ordinal {
+                Text(ordinal.uppercased())
                     .font(palette.font(11, weight: 750))
                     .tracking(0.7)
-                    .foregroundStyle(accent)
+                    .foregroundStyle(palette.secondary)
                     .lineLimit(1)
-                if phase.kind != .pause, phase.lesson?.isTest == true {
-                    ActivityTestChip(palette: palette, color: accent)
-                }
+                    .padding(.trailing, 8)
+                    .padding(.top, 3)
             }
-            Text(text.title)
-                .font(palette.font(19, weight: 600, rounded: true))
-                .foregroundStyle(palette.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            Text(text.detail)
-                .font(palette.font(13))
-                .foregroundStyle(palette.secondary)
-                .lineLimit(1)
         }
     }
 
     @ViewBuilder var expandedBottom: some View {
         if let phase {
             let text = ActivityPhaseText(phase: phase, lessonCount: state.lessonCount)
-            VStack(alignment: .leading, spacing: 8) {
+            // Più compatta della schermata di blocco: l'isola espansa è alta al massimo 160 punti
+            // e con le misure di quella la pillola in fondo veniva tagliata (verificato).
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(alignment: .center, spacing: 12) {
+                    ActivityPhaseShape(phase: phase, palette: palette, size: 40)
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Niente `minimumScaleFactor` nella Dynamic Island: con quello il titolo
+                        // veniva tagliato a metà dello spazio ("Matemati…") invece di
+                        // rimpicciolire (verificato); così si taglia solo se non entra davvero.
+                        Text(text.title)
+                            .font(palette.font(18, weight: 600, rounded: true))
+                            .foregroundStyle(palette.ink)
+                            .lineLimit(1)
+                        Text(text.detail)
+                            .font(palette.font(13))
+                            .foregroundStyle(palette.secondary)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    ActivityTimerColumn(text: text, palette: palette, color: accent, size: 22)
+                        .fixedSize()
+                }
                 if text.showsBar {
                     ActivityProgressRow(phase: phase, palette: palette, timeColor: palette.secondary)
                 }
                 if let pill = text.pill, let lesson = text.pillLesson {
-                    ActivityNextPill(text: pill, lesson: lesson, palette: palette, background: palette.pill)
+                    ActivityNextPill(text: pill, lesson: lesson, palette: palette, background: palette.pill, height: 24)
                 }
             }
-            .padding(.horizontal, 4)
-            .padding(.top, 4)
+            .padding(.horizontal, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

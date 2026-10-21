@@ -219,6 +219,7 @@ final class LiveActivityManager {
                 let content = wishes[index].content
                 if activity.content.state != content.state || activity.content.staleDate != content.staleDate {
                     await activity.update(content)
+                    log("aggiornata \(activity.attributes.dayKey): \(content.state.phases.map(\.kind.rawValue))")
                 }
                 continue
             }
@@ -231,6 +232,7 @@ final class LiveActivityManager {
             } else {
                 await activity.end(nil, dismissalPolicy: .immediate)
             }
+            log("chiusa \(activity.attributes.dayKey)\(state == .pending ? " (in attesa)" : "")")
         }
         for (index, wish) in wishes.enumerated() where !satisfied.contains(index) {
             request(wish)

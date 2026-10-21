@@ -16,8 +16,8 @@ struct TimetableLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.leading) {
                     island.expandedLeading
                 }
-                DynamicIslandExpandedRegion(.center) {
-                    island.expandedCenter
+                DynamicIslandExpandedRegion(.trailing) {
+                    island.expandedTrailing
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     island.expandedBottom
