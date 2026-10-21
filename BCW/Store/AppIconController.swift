@@ -117,6 +117,8 @@ final class AppIconController {
         guard name != app.alternateIconName, refusedName != .some(name) || failures < 2 else { return }
         applying = true
         defer { applying = false }
+        // Una riga per ogni richiesta a iOS (quindi per ogni avviso): sul dispositivo si controlla in Console.
+        log.info("Cambio d'icona: \(name ?? "principale", privacy: .public)")
         do {
             try await app.setAlternateIconName(name)
             refusedName = nil

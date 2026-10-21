@@ -80,6 +80,15 @@ enum AppIconColor: String, CaseIterable, Identifiable {
         let hex = ThemeStore.normalize(accent) ?? defaultAccent
         if let cached = nearestCache[hex] { return cached }
         if let index = accentPresets.firstIndex(where: { $0.hex == hex }) { return presets[index] }
+        // Il risultato resta salvato tra un avvio e l'altro: calcolarlo carica JavaScriptCore, che
+        // all'avvio con un colore qualsiasi non serve (i colori del tema sono in cache), e
+        // `AppIconController` lo chiede appena parte l'interfaccia.
+        let defaults = UserDefaults.standard
+        let saved = defaults.string(forKey: "appIconNearest")?.split(separator: "=").map(String.init) ?? []
+        if saved.count == 2, saved[0] == hex, let color = AppIconColor(rawValue: saved[1]), color != .theme {
+            nearestCache[hex] = color
+            return color
+        }
         guard let target = ColorEngine.shared.hueChroma(hex) else { return .mattone }
         func point(_ value: (hue: Double, chroma: Double)) -> CGPoint {
             let radius = min(value.chroma, 36)
@@ -99,6 +108,7 @@ enum AppIconColor: String, CaseIterable, Identifiable {
             }
         }
         nearestCache[hex] = best
+        defaults.set("\(hex)=\(best.rawValue)", forKey: "appIconNearest")
         return best
     }
 
