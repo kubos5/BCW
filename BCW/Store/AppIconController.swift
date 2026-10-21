@@ -71,26 +71,28 @@ final class AppIconController {
         withObservationTracking {
             // Legge l'accento solo con "Tema dell'app".
             _ = ThemeStore.shared.appIconChoice
-        } onChange: { [weak self] in
-            Task { @MainActor in
-                guard let self else { return }
-                self.observe()
-                self.refusedName = nil
-                self.failures = 0
-                let options = self.options
-                // Scelte nella pagina dell'icona (o arrivate dall'account BCW): dopo una breve pausa,
-                // che unisce i tocchi ravvicinati. Colore del tema: all'uscita da Aspetto, se è aperta,
-                // altrimenti dopo una pausa più lunga.
-                let manual = options != self.lastOptions
-                self.lastOptions = options
-                if !manual && self.holds > 0 {
-                    self.pending?.cancel()
-                    self.heldChange = true
-                    return
-                }
-                self.schedule(after: manual ? .seconds(1) : .seconds(2))
-            }
+        } onChange: {
+            // `shared`, non `self`: la chiusura può partire su un altro thread.
+            Task { @MainActor in AppIconController.shared.choiceChanged() }
         }
+    }
+
+    private func choiceChanged() {
+        observe()
+        refusedName = nil
+        failures = 0
+        // Scelte nella pagina dell'icona (o arrivate dall'account BCW): dopo una breve pausa, che
+        // unisce i tocchi ravvicinati. Colore del tema: all'uscita da Aspetto, se è aperta,
+        // altrimenti dopo una pausa più lunga.
+        let options = options
+        let manual = options != lastOptions
+        lastOptions = options
+        if !manual && holds > 0 {
+            pending?.cancel()
+            heldChange = true
+            return
+        }
+        schedule(after: manual ? .seconds(1) : .seconds(2))
     }
 
     private func schedule(after delay: Duration) {
