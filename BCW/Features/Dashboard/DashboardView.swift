@@ -203,14 +203,18 @@ private struct UpcomingDays: View {
     let after: Date
     let onSelect: (Date) -> Void
 
+    /// I 20 giorni dopo `after` che hanno qualcosa, dall'indice per giorno (prima si filtrava e
+    /// raggruppava l'intera agenda a ogni cambio di giorno).
     static func days(after: Date, model: AppModel) -> [(Date, [AgendaEvent])] {
-        let start = after.adding(days: 1)
-        let end = after.adding(days: 21)
-        let upcoming = model.agenda.filter { $0.begin >= start && $0.begin < end }
-            .filter { !(model.preferences.hideCompletedHomework && model.preferences.isCompleted($0)) }
-        return Dictionary(grouping: upcoming, by: \.day)
-            .sorted { $0.key < $1.key }
-            .map { ($0.key, $0.value.sorted { ($0.kind == .test ? 0 : 1) < ($1.kind == .test ? 0 : 1) }) }
+        let preferences = model.preferences
+        let start = after.startOfDay
+        return (1...20).compactMap { offset in
+            let day = start.adding(days: offset)
+            let events = model.events(on: day)
+                .filter { !(preferences.hideCompletedHomework && preferences.isCompleted($0)) }
+            guard !events.isEmpty else { return nil }
+            return (day, events.sorted { ($0.kind == .test ? 0 : 1) < ($1.kind == .test ? 0 : 1) })
+        }
     }
 
     private var isCollapsed: Bool { model.preferences.isCollapsed(.upcoming) }
@@ -257,10 +261,9 @@ extension UpcomingDays: Equatable {
 }
 
 /// Un giorno in "Nei prossimi giorni", come nella vista Programma di Google Calendar: a sinistra
-/// la data in un riquadro (toccandola si va a quel giorno), a destra il nome del giorno, che
-/// comprime gli elementi, e gli elementi in una lista segmentata. Toccando un elemento che non fa
-/// già qualcosa si va al giorno: non la casella di un compito, né il testo tagliato di un evento
-/// (che si apre). Lo stato compresso resta finché la Dashboard è aperta.
+/// la data in un riquadro (solo toccandola si va a quel giorno), a destra il nome del giorno, che
+/// comprime gli elementi, e gli elementi in una lista segmentata, con i loro tocchi (casella del
+/// compito, testo che si apre, menu). Lo stato compresso resta finché la Dashboard è aperta.
 private struct UpcomingDayCard: View {
     let day: Date
     let events: [AgendaEvent]
@@ -268,7 +271,7 @@ private struct UpcomingDayCard: View {
     @State private var isCollapsed = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        LeadingColumnLayout(spacing: 12) {
             Button(action: onSelect) {
                 DateBadge(day: day, highlighted: events.contains { $0.kind == .test })
             }
@@ -304,18 +307,14 @@ private struct UpcomingDayCard: View {
                     ListGroup {
                         ForEach(events) { event in
                             SegmentCell(padding: 14) {
-                                AgendaEventRow(event: event, onPlainTap: onSelect)
+                                AgendaEventRow(event: event)
                                     .equatable()
                             }
-                            .contentShape(.rect)
-                            // Solo negli spazi vuoti (margini compresi): i tocchi della riga vincono.
-                            .onTapGesture(perform: onSelect)
                         }
                     }
                 }
             }
         }
-        .accessibilityAction(named: "Vai a \(day.relativeDayName)", onSelect)
     }
 
     private var summary: String {

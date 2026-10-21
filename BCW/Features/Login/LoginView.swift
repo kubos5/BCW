@@ -328,14 +328,19 @@ struct LoginView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// Intestazione con la tastiera aperta: logo piccolo e titolo su una riga.
+    /// Intestazione con la tastiera aperta: logo piccolo e titolo su una riga, centrati tra loro
+    /// sulle maiuscole (con le linee di base allineate il titolo, più piccolo, stava in basso).
     private var compactHeader: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 14) {
+        let logoCaps = Typography.platformFont(size: 30, weight: 800, rounded: true).capHeight
+        let titleCaps = Typography.platformFont(size: 16, weight: 500).capHeight
+        return HStack(alignment: .capCenter, spacing: 14) {
             BCWLogo(size: 30)
+                .alignmentGuide(.capCenter) { $0[.firstTextBaseline] - logoCaps / 2 }
             Text(title)
                 .font(.m3(16, weight: 500))
                 .foregroundStyle(Theme.secondaryInk)
                 .lineLimit(1)
+                .alignmentGuide(.capCenter) { $0[.firstTextBaseline] - titleCaps / 2 }
             Spacer(minLength: 0)
         }
         .padding(.top, 8)
@@ -556,6 +561,15 @@ private struct LoginArt: View {
         }
         .accessibilityHidden(true)
     }
+}
+
+private extension VerticalAlignment {
+    /// Metà altezza delle maiuscole della prima riga: centra tra loro testi di dimensioni diverse.
+    enum CapCenter: AlignmentID {
+        nonisolated static func defaultValue(in context: ViewDimensions) -> CGFloat { context[VerticalAlignment.center] }
+    }
+
+    static let capCenter = VerticalAlignment(CapCenter.self)
 }
 
 private struct ProfileChoiceSheet: View {

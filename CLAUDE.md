@@ -102,7 +102,7 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - `BCW.xcodeproj` usa **cartelle sincronizzate** (objectVersion 77): i file in `BCW/` entrano nel target da soli.
 - Un solo target iOS (iPhone e iPad; `SUPPORTED_PLATFORMS = iphoneos iphonesimulator`).
 - `Utilities/Platform.swift`: piccoli adattatori (`Platform.copy`, `screenTitle`, `pagePadding`, `CardGrid`, `ChipRow`,
-  `PlatformNavigationStack`, `localSearchable`, `UnobservedValue`).
+  `PlatformNavigationStack`, `localSearchable`, `UnobservedValue`, `LeadingColumnLayout`).
 - iOS, ricerca senza Liquid Glass: la barra delle schede Material ha quattro destinazioni e la ricerca è
   `SearchAppBar` in cima alla Dashboard (`DashboardChrome`): toccandola la pillola resta sospesa e diventa il campo
   (freccia indietro, X), e `SearchView(embedded: true)` prende il posto della pagina con `.fadeThrough`; la barra delle
@@ -206,6 +206,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   Calendario = sempre il mese, vista Lista = sempre la settimana (scelta dell'utente, ottobre 2026: niente passaggio
   tra i due scorrendo né pulsante per chiudere il mese).
   Frecce e scorrimento di lato sulla barra cambiano settimana (o mese); il titolo apre `M3DatePickerSheet`.
+  Alla pressione i giorni si rimpiccioliscono con il velo e stringono gli angoli, tranne quello scelto, che resta
+  una pillola (come sul web, dove `.cb-day.selected` vince su `:active`).
   La settimana sta alla stessa altezza nelle due schede (verificato al pixel): con Material la barra di ricerca della
   Dashboard è 4 punti più alta del titolo grande dell'Orario, che per questo ha 4 punti in più sopra la barra.
 - Vista Giorno dell'Orario con Liquid Glass: la barra di sistema segue il primo scorrimento che trova e la vista parte
@@ -228,8 +230,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Impostazioni: elenco di sottopagine (Generale, Aspetto, Voti, Dashboard, Orario, Notifiche, Account).
 - Dashboard, "Nei prossimi giorni": ogni giorno (`UpcomingDayCard`) ha a sinistra la data (`DateBadge`, tocco = vai al
   giorno) e a destra il nome, che comprime, e gli elementi in una lista segmentata.
-  Toccando un elemento si va a quel giorno, ma i tocchi propri vincono: la casella del compito e il testo
-  tagliato di una riga (che si apre); `AgendaEventRow.onPlainTap` misura se il testo è tagliato.
+  Si va al giorno solo dalla data: gli elementi hanno soltanto i loro tocchi (casella del compito, testo
+  tagliato che si apre, menu contestuale).
 - Notifiche delle novità (`Store/NewsNotifications.swift`): dopo ogni `refreshAll` confronta voti, comunicazioni,
   note, assenze e compiti/verifiche futuri con gli id già visti per account (`UserDefaults`), e notifica solo i tipi
   attivi in Impostazioni › Notifiche (`Preferences.newsNotifications`); la prima volta ricorda senza notificare; più
@@ -257,11 +259,24 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   fotogramma; misurare solo il passaggio che serve (`Bool`).
 - Misure che cambiano a ogni fotogramma e servono solo in certi momenti vanno in
   `UnobservedValue`, non in uno `@State` osservato: altrimenti l'intera pagina si ricalcola a ogni fotogramma.
+- Valori osservati che cambiano a ogni fotogramma (es. lo spostamento del dito di `DaySwipe`) si leggono in un
+  modificatore piccolo (`DayDragEffect`), non nel corpo del contenitore: lì ogni movimento ricostruiva e
+  reimpaginava l'intero giorno (Dashboard con il thread principale sempre occupato trascinando).
 - `.card()` mette l'ombra sulla sola forma di sfondo: un'ombra sull'intera vista va ricalcolata dal contenuto.
-- Le viste con chiusure tra i parametri (righe dell'agenda, giorni successivi, giorni dell'orario) sono `Equatable` e
-  usate con `.equatable()`: altrimenti ogni aggiornamento della pagina le ricalcolava tutte.
+- Le viste con chiusure tra i parametri (giorni successivi, giorni dell'orario, giorni della barra del calendario)
+  sono `Equatable` e usate con `.equatable()`: altrimenti ogni aggiornamento della pagina le ricalcolava tutte.
+- Righe con una colonna fissa a sinistra (data, casella) e testo a destra: `LeadingColumnLayout`, non
+  `HStack(alignment: .top)`. L'`HStack` misura i figli più volte con larghezze di prova e, con testi su più righe e
+  righe annidate, il cambio di giorno della Dashboard passava quasi tutto il tempo lì ("Nei prossimi giorni").
+- Animazioni continue (che non finiscono mai) con Core Animation, non con `TimelineView(.animation)`: quella
+  aggiorna la vista a ogni fotogramma finché si vede. L'onda di `WavyProgress` è un `CAShapeLayer` animato
+  (`MovingWave`): con la lezione in corso l'Orario fermo teneva occupato il thread principale per circa un quinto
+  del tempo, ora quasi zero.
 - Per misurare: build Release per il simulatore con `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG`, un aggancio temporaneo
   che ripete l'interazione e `sample <pid> 8` sul processo del simulatore, poi sommare i campioni per funzione dell'app.
+  L'impaginazione finisce sotto chi chiede per primo una misura (il `primaryMinimum` di un `safeAreaInset`, il
+  `GeometryReader` di `WavyProgress`): lì non è lavoro doppio, le misure dopo usano la cache. Il simulatore condiviso
+  con altre compilazioni dà numeri molto variabili (anche 30–60% per la stessa build): confrontare più giri.
 
 ## Sistema di design (Material 3 Expressive, `BCW/Design/`)
 - `ThemeStore.shared` (`@Observable`): preferenze di Aspetto (accento, stile dei colori, contrasto, angoli, movimento,
@@ -292,6 +307,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   tastiera aperta il cursore passa al campo corrispondente (al giro dopo) e la tastiera resta. Un tocco nello spazio
   vuoto la chiude. Le note in basso occupano sempre l'altezza delle più lunghe tra i due moduli (copie nascoste in uno
   `ZStack` allineato in alto): cambiando Classeviva/Account BCW il resto, centrato, non si sposta.
+  Nella disposizione compatta logo e titolo sono centrati sulle maiuscole (allineamento `capCenter`, verificato
+  al pixel): con le linee di base allineate il titolo, più piccolo, stava in basso.
 - Componenti propri di M3 Expressive (`Expressive.swift`): `SearchAppBar`, `AccountAvatarButton`, `FABMenu` (con
   Liquid Glass `GlassFABMenu`: pulsante di vetro tinto di 60 punti, come il pulsante di ricerca della barra delle
   schede e allineato sopra di esso, da cui escono le voci come pillole di vetro con `glassEffectID` nello stesso
