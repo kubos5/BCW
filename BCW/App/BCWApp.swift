@@ -12,6 +12,7 @@ struct BCWApp: App {
         #if DEBUG
         TimetableSelfTest.runIfRequested()
         AppIconGenerator.runIfRequested()
+        WidgetSelfTest.runIfRequested()
         #endif
     }
 
@@ -25,6 +26,10 @@ struct BCWApp: App {
         .backgroundTask(.appRefresh(NewsNotifications.refreshTaskID)) {
             await NewsNotifications.runBackgroundRefresh(model: model)
         }
+        // Al passaggio di fase dell'attività in diretta (`LiveActivityManager`), se iOS lo concede.
+        .backgroundTask(.appRefresh(LiveActivityManager.refreshTaskID)) {
+            await model.liveActivities.runBackgroundRefresh(model: model)
+        }
     }
 }
 
@@ -32,6 +37,10 @@ struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
     @State private var lock = BiometricLock()
+    #if DEBUG
+    /// Galleria di prova dei widget (`-BCWWidgetGallery YES`).
+    @State private var showsWidgetGallery = UserDefaults.standard.bool(forKey: "BCWWidgetGallery")
+    #endif
 
     var body: some View {
         ZStack {
@@ -77,6 +86,14 @@ struct RootView: View {
         .appTheme()
         .modifier(AppIconFailureReporter())
         .overlayHost()
+        #if DEBUG
+        .fullScreenCover(isPresented: Binding(get: { showsWidgetGallery && model.phase == .signedIn },
+                                              set: { showsWidgetGallery = $0 })) {
+            WidgetGalleryView()
+                .environment(model)
+                .appTheme()
+        }
+        #endif
         .task {
             // La finestra ora esiste: prende il colore d'accento del tema per i componenti di UIKit.
             Theme.applyTint()
@@ -87,8 +104,13 @@ struct RootView: View {
                 await lock.unlock()
             }
         }
+        // Collegamenti `bcw://` dei widget (scheda e giorno).
+        .onOpenURL { model.open($0) }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background { NewsNotifications.scheduleBackgroundRefresh(model: model) }
+            if phase == .background {
+                NewsNotifications.scheduleBackgroundRefresh(model: model)
+                model.widgets.flush()
+            }
             if phase == .active { AppIconController.shared.sceneBecameActive() }
             if model.isCloud {
                 // Tornando nell'app arrivano le modifiche degli altri dispositivi; uscendo partono

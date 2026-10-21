@@ -126,6 +126,17 @@ struct MainTabView: View {
         .sheet(isPresented: $switchingAccount) {
             AccountSwitcherSheet()
         }
+        // Collegamenti dei widget: la scheda; il giorno lo sceglie la scheda stessa.
+        .onChange(of: model.openedLink, initial: true) { _, link in
+            switch link {
+            case .dashboard: selection = .dashboard
+            case .timetable: selection = .timetable
+            case .grades:
+                selection = .grades
+                model.openedLink = nil
+            case nil: break
+            }
+        }
         // Senza Liquid Glass la scheda Cerca non è nella barra: si torna alla Dashboard.
         .onChange(of: glass) { _, glass in
             if !glass && selection == .search { selection = .dashboard }

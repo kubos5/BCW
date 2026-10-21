@@ -20,6 +20,7 @@ Altrimenti, puoi compilarla in Xcode:
 5. esegui sul simulatore o su un dispositivo collegato via USB
 
 Il progetto usa le cartelle sincronizzate di Xcode 16, quindi qualsiasi file aggiunto in `BCW/` entra automaticamente nel target.
+I widget sono un secondo target (`BCWWidgets`, incorporato nell'app) che condivide con l'app la cartella `Shared/` e l'App Group `group.com.bcw-classeviva.app`: firmando con il proprio team va scelto anche per l'estensione, con un App Group a disposizione del team.
 In alternativa è incluso un `project.yml` per [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
 ---
@@ -56,7 +57,8 @@ La scheda Orario contiene l'orario settimanale, che si compila a mano o si gener
 
 - due viste: Lista (la settimana in alto e gli eventi del giorno sotto) e Giorno (le ore della giornata, come nell'app Calendario)
 - in cima la settimana è una fila di pulsanti, uno per giorno; le frecce cambiano settimana, toccando le date si sceglie un giorno qualsiasi dal calendario e scorrendo di lato sugli eventi si passa al giorno prima o dopo, come nella Dashboard
-- oggi una scheda in cima mostra la lezione in corso (quanto manca) e quella dopo, oppure la prossima lezione
+- aprendo l'Orario si vede oggi finché c'è una lezione da finire, poi il primo giorno successivo con lezioni (come il widget Orario); il pulsante Oggi riporta sempre a oggi
+- oggi una scheda in cima mostra la lezione in corso (quanto manca) e quella dopo, oppure la prossima lezione; il pulsante con il lucchetto la porta nella schermata di blocco come attività in diretta, o la toglie
 - toccando un evento si vedono i dettagli e si aggiungono note, file e foto, per un solo giorno o per ogni settimana
 - le verifiche segnate dai docenti su Classeviva compaiono da sole sulla lezione della materia e si possono nascondere; altre verifiche si segnano a mano, per un giorno o per ogni settimana
 - Verifiche nascoste (dal menu dell'orario): l'elenco delle verifiche nascoste, con il motivo, da cui si possono mostrare di nuovo, e le regole per nasconderle in automatico (per docente, materia, giorno della settimana, periodo, parole nel testo o materie che quel giorno non sono in orario)
@@ -71,6 +73,29 @@ La scheda Orario contiene l'orario settimanale, che si compila a mano o si gener
 - generazione automatica di una bozza dell'orario dalle lezioni registrate, mostrata in anteprima con i bordi tratteggiati prima di applicarla
 - backup dell'orario da esportare e reimportare dalle Impostazioni (con file allegati)
 - con un account BCW l'orario di ogni account abbinato, con i file allegati, si sincronizza tra i dispositivi
+
+### Widget
+
+Widget per la schermata Home e la schermata di blocco, con i colori, il font e le forme dell'app (in chiaro e in scuro, anche con le icone colorate o trasparenti di iOS):
+
+- Orario (piccolo, medio, grande): l'orario di oggi con la lezione in corso in evidenza e, finita l'ultima lezione, quello del giorno seguente con lezioni, come la scheda Orario all'apertura; nel grande la giornata intera con gli intervalli
+- Lezione in corso (piccolo e schermata di blocco): la materia, l'aula, quanto manca con la barra o l'anello di avanzamento e la lezione dopo; senza lezioni in corso la prossima
+- Compiti e verifiche (medio e grande): i prossimi compiti, verifiche ed eventi giorno per giorno
+- Prossima verifica (piccolo e schermata di blocco): la prossima verifica con i giorni che mancano
+- Media (piccolo e schermata di blocco): la media generale nell'anello dei Voti e quella del periodo in corso
+
+Toccando un widget si apre l'app sul giorno o sulla scheda giusta. I widget si aggiornano da soli quando cambiano i dati nell'app e all'inizio e alla fine di ogni lezione; senza account invitano ad accedere e senza orario a crearlo.
+
+### Attività in diretta
+
+Su iPhone la lezione in corso resta nella schermata di blocco e nella Dynamic Island come attività in diretta, con i colori del tema, il font e le forme dell'app, in chiaro e in scuro:
+
+- nella schermata di blocco una scheda con la materia nel suo colore, aula e docente, il tempo che manca, la barra di avanzamento con gli orari e la lezione dopo
+- prima della prima lezione il conto alla rovescia all'inizio, negli intervalli quanto manca alla lezione successiva e in che aula si terrà, all'ultima lezione l'avviso che è l'ultima
+- nella Dynamic Island a sinistra la sigla della materia in una forma del suo colore e a destra il tempo che manca; con più attività un anello di avanzamento; tenendola premuta si allarga con tutti i dettagli
+- le verifiche del giorno sono segnate sulla loro lezione, anche con "Mostra le verifiche" spenta
+- in Impostazioni › Orario si sceglie se farla partire da sola nei giorni di lezione: compare mezz'ora prima della prima lezione e sparisce dopo l'ultima, e il giorno di scuola successivo viene preparato in anticipo, così parte anche con l'app chiusa
+- dalla scheda in cima all'orario di oggi si avvia o si ferma a mano; fermata o tolta dalla schermata di blocco, quel giorno non riparte da sola
 
 ### Design
 
@@ -94,6 +119,8 @@ BCW usa le stesse API REST usate dall'app ufficiale di Classeviva (`https://web.
 Le credenziali sono salvate nel Portachiavi del dispositivo e inviate ai server di Classeviva.
 Le risposte vengono salvate nella cache dell'app per l'uso offline.
 L'orario è salvato sul dispositivo, separato per ogni account.
+Per i widget l'app scrive nel contenitore dell'App Group un riassunto dei dati che mostrano (orario dei prossimi giorni, compiti e verifiche, medie, colori del tema), senza credenziali.
+L'attività in diretta non ha bisogno di un server: l'app la aggiorna quando è aperta, a ogni passaggio di lezione, e prova a farlo in background; ogni aggiornamento contiene anche la fase successiva, che iOS mostra da sola quando la lezione finisce, anche se l'app non si è risvegliata. Senza server iOS fa questo passaggio una volta sola: se l'app resta chiusa più a lungo, il conto alla rovescia si ferma alla fine della lezione successiva e l'attività si rimette in pari appena l'app si apre o si aggiorna in background. Quando parte un'attività preparata in anticipo, iOS mostra un avviso con la prima lezione.
 
 ### Account BCW
 
@@ -117,12 +144,14 @@ BCW/
 ├── App/            Entry point, barra delle schede, blocco biometrico
 ├── Networking/     Client Classeviva e BCW-api, cache su disco, Portachiavi
 ├── Models/         Modelli decodificati in modo tollerante
-├── Store/          Stato dell'app, sincronizzazione con l'account BCW, orario e sua generazione, calcolo medie, preferenze, promemoria, server demo
+├── Store/          Stato dell'app, sincronizzazione con l'account BCW, orario e sua generazione, calcolo medie, preferenze, promemoria, widget e attività in diretta, server demo
 ├── Design/         Material 3 Expressive: aspetto, font, forme, controlli, elenchi, menu e pagine
 ├── Theme/          Colori e stili
 ├── Utilities/      Date, decodifica e piccoli adattatori
 ├── Components/     Componenti riutilizzabili (card, badge voto, anelli, righe agenda…)
 └── Features/       Dashboard, Orario, Voti, Tu (e sottosezioni), Cerca, Impostazioni, Login
+Shared/             Codice comune all'app e ai widget: dati dei widget, giorno dell'orario, collegamenti, viste dei widget e dell'attività in diretta
+BCWWidgets/         Estensione dei widget e dell'attività in diretta (elenco dei widget, linea temporale, icone)
 ```
 
 ---

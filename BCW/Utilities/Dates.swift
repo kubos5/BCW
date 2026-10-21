@@ -1,13 +1,8 @@
 import Foundation
 
 enum CVDate {
-    static let calendar: Calendar = {
-        var cal = Calendar(identifier: .gregorian)
-        cal.locale = Locale(identifier: "it_IT")
-        cal.timeZone = TimeZone(identifier: "Europe/Rome") ?? .current
-        cal.firstWeekday = 2
-        return cal
-    }()
+    /// Lo stesso calendario dei widget (`BCWShared.calendar`, cartella `Shared`).
+    static let calendar: Calendar = BCWShared.calendar
 
     private static let isoFractional: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()

@@ -5,7 +5,21 @@
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.bcw.app.refresh</string>
+		<string>com.bcw.app.liveactivity</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.bcw-classeviva.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>bcw</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

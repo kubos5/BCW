@@ -58,22 +58,23 @@ enum Theme {
 
     // MARK: Stati (bene, sufficiente, insufficiente, neutro)
 
-    static let good = dynamic(light: 0x2B6A45, dark: 0x94D5A7)
-    static let onGood = dynamic(light: 0xFFFFFF, dark: 0x00391D)
-    static let goodContainer = dynamic(light: 0xAFF2C2, dark: 0x0D512F)
-    static let onGoodContainer = dynamic(light: 0x00210F, dark: 0xAFF2C2)
-    static let fair = dynamic(light: 0x855300, dark: 0xFFB95F)
-    static let onFair = dynamic(light: 0xFFFFFF, dark: 0x472A00)
-    static let fairContainer = dynamic(light: 0xFFDDB8, dark: 0x653E00)
-    static let onFairContainer = dynamic(light: 0x2A1700, dark: 0xFFDDB8)
-    static let poor = dynamic(light: 0xAB3429, dark: 0xFFB4A9)
-    static let onPoor = dynamic(light: 0xFFFFFF, dark: 0x690002)
-    static let poorContainer = dynamic(light: 0xFFDAD5, dark: 0x8A1C14)
-    static let onPoorContainer = dynamic(light: 0x410001, dark: 0xFFDAD5)
-    static let neutral = dynamic(light: 0x426182, dark: 0xAAC9EF)
-    static let onNeutral = dynamic(light: 0xFFFFFF, dark: 0x0F3251)
-    static let neutralContainer = dynamic(light: 0xD1E4FF, dark: 0x2A4969)
-    static let onNeutralContainer = dynamic(light: 0x001D35, dark: 0xD1E4FF)
+    // Toni fissi, in `ThemeDefaults` (cartella `Shared`, usata anche dai widget).
+    static let good = dynamic(ThemeDefaults.good)
+    static let onGood = dynamic(ThemeDefaults.onGood)
+    static let goodContainer = dynamic(ThemeDefaults.goodContainer)
+    static let onGoodContainer = dynamic(ThemeDefaults.onGoodContainer)
+    static let fair = dynamic(ThemeDefaults.fair)
+    static let onFair = dynamic(ThemeDefaults.onFair)
+    static let fairContainer = dynamic(ThemeDefaults.fairContainer)
+    static let onFairContainer = dynamic(ThemeDefaults.onFairContainer)
+    static let poor = dynamic(ThemeDefaults.poor)
+    static let onPoor = dynamic(ThemeDefaults.onPoor)
+    static let poorContainer = dynamic(ThemeDefaults.poorContainer)
+    static let onPoorContainer = dynamic(ThemeDefaults.onPoorContainer)
+    static let neutral = dynamic(ThemeDefaults.neutral)
+    static let onNeutral = dynamic(ThemeDefaults.onNeutral)
+    static let neutralContainer = dynamic(ThemeDefaults.neutralContainer)
+    static let onNeutralContainer = dynamic(ThemeDefaults.onNeutralContainer)
     /// Intervalli dell'orario.
     static let breakTint = dynamic(light: 0x9A8C78, dark: 0xB8AC98)
 
@@ -169,6 +170,10 @@ enum Theme {
     static func gradeColor(value: Double?) -> Color { tone(value: value).color }
 
     // MARK: Colori dinamici
+
+    static func dynamic(_ pair: ThemeDefaults.Pair) -> Color {
+        dynamic(light: pair.light, dark: pair.dark)
+    }
 
     static func dynamic(light: Int, dark: Int, lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
         Color(uiColor: UIColor { traits in

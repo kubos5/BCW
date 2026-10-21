@@ -8,7 +8,7 @@ enum Platform {
         UIPasteboard.general.string = text
     }
 
-    /// Apre le impostazioni di sistema delle notifiche per BCW.
+    /// Apre le impostazioni di sistema di BCW (notifiche, attività in diretta).
     static func openNotificationSettings() {
         if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
     }
