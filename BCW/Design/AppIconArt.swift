@@ -299,11 +299,14 @@ enum AppIconPalette {
         }
     }
 
-    /// Schema di Material (Tonal Spot, contrasto standard) di un colore proposto.
+    /// Schema di Material (contrasto standard) di un colore proposto: Tonal Spot, tranne Ardesia.
+    /// Tonal Spot dà a ogni primario lo stesso croma, quindi Ardesia diventava un blu quasi uguale
+    /// a Blu (primary #3c6287 contro #43608a); Neutral tiene il grigio ardesia (#565f6b).
     static func scheme(for color: AppIconColor) -> (light: SchemeValues, dark: SchemeValues) {
         let hex = color.hex ?? defaultAccent
         if let cached = schemes[hex] { return cached }
-        let built = ColorEngine.shared.build(signature: "\(hex)|tonalSpot|standard")
+        let style = color == .ardesia ? ColorStyle.neutral : .tonalSpot
+        let built = ColorEngine.shared.build(signature: "\(hex)|\(style.rawValue)|standard")
             ?? (SchemeValues(roles: [:]), SchemeValues(roles: [:]))
         schemes[hex] = built
         return built
@@ -358,17 +361,25 @@ struct AppIconArtwork: View {
     }
 }
 
-/// Forma di Material ruotata attorno al centro.
+/// Forma di Material ruotata attorno al centro. Ruotata, resta dentro il suo riquadro (l'86% della
+/// tela): il quadrifoglio ruotato di 45° arrivava al 94%, quasi al bordo dell'icona.
 struct AppIconShapeOutline: Shape {
     let name: MaterialShapeName
     var rotation: Double = 0
 
     func path(in rect: CGRect) -> Path {
         let unit = MaterialShape.unitPath(name)
-        let rotated = rotation == 0 ? unit : unit.applying(
-            CGAffineTransform(translationX: 50, y: 50)
+        var rotated = unit
+        if rotation != 0 {
+            let turned = unit.applying(CGAffineTransform(translationX: 50, y: 50)
                 .rotated(by: rotation * .pi / 180)
                 .translatedBy(x: -50, y: -50))
+            let after = turned.cgPath.boundingBoxOfPath
+            let fit = 100 / max(after.width, after.height, 1)
+            rotated = fit >= 1 ? turned : turned.applying(CGAffineTransform(translationX: 50, y: 50)
+                .scaledBy(x: fit, y: fit)
+                .translatedBy(x: -50, y: -50))
+        }
         return rotated.applying(
             CGAffineTransform(translationX: rect.minX, y: rect.minY)
                 .scaledBy(x: rect.width / 100, y: rect.height / 100))
