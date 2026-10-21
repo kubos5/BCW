@@ -14,7 +14,7 @@ struct AgendaEventRow: View {
     private var isDone: Bool { model.preferences.isCompleted(event) }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        LeadingColumnLayout(spacing: 12) {
             leading
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {

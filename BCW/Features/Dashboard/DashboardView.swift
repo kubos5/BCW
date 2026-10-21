@@ -203,14 +203,18 @@ private struct UpcomingDays: View {
     let after: Date
     let onSelect: (Date) -> Void
 
+    /// I 20 giorni dopo `after` che hanno qualcosa, dall'indice per giorno (prima si filtrava e
+    /// raggruppava l'intera agenda a ogni cambio di giorno).
     static func days(after: Date, model: AppModel) -> [(Date, [AgendaEvent])] {
-        let start = after.adding(days: 1)
-        let end = after.adding(days: 21)
-        let upcoming = model.agenda.filter { $0.begin >= start && $0.begin < end }
-            .filter { !(model.preferences.hideCompletedHomework && model.preferences.isCompleted($0)) }
-        return Dictionary(grouping: upcoming, by: \.day)
-            .sorted { $0.key < $1.key }
-            .map { ($0.key, $0.value.sorted { ($0.kind == .test ? 0 : 1) < ($1.kind == .test ? 0 : 1) }) }
+        let preferences = model.preferences
+        let start = after.startOfDay
+        return (1...20).compactMap { offset in
+            let day = start.adding(days: offset)
+            let events = model.events(on: day)
+                .filter { !(preferences.hideCompletedHomework && preferences.isCompleted($0)) }
+            guard !events.isEmpty else { return nil }
+            return (day, events.sorted { ($0.kind == .test ? 0 : 1) < ($1.kind == .test ? 0 : 1) })
+        }
     }
 
     private var isCollapsed: Bool { model.preferences.isCollapsed(.upcoming) }
@@ -267,7 +271,7 @@ private struct UpcomingDayCard: View {
     @State private var isCollapsed = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        LeadingColumnLayout(spacing: 12) {
             Button(action: onSelect) {
                 DateBadge(day: day, highlighted: events.contains { $0.kind == .test })
             }

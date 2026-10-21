@@ -102,7 +102,7 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - `BCW.xcodeproj` usa **cartelle sincronizzate** (objectVersion 77): i file in `BCW/` entrano nel target da soli.
 - Un solo target iOS (iPhone e iPad; `SUPPORTED_PLATFORMS = iphoneos iphonesimulator`).
 - `Utilities/Platform.swift`: piccoli adattatori (`Platform.copy`, `screenTitle`, `pagePadding`, `CardGrid`, `ChipRow`,
-  `PlatformNavigationStack`, `localSearchable`, `UnobservedValue`).
+  `PlatformNavigationStack`, `localSearchable`, `UnobservedValue`, `LeadingColumnLayout`).
 - iOS, ricerca senza Liquid Glass: la barra delle schede Material ha quattro destinazioni e la ricerca è
   `SearchAppBar` in cima alla Dashboard (`DashboardChrome`): toccandola la pillola resta sospesa e diventa il campo
   (freccia indietro, X), e `SearchView(embedded: true)` prende il posto della pagina con `.fadeThrough`; la barra delle
@@ -263,8 +263,11 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   modificatore piccolo (`DayDragEffect`), non nel corpo del contenitore: lì ogni movimento ricostruiva e
   reimpaginava l'intero giorno (Dashboard con il thread principale sempre occupato trascinando).
 - `.card()` mette l'ombra sulla sola forma di sfondo: un'ombra sull'intera vista va ricalcolata dal contenuto.
-- Le viste con chiusure tra i parametri (giorni successivi, giorni dell'orario) sono `Equatable` e
-  usate con `.equatable()`: altrimenti ogni aggiornamento della pagina le ricalcolava tutte.
+- Le viste con chiusure tra i parametri (giorni successivi, giorni dell'orario, giorni della barra del calendario)
+  sono `Equatable` e usate con `.equatable()`: altrimenti ogni aggiornamento della pagina le ricalcolava tutte.
+- Righe con una colonna fissa a sinistra (data, casella) e testo a destra: `LeadingColumnLayout`, non
+  `HStack(alignment: .top)`. L'`HStack` misura i figli più volte con larghezze di prova e, con testi su più righe e
+  righe annidate, il cambio di giorno della Dashboard passava quasi tutto il tempo lì ("Nei prossimi giorni").
 - Per misurare: build Release per il simulatore con `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG`, un aggancio temporaneo
   che ripete l'interazione e `sample <pid> 8` sul processo del simulatore, poi sommare i campioni per funzione dell'app.
 
