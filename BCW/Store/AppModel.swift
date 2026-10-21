@@ -22,6 +22,8 @@ final class AppModel {
     let cloudSync = CloudSync()
     /// Istantanea dei dati per i widget (nel contenitore dell'App Group).
     let widgets = WidgetExporter()
+    /// Attività in diretta "Orario di oggi" (segue le istantanee dei widget).
+    let liveActivities = LiveActivityManager()
     /// Collegamento `bcw://` aperto da un widget, in attesa che la scheda giusta lo usi.
     var openedLink: DeepLink?
 
@@ -134,7 +136,10 @@ final class AppModel {
     func bootstrap() {
         // L'aspetto è in `ThemeStore`: anche i suoi cambi vanno all'account BCW.
         ThemeStore.shared.onSyncedChange = { [weak self] in self?.cloudSync.settingsChanged() }
-        defer { widgets.start(model: self) }
+        defer {
+            liveActivities.start(model: self)
+            widgets.start(model: self)
+        }
         cloud = Keychain.loadCloudSession()
         accounts = cloud == nil ? Keychain.loadAccounts() : Keychain.loadCloudAccounts()
         // Con l'account BCW gli account abbinati arrivano dal server: intanto si usano quelli salvati.

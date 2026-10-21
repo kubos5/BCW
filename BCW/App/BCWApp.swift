@@ -25,6 +25,10 @@ struct BCWApp: App {
         .backgroundTask(.appRefresh(NewsNotifications.refreshTaskID)) {
             await NewsNotifications.runBackgroundRefresh(model: model)
         }
+        // Al passaggio di fase dell'attività in diretta (`LiveActivityManager`), se iOS lo concede.
+        .backgroundTask(.appRefresh(LiveActivityManager.refreshTaskID)) {
+            await model.liveActivities.runBackgroundRefresh(model: model)
+        }
     }
 }
 

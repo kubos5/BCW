@@ -1,7 +1,7 @@
 import SwiftUI
 import WidgetKit
 
-/// Estensione dei widget di BCW. Le viste, i tipi e la linea temporale sono nella cartella
+/// Estensione dei widget e dell'attività in diretta di BCW. Le viste, i tipi e la linea temporale sono nella cartella
 /// `Shared` (compilata anche nell'app, per la galleria di prova); qui solo ciò che serve a
 /// WidgetKit: l'elenco dei widget e il fornitore delle voci, che legge l'istantanea scritta
 /// dall'app nel contenitore dell'App Group (`WidgetSnapshot.load`).
@@ -13,6 +13,7 @@ struct BCWWidgetsBundle: WidgetBundle {
         AgendaWidget()
         NextTestWidget()
         AverageWidget()
+        TimetableLiveActivity()
     }
 }
 

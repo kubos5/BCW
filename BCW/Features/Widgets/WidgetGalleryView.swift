@@ -20,6 +20,8 @@ struct WidgetGalleryView: View {
     @State private var source = WidgetGalleryView.argument("BCWWidgetGallerySource").flatMap(Source.init(rawValue:))
         ?? (UserDefaults.standard.bool(forKey: "BCWWidgetGallerySample") ? .sample : .app)
     private let only = WidgetGalleryView.argument("BCWWidgetGalleryKind").flatMap(BCWWidgetKind.init(rawValue:))
+    /// `-BCWWidgetGalleryKind live`: solo l'attività in diretta.
+    private let liveOnly = WidgetGalleryView.argument("BCWWidgetGalleryKind") == "live"
 
     static func argument(_ key: String) -> String? { UserDefaults.standard.string(forKey: key) }
 
@@ -63,8 +65,11 @@ struct WidgetGalleryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 controls
-                ForEach(BCWWidgetKind.allCases.filter { only == nil || $0 == only }) { kind in
+                ForEach(BCWWidgetKind.allCases.filter { !liveOnly && (only == nil || $0 == only) }) { kind in
                     section(kind, snapshot: snapshot, now: now, colorScheme: colorScheme)
+                }
+                if only == nil && look == .fullColor {
+                    LiveActivityGallery(theme: TimetableActivityTheme(snapshot.theme), colorScheme: colorScheme)
                 }
             }
             .padding(.horizontal, 16)
@@ -165,6 +170,89 @@ private struct WidgetFrame: View {
                     }
                 }
                 .clipShape(.rect(cornerRadius: 24, style: .continuous))
+        }
+    }
+}
+/// L'attività in diretta nelle sue fasi (con l'ora vera): schermata di blocco nello schema scelto,
+/// Dynamic Island compatta ed espansa (approssimate: le regioni le dispone il sistema).
+private struct LiveActivityGallery: View {
+    let theme: TimetableActivityTheme
+    let colorScheme: ColorScheme
+
+    var body: some View {
+        let now = Date()
+        let minute: TimeInterval = 60
+        // Orari finti attorno a adesso per mostrare ogni fase (lezioni da un'ora).
+        let cases: [(String, TimetableActivityState?)] = [
+            ("Prima dell'inizio", state(start: now.addingTimeInterval(12 * minute), now: now)),
+            ("Prima dell'inizio, più di un'ora", state(start: now.addingTimeInterval(95 * minute), now: now)),
+            ("Lezione in corso", state(start: now.addingTimeInterval(-20 * minute), now: now)),
+            ("Intervallo", state(start: now.addingTimeInterval(-65 * minute), now: now)),
+            ("Ultima lezione", state(start: now.addingTimeInterval(-170 * minute), now: now)),
+            ("Lezioni finite", plan(start: now.addingTimeInterval(-300 * minute))?.finalContent(theme: theme).state),
+        ]
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Attività in diretta")
+                .font(.m3(16, weight: 650))
+                .foregroundStyle(colorScheme == .light ? Color(rgb: 0x1C2430) : Color(rgb: 0xE8EEF6))
+            ForEach(cases.indices, id: \.self) { index in
+                if let state = cases[index].1 {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(cases[index].0)
+                            .font(.m3(13, weight: 600))
+                            .foregroundStyle(colorScheme == .light ? Color(rgb: 0x1C2430) : Color(rgb: 0xE8EEF6))
+                        let palette = ActivityPalette(theme: theme, dark: colorScheme == .dark)
+                        TimetableActivityLockView(state: state, isStale: false)
+                            .background(palette.background)
+                            .clipShape(.rect(cornerRadius: 24, style: .continuous))
+                            .frame(width: 362)
+                        island(state)
+                    }
+                }
+            }
+        }
+    }
+
+    private func plan(start: Date) -> TimetableActivityPlan? {
+        TimetableActivityPlan(day: start, items: TimetableActivityPlan.sampleItems(start: start, unit: 3600))
+    }
+
+    private func state(start: Date, now: Date) -> TimetableActivityState? {
+        plan(start: start)?.content(at: now, theme: theme)?.state
+    }
+
+    /// Compatta (forma e tempo ai lati della fotocamera), minima ed espansa, sul nero dell'isola.
+    private func island(_ state: TimetableActivityState) -> some View {
+        let island = TimetableActivityIsland(state: state, isStale: false)
+        let black = Color(rgb: 0x050505)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                HStack(spacing: 0) {
+                    island.compactLeading
+                    Spacer(minLength: 120)
+                    island.compactTrailing
+                }
+                .padding(.horizontal, 8)
+                .frame(width: 250, height: 37)
+                .background(black, in: .capsule)
+                island.minimal
+                    .frame(width: 37, height: 37)
+                    .background(black, in: .circle)
+            }
+            .environment(\.colorScheme, .dark)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .top, spacing: 0) {
+                    island.expandedLeading
+                    island.expandedCenter
+                        .padding(.top, 30)
+                }
+                island.expandedBottom
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+            .frame(width: 370, alignment: .leading)
+            .background(black, in: .rect(cornerRadius: 44, style: .continuous))
+            .environment(\.colorScheme, .dark)
         }
     }
 }

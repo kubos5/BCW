@@ -69,6 +69,8 @@ final class WidgetExporter {
         }
         guard let snapshot else { return }
         current = snapshot
+        // L'attività in diretta usa gli stessi dati (e controlla da sé se qualcosa è cambiato).
+        model.liveActivities.update(snapshot: snapshot)
         if let written, written.hasSameContent(as: snapshot) { return }
         do {
             try snapshot.save()
@@ -108,15 +110,18 @@ final class WidgetExporter {
         for offset in 0..<WidgetSnapshot.dayCount {
             guard let day = calendar.date(byAdding: .day, value: offset, to: today) else { continue }
             let entries = store.entries(weekday: day.timetableWeekday, includingDraft: false)
-            let tests = showsTests ? testIDs(entries: entries, on: day, model: model) : []
+            // L'attività in diretta segna le verifiche anche senza "Mostra le verifiche".
+            let tests = testIDs(entries: entries, on: day, model: model)
             days.append(WidgetSnapshot.Day(
                 key: BCWShared.dayKey(day),
-                events: entries.map { event($0, store: store, isTest: tests.contains($0.id)) },
+                events: entries.map {
+                    event($0, store: store, isTest: showsTests && tests.contains($0.id), hasTest: tests.contains($0.id))
+                },
                 isHoliday: model.calendarStatus(on: day)?.isHoliday ?? false))
         }
         var week = (1...7).map { weekday in
             store.entries(weekday: weekday, includingDraft: false)
-                .map { event($0, store: store, isTest: showsTests && $0.isWeeklyTest) }
+                .map { event($0, store: store, isTest: showsTests && $0.isWeeklyTest, hasTest: $0.isWeeklyTest) }
         }
 
         applyTestShift(days: &days, week: &week, now: now)
@@ -168,10 +173,12 @@ final class WidgetExporter {
         return ids
     }
 
-    private static func event(_ entry: TimetableEntry, store: TimetableStore, isTest: Bool) -> WidgetSnapshot.Event {
+    private static func event(_ entry: TimetableEntry, store: TimetableStore, isTest: Bool,
+                              hasTest: Bool? = nil) -> WidgetSnapshot.Event {
         WidgetSnapshot.Event(id: entry.id.uuidString, title: entry.displayTitle, room: entry.room,
                              teacher: entry.teacher, start: entry.start, end: entry.end,
                              kind: entry.isBreak ? .breakTime : .lesson, isTest: isTest,
+                             hasTest: hasTest == true ? true : nil,
                              tint: tint(Theme.timetableColor(entry, store: store)))
     }
 

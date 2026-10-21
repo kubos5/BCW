@@ -117,6 +117,9 @@ final class Preferences {
     var completedHomework: Set<Int> {
         didSet { defaults.set(Array(completedHomework), forKey: "completedHomework"); syncedChanged() }
     }
+    /// Attività in diretta "Orario di oggi" avviata da sola nei giorni con lezioni (solo su questo
+    /// dispositivo, come le notifiche).
+    var liveActivities: Bool { didSet { defaults.set(liveActivities, forKey: "liveActivities") } }
     /// Tipi di novità per cui arriva una notifica (`NewsNotifications`).
     var newsNotifications: Set<NewsKind> {
         didSet { defaults.set(newsNotifications.map(\.rawValue), forKey: "newsNotifications") }
@@ -142,6 +145,8 @@ final class Preferences {
         titleAbbreviation = TitleAbbreviation(rawValue: defaults.string(forKey: "titleAbbreviation") ?? "") ?? .automatic
         collapsedSections = Set(defaults.stringArray(forKey: "collapsedSections") ?? [])
         newsNotifications = Set((defaults.stringArray(forKey: "newsNotifications") ?? []).compactMap(NewsKind.init(rawValue:)))
+        // `bool(forKey:)` legge anche i valori passati come argomenti di avvio (`-liveActivities NO`).
+        liveActivities = defaults.object(forKey: "liveActivities") == nil || defaults.bool(forKey: "liveActivities")
     }
 
     private func syncedChanged() {
@@ -151,7 +156,8 @@ final class Preferences {
     // MARK: Sincronizzazione con l'account BCW
 
     /// Impostazioni che valgono su tutti i dispositivi, con gli stessi nomi della versione web.
-    /// Restano sul dispositivo blocco, promemoria e notifiche (vogliono un permesso ciascuno).
+    /// Restano sul dispositivo blocco, promemoria, notifiche e attività in diretta (vogliono un
+    /// permesso ciascuno).
     var syncedValues: [String: JSONValue] {
         [
             "averageMode": .string(averageMode.rawValue),

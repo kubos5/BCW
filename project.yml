@@ -9,10 +9,11 @@ targets:
   BCW:
     type: application
     supportedDestinations: [iOS]
-    # `Shared`: codice comune all'app e ai widget (dati dei widget, giorno dell'orario, viste).
+    # `Shared`: codice comune all'app e ai widget (dati dei widget, giorno dell'orario, viste dei widget
+    # e dell'attività in diretta).
     sources: [BCW, Shared]
     dependencies:
-      # L'estensione dei widget, incorporata nell'app (PlugIns).
+      # L'estensione dei widget e dell'attività in diretta, incorporata nell'app (PlugIns).
       - target: BCWWidgets
     settings:
       base:
@@ -26,7 +27,8 @@ targets:
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: YES
-        # iOS: aggiornamento in background per le notifiche delle novità.
+        # iOS: aggiornamento in background (notifiche delle novità e attività in diretta), collegamenti
+        # bcw:// dei widget e NSSupportsLiveActivities.
         "INFOPLIST_FILE[sdk=iphone*]": Config/Info-iOS.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleDisplayName: BCW

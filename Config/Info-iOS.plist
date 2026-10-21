@@ -5,6 +5,7 @@
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.bcw.app.refresh</string>
+		<string>com.bcw.app.liveactivity</string>
 	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
@@ -17,6 +18,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

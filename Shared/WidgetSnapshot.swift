@@ -33,7 +33,7 @@ nonisolated struct WidgetSnapshot: Codable, Equatable, Sendable {
     // MARK: Tipi
 
     /// Colore chiaro e scuro (RGB esadecimale).
-    struct Tint: Codable, Equatable, Sendable {
+    struct Tint: Codable, Hashable, Sendable {
         var light: Int
         var dark: Int
     }
@@ -58,6 +58,9 @@ nonisolated struct WidgetSnapshot: Codable, Equatable, Sendable {
         var kind: Kind = .lesson
         /// Verifica segnata nell'orario (a mano o da Classeviva), come nella vista Lista.
         var isTest = false
+        /// Verifica in quell'ora anche con "Mostra le verifiche" spenta (per l'attività in diretta,
+        /// che la segnala sempre). Facoltativo: le istantanee precedenti non ce l'hanno.
+        var hasTest: Bool?
         /// Colore della materia o scelto dall'utente.
         var tint: Tint
 

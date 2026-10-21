@@ -5,7 +5,7 @@ import WidgetKit
 /// Autotest dei widget (solo sviluppo): `-BCWWidgetSelfTest YES` prova la regola del giorno
 /// predefinito dell'orario (`TimetableDefaultDay`, la stessa di app e widget), le voci della linea
 /// temporale, la lezione in corso e la prossima, i collegamenti `bcw://`, la codifica
-/// dell'istantanea e il contenitore dell'App Group. Stampa `BCW-WIDGET-SELFTEST` con l'esito ed esce.
+/// dell'istantanea, il contenitore dell'App Group e le fasi dell'attività in diretta. Stampa `BCW-WIDGET-SELFTEST` con l'esito ed esce.
 enum WidgetSelfTest {
     static func runIfRequested() {
         guard UserDefaults.standard.bool(forKey: "BCWWidgetSelfTest") else { return }
@@ -88,6 +88,45 @@ enum WidgetSelfTest {
         }
         check(snapshot.events(on: day(14)) == snapshot.week[2], "giorni lontani dall'orario settimanale")
         check(WidgetSnapshot.fileURL != nil, "contenitore dell'App Group non disponibile")
+
+        // Attività in diretta: fasi della giornata dell'esempio (8, 9, 10, intervallo 11–11:10, 11:10, 12:10).
+        if let plan = TimetableActivityPlan(snapshot: snapshot, day: wednesday) {
+            let theme = TimetableActivityTheme(snapshot.theme)
+            check(plan.lessons.count == 5 && plan.autoStart == at(0, 7, 30) && plan.end == at(0, 13, 10), "piano della giornata")
+            check(plan.phases.map(\.kind) == [.before, .lesson, .lesson, .lesson, .pause, .lesson, .lesson, .finished],
+                  "fasi: \(plan.phases.map(\.kind.rawValue))")
+            let early = plan.content(at: at(0, 7), theme: theme)
+            check(early?.state.phases.first?.kind == .before && early?.staleDate == at(0, 8), "prima dell'inizio")
+            let lesson = plan.content(at: at(0, 9, 30), theme: theme)
+            check(lesson?.state.phases.map(\.start) == [at(0, 9), at(0, 10)] && lesson?.staleDate == at(0, 10),
+                  "lezione in corso e successiva")
+            check(lesson?.state.phase(isStale: true)?.start == at(0, 10), "scaduta: la fase successiva")
+            let pause = plan.content(at: at(0, 11, 5), theme: theme)?.state.phases.first
+            check(pause?.kind == .pause && pause?.title == "Intervallo" && pause?.lesson?.start == at(0, 11, 10)
+                  && pause?.position == 4, "intervallo con la lezione dopo")
+            let last = plan.content(at: at(0, 12, 30), theme: theme)?.state.phases
+            check(last?.first?.next == nil && last?.last?.kind == .finished, "ultima lezione, poi lezioni finite")
+            check(plan.content(at: at(0, 13, 10), theme: theme) == nil, "finita l'ultima lezione: niente attività")
+            check(plan.nextChange(after: at(0, 9, 30)) == at(0, 10) && plan.nextChange(after: at(0, 13)) == at(0, 13, 10),
+                  "prossimo passaggio di fase")
+            if let state = lesson?.state, let data = try? JSONEncoder().encode(state) {
+                check(data.count < 4096, "stato dell'attività troppo grande: \(data.count) byte")
+            }
+        } else {
+            failures.append("piano dell'attività mancante")
+        }
+        let tint = WidgetSnapshot.Tint(light: 1, dark: 2)
+        let merged = TimetableActivityPlan(day: wednesday, items: [
+            .init(title: "Matematica", start: at(0, 8), end: at(0, 9), tint: tint),
+            .init(title: "Matematica", start: at(0, 9), end: at(0, 10), tint: tint, isTest: true),
+            .init(title: "Storia", start: at(0, 9, 30), end: at(0, 11), tint: tint),
+            .init(title: "Gita", start: at(0, 10), end: at(0, 10, 30), tint: tint),
+        ])
+        check(merged?.lessons.map(\.title) == ["Matematica", "Storia"] && merged?.lessons.first?.isTest == true
+              && merged?.lessons.last?.start == at(0, 10), "ore uguali unite, sovrapposizioni tagliate")
+        check(TimetableActivityPlan(day: wednesday, items: [.init(title: "Intervallo", start: at(0, 11), end: at(0, 12),
+                                                                    tint: tint, isBreak: true)]) == nil,
+              "senza lezioni niente piano")
 
         print(failures.isEmpty ? "BCW-WIDGET-SELFTEST PASS" : "BCW-WIDGET-SELFTEST FAIL\n- " + failures.joined(separator: "\n- "))
         exit(failures.isEmpty ? 0 : 1)
