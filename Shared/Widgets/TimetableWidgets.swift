@@ -517,26 +517,16 @@ private struct TimetableLessonRow: View {
                 .frame(maxHeight: style == .regular ? 28 : (style == .relaxed ? 18 : 16))
                 .widgetAccentable()
             VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
-                    Text(block.title)
-                        .font(palette.font(style == .compact ? 13 : 14, weight: 600))
-                        .foregroundStyle(foreground)
-                        .lineLimit(1)
-                    if style.isOneLine, !block.room.isEmpty {
-                        Text(block.room)
-                            .font(palette.font(11))
-                            .foregroundStyle(secondary)
-                            .lineLimit(1)
-                            .layoutPriority(-1)
+                if isCurrent {
+                    // "In corso" solo se entra per intero (nel medio veniva tagliato in "IN COR…"):
+                    // prima va via l'aula, poi l'etichetta; la riga in evidenza basta a dirlo.
+                    ViewThatFits(in: .horizontal) {
+                        titleLine(foreground: foreground, secondary: secondary, showsRoom: true, showsBadge: true)
+                        titleLine(foreground: foreground, secondary: secondary, showsRoom: false, showsBadge: true)
+                        titleLine(foreground: foreground, secondary: secondary, showsRoom: true, showsBadge: false)
                     }
-                    Spacer(minLength: 0)
-                    if isCurrent {
-                        WidgetEyebrow(text: "In corso", color: foreground, palette: palette, size: 9.5)
-                    } else if block.isTest {
-                        WidgetIcon("test", size: 13)
-                            .foregroundStyle(palette.accent)
-                            .widgetAccentable()
-                    }
+                } else {
+                    titleLine(foreground: foreground, secondary: secondary, showsRoom: true, showsBadge: true)
                 }
                 if style == .regular {
                     Text(detail)
@@ -568,6 +558,33 @@ private struct TimetableLessonRow: View {
                                                bottomTrailingRadius: corners.bottom, topTrailingRadius: corners.top,
                                                style: .continuous))
         .opacity(isPast && !isCurrent ? 0.55 : 1)
+    }
+
+    /// Materia (con l'aula nelle righe su una riga) e, a destra, "In corso" o l'icona della verifica.
+    private func titleLine(foreground: Color, secondary: Color, showsRoom: Bool, showsBadge: Bool) -> some View {
+        HStack(spacing: 6) {
+            Text(block.title)
+                .font(palette.font(style == .compact ? 13 : 14, weight: 600))
+                .foregroundStyle(foreground)
+                .lineLimit(1)
+            if showsRoom, style.isOneLine, !block.room.isEmpty {
+                Text(block.room)
+                    .font(palette.font(11))
+                    .foregroundStyle(secondary)
+                    .lineLimit(1)
+                    .layoutPriority(-1)
+            }
+            Spacer(minLength: 0)
+            if showsBadge {
+                if day.isCurrent(block) {
+                    WidgetEyebrow(text: "In corso", color: foreground, palette: palette, size: 9.5)
+                } else if block.isTest {
+                    WidgetIcon("test", size: 13)
+                        .foregroundStyle(palette.accent)
+                        .widgetAccentable()
+                }
+            }
+        }
     }
 
     private var detail: String {

@@ -158,9 +158,11 @@ private struct NowSmallView: View {
         return "\(TimeOfDay.string(event.start))–\(TimeOfDay.string(event.end))"
     }
 
+    /// Per un altro giorno "Prossima": giorno e ora sono già in fondo ("Domani alle 08:00"), e
+    /// "Prima lezione" accanto all'icona veniva tagliato (verificato sulla Home).
     private func eyebrow(_ event: WidgetSnapshot.Event, isCurrent: Bool) -> String {
         if isCurrent { return "Adesso" }
-        return day.isToday ? "Alle \(TimeOfDay.string(event.start))" : day.dayName
+        return day.isToday ? "Alle \(TimeOfDay.string(event.start))" : "Prossima"
     }
 }
 
