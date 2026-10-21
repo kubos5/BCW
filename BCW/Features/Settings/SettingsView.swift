@@ -301,6 +301,13 @@ struct AppearanceSettingsSection: View {
             SelectRow("Contrasto", icon: "contrast", selection: $theme.contrast,
                       options: ContrastLevel.allCases.map { ($0, $0.title, nil) })
         }
+        // Con "Tema dell'app" l'icona segue l'accento: cambia (con l'avviso di iOS) uscendo dalla pagina.
+        .onAppear { AppIconController.shared.holdThemeChanges(true) }
+        .onDisappear { AppIconController.shared.holdThemeChanges(false) }
+
+        ListGroup {
+            AppIconSettingsLink()
+        }
 
         ListGroup("Forme e movimento", footer: "Espressive: animazioni a molla con un piccolo rimbalzo, come in Material 3 Expressive. Standard: senza rimbalzo. Ridotte: brevi e senza movimenti ampi. I caratteri arrotondati usano l'asse ROND di Google Sans Flex.") {
             SelectRow("Angoli", icon: "corners", selection: $theme.corners,

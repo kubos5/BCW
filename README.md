@@ -78,6 +78,7 @@ L'app segue Material 3 Expressive, con colori, font e pagina Aspetto della [vers
 Anche l'esperienza d'uso è quella di un'app Material 3 Expressive: barra di ricerca in alto, liste segmentate, chip di stato, gruppi di pulsanti collegati, schede, menu del pulsante d'azione flottante e barra degli strumenti flottante, con le animazioni a molla e le transizioni di Material 3.
 Le forme usano angoli continui e su iPhone l'interfaccia ha il feedback aptico.
 In Impostazioni › Aspetto si può attivare Liquid Glass: barra di navigazione, barra delle schede e menu diventano quelli di sistema, in vetro.
+In Impostazioni › Aspetto › Icona dell'app si personalizza l'icona: la barra di BCW dentro una forma di Material 3 Expressive (cerchio, biscotti, quadrifoglio, fiore, sole, gemma) oppure l'icona classica, con il colore del tema dell'app (il più vicino tra i dieci proposti) o uno dei dieci colori. L'icona segue le icone chiare, scure, colorate e trasparenti di iOS, oppure resta sempre chiara o sempre scura, con lo sfondo scuro del tema o quello standard di iOS. Le scelte si sincronizzano con l'account BCW.
 
 ### Requisiti
 
@@ -99,7 +100,7 @@ L'orario è salvato sul dispositivo, separato per ogni account.
 Nella schermata di accesso un gruppo di pulsanti sceglie tra Classeviva e Account BCW. Un account BCW (nome utente e password) vive sul server [BCW-api](https://github.com/kubos5/BCW-api), un Cloudflare Worker con un database D1:
 
 - gli account Classeviva abbinati sono salvati sul server, con le credenziali cifrate: entrando con l'account BCW l'app li riceve e accede a Classeviva come con un account del dispositivo; aggiungere o togliere un account lo abbina o lo scollega
-- impostazioni (tranne blocco, promemoria, notifiche e Liquid Glass), aspetto e orario di ogni account abbinato, con i file allegati, si sincronizzano con la versione web e con gli altri dispositivi
+- impostazioni (tranne blocco, promemoria, notifiche e Liquid Glass), aspetto (anche l'icona dell'app) e orario di ogni account abbinato, con i file allegati, si sincronizzano con la versione web e con gli altri dispositivi
 - da Impostazioni › Account si accede o si crea un account BCW anche con un account Classeviva già aperto, e gli account del dispositivo si possono abbinare subito
 - chi entra con un account Classeviva vede in Impostazioni › Account a quali account BCW è abbinato e può scollegarsi da ognuno: il server verifica l'accesso con il token della sessione di Classeviva, senza la password
 - uscendo dall'account BCW gli account abbinati e i loro dati spariscono dal dispositivo e tornano quelli salvati sul dispositivo

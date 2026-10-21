@@ -160,6 +160,7 @@ struct YouView: View {
         case "libri": SchoolbooksView()
         case "calendario": SchoolCalendarView()
         case "account": AccountView()
+        case "icona": AppIconSettingsView()
         case let pane where pane.hasPrefix("impostazioni-"):
             if let found = SettingsPane.allCases.first(where: { $0.rawValue == pane.dropFirst(13) }) {
                 SettingsPaneView(pane: found)
