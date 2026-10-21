@@ -268,8 +268,15 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Righe con una colonna fissa a sinistra (data, casella) e testo a destra: `LeadingColumnLayout`, non
   `HStack(alignment: .top)`. L'`HStack` misura i figli più volte con larghezze di prova e, con testi su più righe e
   righe annidate, il cambio di giorno della Dashboard passava quasi tutto il tempo lì ("Nei prossimi giorni").
+- Animazioni continue (che non finiscono mai) con Core Animation, non con `TimelineView(.animation)`: quella
+  aggiorna la vista a ogni fotogramma finché si vede. L'onda di `WavyProgress` è un `CAShapeLayer` animato
+  (`MovingWave`): con la lezione in corso l'Orario fermo teneva occupato il thread principale per circa un quinto
+  del tempo, ora quasi zero.
 - Per misurare: build Release per il simulatore con `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG`, un aggancio temporaneo
   che ripete l'interazione e `sample <pid> 8` sul processo del simulatore, poi sommare i campioni per funzione dell'app.
+  L'impaginazione finisce sotto chi chiede per primo una misura (il `primaryMinimum` di un `safeAreaInset`, il
+  `GeometryReader` di `WavyProgress`): lì non è lavoro doppio, le misure dopo usano la cache. Il simulatore condiviso
+  con altre compilazioni dà numeri molto variabili (anche 30–60% per la stessa build): confrontare più giri.
 
 ## Sistema di design (Material 3 Expressive, `BCW/Design/`)
 - `ThemeStore.shared` (`@Observable`): preferenze di Aspetto (accento, stile dei colori, contrasto, angoli, movimento,
