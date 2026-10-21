@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import os
 
 /// Applica l'icona scelta in Impostazioni › Aspetto › Icona dell'app (`setAlternateIconName`).
 ///
@@ -20,8 +21,12 @@ final class AppIconController {
     @ObservationIgnored private var started = false
     @ObservationIgnored private var pending: Task<Void, Never>?
     @ObservationIgnored private var applying = false
-    /// Nome che iOS ha rifiutato: non si riprova finché le opzioni non cambiano.
+    /// Nome che iOS ha rifiutato e tentativi falliti: al primo errore si riprova da soli (subito
+    /// dopo l'installazione iOS può non avere ancora registrato le icone), al secondo compare
+    /// l'avviso e si riprova solo quando cambiano le opzioni o si torna nell'app.
     @ObservationIgnored private var refusedName: String??
+    @ObservationIgnored private var failures = 0
+    @ObservationIgnored private let log = Logger(subsystem: "com.bcw-classeviva.app", category: "AppIcon")
     /// Opzioni scelte a mano all'ultimo controllo (per distinguerle dai cambi del solo accento).
     @ObservationIgnored private var lastOptions = ""
     /// Pagine aperte che trattengono i cambi del solo colore del tema (Impostazioni › Aspetto).
@@ -43,6 +48,7 @@ final class AppIconController {
     /// L'app è tornata attiva: se l'icona non è quella scelta, la cambia.
     func sceneBecameActive() {
         guard started, holds == 0 else { return }
+        if failures > 1 { failures = 1 }
         schedule(after: .milliseconds(600))
     }
 
@@ -70,6 +76,7 @@ final class AppIconController {
                 guard let self else { return }
                 self.observe()
                 self.refusedName = nil
+                self.failures = 0
                 let options = self.options
                 // Scelte nella pagina dell'icona (o arrivate dall'account BCW): dopo una breve pausa,
                 // che unisce i tocchi ravvicinati. Colore del tema: all'uscita da Aspetto, se è aperta,
@@ -99,15 +106,27 @@ final class AppIconController {
         let app = UIApplication.shared
         guard app.supportsAlternateIcons, app.applicationState == .active, !applying else { return }
         let name = ThemeStore.shared.appIconChoice.assetName
-        guard name != app.alternateIconName, refusedName != .some(name) else { return }
+        guard name != app.alternateIconName, refusedName != .some(name) || failures < 2 else { return }
         applying = true
         defer { applying = false }
         do {
             try await app.setAlternateIconName(name)
+            refusedName = nil
+            failures = 0
+        } catch where app.alternateIconName == name {
+            // Sul simulatore l'avviso di iOS non si apre (errore di I/O) ma l'icona cambia lo stesso.
+            log.info("Icona \(name ?? "principale", privacy: .public) cambiata senza avviso: \(error.localizedDescription, privacy: .public)")
+            refusedName = nil
+            failures = 0
         } catch {
+            log.error("Icona \(name ?? "principale", privacy: .public) rifiutata: \(error.localizedDescription, privacy: .public)")
+            failures = refusedName == .some(name) ? failures + 1 : 1
             refusedName = .some(name)
-            failure = "Non è stato possibile cambiare l'icona dell'app."
-            print("BCW-APPICON:", name ?? "principale", error.localizedDescription)
+            if failures == 1 {
+                schedule(after: .seconds(3))
+            } else if failures == 2 {
+                failure = "Non è stato possibile cambiare l'icona dell'app."
+            }
             return
         }
         // Le opzioni sono cambiate mentre iOS cambiava l'icona: si ricontrolla.

@@ -125,11 +125,12 @@ enum AppIconGenerator {
         try Data(barSVG.utf8).write(to: assets.appendingPathComponent("bcw-linea.svg"))
         let shapeScale = String(format: "%.4f", 1024 * AppIconGeometry.shape / 100)
         let barScale = String(format: "%.4f", 1024 * AppIconGeometry.shape * AppIconGeometry.bar / 64)
-        let tintedShape = "srgb:0.45000,0.45000,0.45000,1.00000"
+        let gray = String(format: "%.5f", AppIconPalette.tintedShapeWhite)
+        let tintedShape = "srgb:\(gray),\(gray),\(gray),1.00000"
         let json = """
         {
           "fill-specializations" : [
-            { "value" : { "solid" : "\(srgb(scheme.light, "surface-container-low"))" } },
+            { "value" : { "solid" : "\(srgb(scheme.light, "surface"))" } },
             { "appearance" : "dark", "value" : { "solid" : "\(srgb(scheme.dark, "surface-dim"))" } }
           ],
           "groups" : [
@@ -137,7 +138,7 @@ enum AppIconGenerator {
               "layers" : [
                 {
                   "fill-specializations" : [
-                    { "value" : { "solid" : "\(srgb(scheme.light, "primary"))" } },
+                    { "value" : { "solid" : "\(srgb(scheme.light, "on-primary"))" } },
                     { "appearance" : "dark", "value" : { "solid" : "\(srgb(scheme.dark, "primary"))" } },
                     { "appearance" : "tinted", "value" : { "solid" : "srgb:1.00000,1.00000,1.00000,1.00000" } }
                   ],
@@ -155,7 +156,7 @@ enum AppIconGenerator {
               "layers" : [
                 {
                   "fill-specializations" : [
-                    { "value" : { "solid" : "\(srgb(scheme.light, "primary-container"))" } },
+                    { "value" : { "solid" : "\(srgb(scheme.light, "primary"))" } },
                     { "appearance" : "dark", "value" : { "solid" : "\(srgb(scheme.dark, "primary-container"))" } },
                     { "appearance" : "tinted", "value" : { "solid" : "\(tintedShape)" } }
                   ],

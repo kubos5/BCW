@@ -114,8 +114,16 @@ enum AppIconAppearance: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .automatic: "Automatico"
-        case .light: "Chiaro"
-        case .dark: "Scuro"
+        case .light: "Sempre chiaro"
+        case .dark: "Sempre scuro"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .automatic: "Chiaro o scuro come le icone di iOS"
+        case .light: "Colori chiari anche con le icone scure di iOS"
+        case .dark: "Colori scuri anche con le icone chiare di iOS"
         }
     }
 }
@@ -244,19 +252,24 @@ enum AppIconPalette {
     /// con le icone chiare di iOS.
     static let systemDark = AppIconBackground.gradient(Color(platformColor: PlatformColor(hex: 0x2E2E30)),
                                                        Color(platformColor: PlatformColor(hex: 0x111112)))
-    /// Grigio della forma nell'immagine colorata: la barra (bianca) resta il livello più chiaro.
-    static let tintedShape = Color(white: 0.45)
+    /// Grigio della forma nell'immagine colorata (e trasparente): la barra, bianca, resta il livello
+    /// più chiaro. iOS schiarisce i grigi tingendoli: con 0,45 la forma diventava quasi bianca e la
+    /// barra si vedeva appena (verificato sul simulatore), con 0,3 forma e barra restano distinte.
+    static let tintedShapeWhite: CGFloat = 0.3
+    static let tintedShape = Color(white: tintedShapeWhite)
 
-    /// Colori di un'immagine: chiara = sfondo surface-container-low, forma primary-container,
-    /// barra primary; scura = sfondo surface-dim, forma e barra negli stessi ruoli del tema scuro.
+    /// Colori di un'immagine. Chiara: sfondo surface, forma primary, barra on-primary (la forma
+    /// si stacca bene dallo sfondo anche in piccolo, e la barra bianca resta il segno di BCW).
+    /// Scura: sfondo surface-dim, forma primary-container, barra primary del tema scuro (toni
+    /// bassi come le icone scure di iOS, con la barra chiara come nella versione chiara).
     static func colors(for choice: AppIconChoice, rendition: AppIconRendition) -> AppIconColors {
         if choice.shape == .classic { return classic(rendition) }
         let scheme = scheme(for: choice.color)
         func color(_ values: SchemeValues, _ role: String) -> Color { Color(platformColor: PlatformColor(hex: values.color(role))) }
         switch rendition {
         case .light:
-            return AppIconColors(background: .solid(color(scheme.light, "surface-container-low")),
-                                 shape: color(scheme.light, "primary-container"), bar: color(scheme.light, "primary"))
+            return AppIconColors(background: .solid(color(scheme.light, "surface")),
+                                 shape: color(scheme.light, "primary"), bar: color(scheme.light, "on-primary"))
         case .dark, .darkSystem, .darkSystemOpaque:
             let background: AppIconBackground = switch rendition {
             case .dark: .solid(color(scheme.dark, "surface-dim"))

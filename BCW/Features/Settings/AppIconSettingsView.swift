@@ -38,17 +38,23 @@ private struct AppIconSettingsSection: View {
         .disabled(theme.appIconShape == .classic)
         .opacity(theme.appIconShape == .classic ? 0.38 : 1)
 
-        ListGroup("Aspetto", footer: "Automatico segue le icone di iOS: con quelle chiare l'icona ha i colori chiari del tema, con quelle scure i colori scuri, sullo sfondo scuro del tema (Material) o su quello standard di iOS. Chiaro e Scuro valgono sempre. Con le icone colorate e trasparenti iOS tinge ogni icona: forma e barra restano due livelli distinti. iOS chiede conferma a ogni cambio d'icona.") {
-            AppIconOptionRow(title: "Aspetto", icon: "contrast") {
-                SegmentedButtons(selection: $theme.appIconAppearance,
-                                 options: AppIconAppearance.allCases.map { ($0, $0.title, nil) })
+        ListGroup("Aspetto", footer: "Con le icone colorate e trasparenti di iOS l'icona è sempre tinta da iOS, qualunque sia l'aspetto scelto: forma e barra restano due livelli distinti.") {
+            ForEach(AppIconAppearance.allCases) { appearance in
+                AppIconAppearanceRow(appearance: appearance, selected: theme.appIconAppearance == appearance) {
+                    withAnimation(Motion.spatialFast) { theme.appIconAppearance = appearance }
+                }
             }
-            AppIconOptionRow(title: "Sfondo scuro", icon: "image") {
-                SegmentedButtons(selection: $theme.appIconDarkBackground,
-                                 options: AppIconDarkBackground.allCases.map { ($0, $0.title, nil) })
-            }
-            .disabled(theme.appIconAppearance == .light)
-            .opacity(theme.appIconAppearance == .light ? 0.38 : 1)
+        }
+
+        let darkDisabled = theme.appIconAppearance == .light
+        ListGroup("Sfondo scuro", footer: darkDisabled
+                  ? "Con Sempre chiaro l'icona non è mai scura."
+                  : "Material: lo sfondo scuro del tema, come nell'app. iOS: lo sfondo scuro standard delle icone di iOS. A ogni cambio d'icona iOS mostra un avviso.") {
+            SegmentedButtons(selection: $theme.appIconDarkBackground,
+                             options: AppIconDarkBackground.allCases.map { ($0, $0.title, nil) })
+                .padding(16)
+                .disabled(darkDisabled)
+                .opacity(darkDisabled ? 0.38 : 1)
         }
 
         if !theme.appIconIsDefault {
@@ -165,7 +171,7 @@ private struct AppIconColorGrid: View {
                     withAnimation(Motion.spatial) { selection = color }
                 } label: {
                     AppIconColorSwatch(color: shown, dark: colorScheme == .dark, selected: selected,
-                                       icon: selected ? "check" : (color == .theme ? "palette" : nil))
+                                       icon: color == .theme ? "palette" : (selected ? "check" : nil))
                 }
                 .buttonStyle(AppIconCellButtonStyle())
                 .accessibilityLabel(color == .theme ? "Tema dell'app (\(shown.title))" : color.title)
@@ -176,7 +182,7 @@ private struct AppIconColorGrid: View {
     }
 }
 
-/// Campione di un colore dell'icona: il contenitore primario con la barra nel primario.
+/// Campione di un colore dell'icona: la forma e la barra nei colori dell'icona chiara o scura.
 private struct AppIconColorSwatch: View {
     let color: AppIconColor
     let dark: Bool
@@ -184,11 +190,11 @@ private struct AppIconColorSwatch: View {
     let icon: String?
 
     var body: some View {
-        let scheme = AppIconPalette.scheme(for: color)
-        let values = dark ? scheme.dark : scheme.light
+        let colors = AppIconPalette.colors(for: AppIconChoice(shape: .circle, color: color, variant: .auto),
+                                           rendition: dark ? .dark : .light)
         let shape = RoundedRectangle(cornerRadius: selected ? Theme.radii.l : 22, style: .continuous)
         ZStack {
-            Color(platformColor: PlatformColor(hex: values.color("primary-container")))
+            colors.shape
             if let icon {
                 Icon(icon, size: 18)
                     .foregroundStyle(Theme.ink)
@@ -196,7 +202,7 @@ private struct AppIconColorSwatch: View {
                     .background(Theme.surfaceContainerLowest, in: .circle)
             } else {
                 Capsule(style: .circular)
-                    .fill(Color(platformColor: PlatformColor(hex: values.color("primary"))))
+                    .fill(colors.bar)
                     .frame(width: 26, height: 26 * AppIconGeometry.barAspect)
             }
         }
@@ -215,24 +221,28 @@ private struct AppIconColorSwatch: View {
     }
 }
 
-/// Voce con titolo e, sotto, un gruppo di pulsanti segmentati.
-private struct AppIconOptionRow<Content: View>: View {
-    let title: String
-    let icon: String
-    @ViewBuilder let content: () -> Content
+/// Voce di un aspetto dell'icona: selezionata, ha lo sfondo del contenitore secondario e la spunta.
+private struct AppIconAppearanceRow: View {
+    let appearance: AppIconAppearance
+    let selected: Bool
+    let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 16) {
-                FormIcon(icon)
-                Text(title)
-                    .font(.m3(16, weight: 500))
-                    .foregroundStyle(Theme.ink)
+        Button {
+            guard !selected else { return }
+            Haptics.selection()
+            action()
+        } label: {
+            ListRow(appearance.title, subtitle: appearance.subtitle) {
+                if selected {
+                    Icon("check", size: 22)
+                        .foregroundStyle(Theme.onSecondaryContainer)
+                        .transition(.scale.combined(with: .opacity))
+                }
             }
-            content()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .buttonStyle(ListRowButtonStyle(selected: selected))
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
