@@ -366,9 +366,13 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `ThemeStore.syncedValues`/`applySynced` (valori sconosciuti ignorati). In `CloudSync.syncSettings` una chiave che
   l'ultima sincronizzazione non conosceva conta come cambiata solo se il server non ce l'ha: così il valore
   predefinito di un dispositivo appena aggiornato non cancella la scelta fatta su un altro.
-- Peso misurato: `Assets.car` da 5,05 MB (ramo claude) a 49,1 MB, +44 MB, metà iPhone e metà iPad (dopo lo
-  sfoltimento dell'App Store circa 22 MB per dispositivo). `compression-type` nei `Contents.json` non cambia nulla:
-  actool salva sempre le icone in ARGB con lzfse.
+- Peso misurato: `Assets.car` da 5,05 MB (ramo claude) a 49,1 MB, +44 MB, metà iPhone e metà iPad; per un solo
+  iPhone (actool con `--filter-for-device-model iPhone18,3`, come lo sfoltimento dell'App Store) da 2,6 a 24,6 MB.
+  Ogni icona compilata tiene solo le tre immagini 1024 (circa 54 KB per dispositivo). `compression-type` nei
+  `Contents.json` non cambia nulla: actool salva sempre le icone in ARGB con lzfse.
+- Verificato sulla Home del simulatore (iOS 26.3, Default/Dark/Clear/Tinted): icona principale a vetro, alternative,
+  classica, Sempre chiaro e Sempre scuro, sfondo scuro Material e iOS; con "Tema dell'app" provando due accenti in
+  Aspetto l'icona cambia una volta sola, uscendo dalla pagina.
 - Limiti verificati: iOS aggiunge i suoi riflessi di vetro anche alle icone piatte (sfumatura sulla forma, alone sulla
   barra). Con le icone colorate e trasparenti iOS tinge sempre l'immagine colorata, anche con Sempre chiaro o Sempre
   scuro: non si può forzare. Sul simulatore (iOS 26.3) l'avviso del cambio non si apre ("couldn't load upcall bundle
