@@ -142,7 +142,8 @@ final class LiveActivityManager {
     /// si tocca nulla).
     private func currentWishes(now: Date) -> (wishes: [Wish], today: TimetableActivityPlan?)? {
         guard let model, let snapshot else { return nil }
-        guard areActivitiesEnabled, snapshot.signedIn else { return ([], nil) }
+        // La prova vale anche senza account (riaperta da iOS in background, senza la demo).
+        guard areActivitiesEnabled, snapshot.signedIn || isDemo else { return ([], nil) }
         let theme = TimetableActivityTheme(snapshot.theme)
         let calendar = BCWShared.calendar
         let today = calendar.startOfDay(for: now)
@@ -171,6 +172,14 @@ final class LiveActivityManager {
                 wishes.append(Wish(dayKey: todayKey, start: plan.autoStart, plan: plan, content: content))
             }
         }
+        #if DEBUG
+        // `-BCWLiveActivityDemoPair YES`: una seconda attività uguale, perché la Dynamic Island usi la
+        // presentazione minima (con una sola attività resta compatta).
+        if isDemo, defaults.bool(forKey: "BCWLiveActivityDemoPair"),
+           let wish = wishes.first(where: { $0.dayKey == todayKey && $0.start == nil }) {
+            wishes.append(Wish(dayKey: todayKey + "-2", start: nil, plan: wish.plan, content: wish.content))
+        }
+        #endif
         // Il prossimo giorno di scuola parte da solo mezz'ora prima della prima lezione.
         if automatic {
             for offset in 1...TimetableDefaultDay.lookahead {
@@ -337,18 +346,40 @@ final class LiveActivityManager {
     /// un intervallo da N, la seconda lezione con una verifica. Con `-BCWLiveActivityDemoStart S`
     /// l'attività viene programmata (iOS 26) e parte da sola tra S secondi, prima lezione N
     /// secondi dopo.
+    ///
+    /// La prova resta salvata finché non finisce: quando parte un'attività programmata (o arriva
+    /// l'aggiornamento in background) iOS riapre l'app senza gli argomenti di avvio, e senza la
+    /// prova l'app avrebbe chiuso l'attività come non più voluta (verificato).
     private func prepareDemo() {
         let defaults = UserDefaults.standard
-        guard defaults.bool(forKey: "BCWLiveActivityDemo") else { return }
-        let unit = TimeInterval(defaults.integer(forKey: "BCWLiveActivitySeconds") > 0
-            ? defaults.integer(forKey: "BCWLiveActivitySeconds") : 60)
-        // Secondi interi: le date tornano uguali da ActivityKit.
         let now = Date(timeIntervalSinceReferenceDate: Date().timeIntervalSinceReferenceDate.rounded())
-        let delay = TimeInterval(max(0, defaults.integer(forKey: "BCWLiveActivityDemoStart")))
-        if delay > 0 { demoStart = now.addingTimeInterval(delay) }
-        let start = now.addingTimeInterval(delay + unit)
+        let start: Date, unit: TimeInterval
+        if defaults.bool(forKey: "BCWLiveActivityDemo") {
+            unit = TimeInterval(defaults.integer(forKey: "BCWLiveActivitySeconds") > 0
+                ? defaults.integer(forKey: "BCWLiveActivitySeconds") : 60)
+            // Secondi interi: le date tornano uguali da ActivityKit.
+            let delay = TimeInterval(max(0, defaults.integer(forKey: "BCWLiveActivityDemoStart")))
+            demoStart = delay > 0 ? now.addingTimeInterval(delay) : nil
+            start = now.addingTimeInterval(delay + unit)
+            defaults.set([start.timeIntervalSinceReferenceDate, unit,
+                          demoStart?.timeIntervalSinceReferenceDate ?? 0], forKey: Self.demoKey)
+        } else if let saved = defaults.array(forKey: Self.demoKey) as? [Double], saved.count == 3 {
+            start = Date(timeIntervalSinceReferenceDate: saved[0])
+            unit = saved[1]
+            // Lezioni finite (7 unità) e "Lezioni finite" rimasto per un po': la prova è finita.
+            guard now < start.addingTimeInterval(7 * unit + Self.finishedLinger) else {
+                defaults.removeObject(forKey: Self.demoKey)
+                return
+            }
+            demoStart = saved[2] > 0 ? Date(timeIntervalSinceReferenceDate: saved[2]) : nil
+        } else {
+            return
+        }
         demoItems = TimetableActivityPlan.sampleItems(start: start, unit: unit)
         log("prova: prima lezione alle \(WidgetDates.time(start)), fasi da \(Int(unit)) s")
     }
+
+    /// La prova in corso: prima lezione, durata delle fasi, inizio programmato (0 se subito).
+    private static let demoKey = "BCWLiveActivityDemoPlan"
     #endif
 }
