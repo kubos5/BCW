@@ -199,7 +199,7 @@ private struct NowRectangularView: View {
                      : "\(day.dayName) alle \(TimeOfDay.string(next.start))")
                     .font(palette.font(13))
                     .lineLimit(1)
-                if let after = day.lessons.first(where: { $0.start >= next.end }) {
+                if let after = day.following.first {
                     Text("Poi \(after.title)")
                         .font(palette.font(13))
                         .foregroundStyle(.secondary)

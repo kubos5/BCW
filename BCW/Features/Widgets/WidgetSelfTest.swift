@@ -59,6 +59,23 @@ enum WidgetSelfTest {
         let evening = TimetableWidgetDay(snapshot: snapshot, now: at(0, 15))
         check(!evening.isToday && WidgetDates.offset(of: evening.day, from: wednesday) == 1, "la sera si mostra domani")
         check(evening.current == nil && evening.next?.start == 8 * 60, "domani dalla prima lezione")
+        // Ore uguali di seguito: una lezione sola, come nelle righe e nell'attività in diretta.
+        var doubled = snapshot
+        let italian = WidgetSnapshot.Tint(light: 0x9E412B, dark: 0xFFB4A3)
+        if let index = doubled.days.firstIndex(where: { $0.key == BCWShared.dayKey(wednesday) }) {
+            doubled.days[index].events = [
+                .init(id: "ita1", title: "Italiano", room: "2B", start: 10 * 60, end: 11 * 60, tint: italian),
+                .init(id: "ita2", title: "Italiano", start: 11 * 60, end: 12 * 60, isTest: true, tint: italian),
+                .init(id: "sto", title: "Storia", start: 12 * 60, end: 13 * 60, tint: .init(light: 1, dark: 2)),
+            ]
+        }
+        let double = TimetableWidgetDay(snapshot: doubled, now: at(0, 10, 30))
+        check(double.current?.id == "ita1" && double.current?.end == 12 * 60 && double.current?.isTest == true
+              && double.current?.room == "2B", "due ore di seguito: in corso fino alle 12")
+        check(double.next?.title == "Storia" && double.following.map(\.id) == ["sto"], "dopo due ore uguali la materia dopo")
+        let beforeDouble = TimetableWidgetDay(snapshot: doubled, now: at(0, 9))
+        check(beforeDouble.current == nil && beforeDouble.next?.end == 12 * 60 && beforeDouble.following.map(\.id) == ["sto"],
+              "prossima lezione di due ore")
 
         // Voci della linea temporale: adesso, ogni inizio e fine futuri, le mezzanotti.
         let now = at(0, 9, 30)

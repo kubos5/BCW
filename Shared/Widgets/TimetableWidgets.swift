@@ -14,9 +14,14 @@ struct TimetableWidgetDay {
     /// Eventi del giorno in ordine, intervalli compresi.
     let events: [Event]
     let lessons: [Event]
+    /// Le lezioni con le ore uguali di seguito unite in una (come le righe dei widget, i gruppi
+    /// dell'orario e l'attività in diretta): due ore di Italiano sono "fino alle 12:00", poi la
+    /// materia dopo, non "poi Italiano alle 11:00".
+    let mergedLessons: [Event]
     let isToday: Bool
     /// Minuto attuale, se il giorno è oggi.
     let minute: Int?
+    /// La lezione in corso (ore uguali di seguito unite).
     let current: Event?
     /// La prossima lezione (dopo quella in corso, o la prima del giorno se non è oggi).
     let next: Event?
@@ -28,25 +33,36 @@ struct TimetableWidgetDay {
         self.day = day
         events = snapshot.events(on: day).sorted { ($0.start, $0.end, $0.title) < ($1.start, $1.end, $1.title) }
         lessons = events.filter { !$0.isBreak }
+        // L'ora unita tiene l'id della prima: `isCurrent(_:)` la ritrova nel suo blocco.
+        let merged = TimetableBlock.blocks(lessons).map { block -> Event in
+            var event = block.first
+            event.end = block.end
+            event.room = block.room
+            event.teacher = block.teacher
+            event.isTest = block.isTest
+            event.hasTest = block.events.contains { $0.hasTest == true } ? true : nil
+            return event
+        }
+        mergedLessons = merged
         isToday = BCWShared.calendar.isDate(day, inSameDayAs: now)
         isHoliday = snapshot.isHoliday(day)
         if isToday {
             let minute = BCWShared.minutes(of: now)
             self.minute = minute
-            let current = lessons.last { $0.start <= minute && minute < $0.end }
+            let current = merged.last { $0.start <= minute && minute < $0.end }
             self.current = current
-            next = lessons.first { $0.start > minute && $0.start >= (current?.end ?? minute) && $0.id != current?.id }
+            next = merged.first { $0.start > minute && $0.start >= (current?.end ?? minute) && $0.id != current?.id }
         } else {
             minute = nil
             current = nil
-            next = lessons.first
+            next = merged.first
         }
     }
 
-    /// Le lezioni dopo quella in evidenza (in corso o prossima).
+    /// Le lezioni dopo quella in evidenza (in corso o prossima), con le ore uguali unite.
     var following: [Event] {
         guard let featured = current ?? next else { return [] }
-        return lessons.filter { $0.start >= featured.end && $0.id != featured.id }
+        return mergedLessons.filter { $0.start >= featured.end && $0.id != featured.id }
     }
 
     func date(_ minute: Int) -> Date { BCWShared.date(day, minute: minute) }
