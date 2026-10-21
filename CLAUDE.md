@@ -360,11 +360,16 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Rigenerare dopo aver cambiato forme, colori o disegno: compilare, installare e lanciare
   `xcrun simctl launch --console-pty <udid> com.bcw-classeviva.app -BCWGenerateAppIcons <percorso assoluto di BCW/Resources>`
   (solo DEBUG, `AppIconGenerator`): riscrive da capo `AppIcons.xcassets` e `AppIcon.icon` (SVG della forma e della
-  barra, `icon.json`) e stampa `BCW-APPICONS OK 404`; poi ricompilare. I PNG sono a tavolozza (circa 14 KB).
+  barra, `icon.json`) e stampa `BCW-APPICONS OK 404`; poi ricompilare. I PNG sono a tavolozza (in media 13 KB). Il
+  generatore è deterministico: con un percorso di prova al posto di `BCW/Resources` i file escono identici a quelli
+  del repository, un modo rapido per controllare che il catalogo corrisponda al codice.
 - `AppIconController` (avviato in `RootView`) cambia l'icona solo se cambia il nome e con l'app attiva: le scelte
   della pagina dopo 1 s; i cambi del solo accento con "Tema dell'app" aspettano l'uscita da Impostazioni › Aspetto
   (`holdThemeChanges`), così provando i colori iOS mostra un solo avviso; tornando nell'app con Aspetto aperta il
-  controllo si fa all'uscita. Errori in un toast (`AppIconFailureReporter`).
+  controllo si fa all'uscita. Errori in un toast (`AppIconFailureReporter`). Ogni richiesta a iOS (cioè ogni avviso)
+  scrive `Cambio d'icona: <nome>` nel registro (sottosistema `com.bcw-classeviva.app`, categoria `AppIcon`).
+  `AppIconColor.nearest` ricorda l'ultimo risultato in UserDefaults (`appIconNearest`): calcolarlo carica
+  JavaScriptCore, che all'avvio con un accento qualsiasi altrimenti non serve.
 - Sincronizzazione: `appIconShape`, `appIconColor`, `appIconAppearance`, `appIconDarkBackground` in
   `ThemeStore.syncedValues`/`applySynced` (valori sconosciuti ignorati). In `CloudSync.syncSettings` una chiave che
   l'ultima sincronizzazione non conosceva conta come cambiata solo se il server non ce l'ha: così il valore
@@ -374,8 +379,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   Ogni icona compilata tiene solo le tre immagini 1024 (circa 54 KB per dispositivo). `compression-type` nei
   `Contents.json` non cambia nulla: actool salva sempre le icone in ARGB con lzfse.
 - Verificato sulla Home del simulatore (iOS 26.3, Default/Dark/Clear/Tinted): icona principale a vetro, alternative,
-  classica, Sempre chiaro e Sempre scuro, sfondo scuro Material e iOS; con "Tema dell'app" provando due accenti in
-  Aspetto l'icona cambia una volta sola, uscendo dalla pagina.
+  classica, Sempre chiaro e Sempre scuro, sfondo scuro Material e iOS; con "Tema dell'app" provando più accenti in
+  Aspetto (anche dopo aver cambiato Liquid Glass nella pagina) l'icona cambia una volta sola, uscendo dalla pagina;
+  tre forme toccate di seguito danno una sola richiesta.
 - Limiti verificati: iOS aggiunge i suoi riflessi di vetro anche alle icone piatte (sfumatura sulla forma, alone sulla
   barra). Con le icone colorate e trasparenti iOS tinge sempre l'immagine colorata, anche con Sempre chiaro o Sempre
   scuro: non si può forzare. Sul simulatore (iOS 26.3) l'avviso del cambio non si apre ("couldn't load upcall bundle
