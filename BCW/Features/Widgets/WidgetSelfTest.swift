@@ -18,6 +18,10 @@ enum WidgetSelfTest {
         func day(_ offset: Int) -> Date { calendar.date(byAdding: .day, value: offset, to: wednesday)! }
         func at(_ offset: Int, _ hour: Int, _ minute: Int = 0) -> Date { BCWShared.date(day(offset), minute: hour * 60 + minute) }
         check(BCWShared.weekday(of: wednesday) == 3, "giorno della settimana")
+        // Domenica 25 ottobre 2026 si torna all'ora solare (giornata di 25 ore): le 8:00 restano le 8:00.
+        check(BCWShared.minutes(of: at(4, 8)) == 8 * 60 && BCWShared.minutes(of: at(4, 14, 30)) == 14 * 60 + 30,
+              "orari nel giorno del cambio dell'ora")
+        check(BCWShared.date(day(4), minute: 24 * 60) == day(5), "le 24:00 sono la mezzanotte dopo")
 
         // Regola del giorno predefinito: lezioni dal lunedì al venerdì, 8:00–14:00.
         let school: (Date) -> [TimetableDefaultDay.Span] = { date in

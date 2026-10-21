@@ -37,9 +37,15 @@ nonisolated enum BCWShared {
         return (c.hour ?? 0) * 60 + (c.minute ?? 0)
     }
 
-    /// L'istante di un giorno a un certo minuto.
+    /// L'istante di un giorno a un certo minuto (ora dell'orologio: nei giorni del cambio dell'ora
+    /// le 8:00 restano le 8:00, mentre sommare 480 minuti alla mezzanotte darebbe le 7:00 o le 9:00).
+    /// 24:00 è la mezzanotte successiva.
     static func date(_ day: Date, minute: Int) -> Date {
-        calendar.date(byAdding: .minute, value: minute, to: calendar.startOfDay(for: day)) ?? day
+        let start = calendar.startOfDay(for: day)
+        let minute = min(max(minute, 0), 24 * 60)
+        if minute == 24 * 60 { return calendar.date(byAdding: .day, value: 1, to: start) ?? start }
+        return calendar.date(bySettingHour: minute / 60, minute: minute % 60, second: 0, of: start)
+            ?? start.addingTimeInterval(TimeInterval(minute * 60))
     }
 
     /// Giorno della settimana dell'orario: 1 = lunedì … 7 = domenica.
