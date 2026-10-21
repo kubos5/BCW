@@ -68,8 +68,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   stampa `BCW-SELFTEST PASS/FAIL` ed esce. Sul simulatore: `simctl launch --console-pty booted com.bcw-classeviva.app
   -demoMode YES -BCWTimetableSelfTest YES`.
 - Autotest dei widget (solo DEBUG): `-BCWWidgetSelfTest YES` prova la regola del giorno predefinito dell'orario, le voci
-  della linea temporale, lezione in corso e prossima, i collegamenti `bcw://`, la codifica dell'istantanea e l'App Group;
-  stampa `BCW-WIDGET-SELFTEST PASS/FAIL` ed esce.
+  della linea temporale, lezione in corso e prossima, i collegamenti `bcw://`, la codifica dell'istantanea, l'App Group
+  e le fasi dell'attività in diretta (ore unite, pause, contenuto scaduto, stato sotto i 4 KB); stampa
+  `BCW-WIDGET-SELFTEST PASS/FAIL` ed esce.
 - Simulatori: sono disponibili iOS 26.3 e iOS 27. Lo strumento del simulatore di Claude Code (tocchi, pressioni lunghe,
   screenshot) funziona con il simulatore acceso; per le animazioni registrare con `simctl io … recordVideo`. Quello di iOS 27 appena avviato satura la CPU per minuti e fa
   bloccare `simctl install/launch`: tenerne acceso uno alla volta.
@@ -298,14 +299,64 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   parola sola non va a capo (veniva troncata accanto a un'icona): i titoli prendono tutta la larghezza. Negli accessori
   in linea entrano solo un testo e un'immagine e il sistema taglia la fine: l'ora va prima della materia. Nell'elenco
   dei widget del simulatore le app compaiono solo dopo aver toccato il campo di ricerca.
-- Niente attività in diretta (Live Activity): senza notifiche push il contenuto si aggiorna solo con l'app aperta e la
-  lezione mostrata resterebbe vecchia; il widget "Lezione in corso" nella schermata di blocco copre lo stesso bisogno.
+- Attività in diretta "Orario di oggi" (richiesta dell'utente, ottobre 2026: la card "Adesso" dell'Orario con la
+  materia attuale e la barra, stile Material adattato alla Dynamic Island e alla schermata di blocco). Tipi in
+  `Shared/LiveActivity/TimetableActivity.swift` (`TimetableActivityAttributes` con `dayKey` e `scheduledStart`,
+  `TimetableActivityState`, `TimetableActivityPlan`), viste in `Shared/LiveActivity/TimetableActivityViews.swift`,
+  configurazione in `BCWWidgets/TimetableLiveActivity.swift`, gestione nell'app in `Store/LiveActivityManager.swift`
+  (`AppModel.liveActivities`). `NSSupportsLiveActivities` e l'identificatore `com.bcw.app.liveactivity` in
+  `Config/Info-iOS.plist`.
+- Fasi (`TimetableActivityPlan`, dall'istantanea dei widget, ore uguali di seguito unite): prima dell'inizio (da
+  mezz'ora prima, conto alla rovescia), lezione, pausa tra due lezioni (conto alla rovescia, aula della successiva),
+  lezioni finite (contenuto finale per 10 minuti, poi l'attività si chiude). Le verifiche si segnano sempre
+  (`WidgetSnapshot.Event.hasTest`), anche con "Mostra le verifiche" spenta.
+- Aggiornamenti senza server: `WidgetExporter` passa ogni istantanea al gestore (avvio, ritorno nell'app, `refreshAll`,
+  orario cambiato, mezzanotte), che allinea le attività a quelle volute (`reconcile`: aggiorna, chiude, richiede) e,
+  con l'app in esecuzione, si risveglia a ogni passaggio di fase. In secondo piano un `BGAppRefreshTask` programmato al
+  passaggio successivo (sul simulatore `submit` dà sempre l'errore 1, non disponibile: non verificabile).
+- Lo stato porta fino a 4 fasi con `staleDate` alla fine della prima: scaduto, la vista mostra la fase in corso al
+  momento del disegno (`TimetableActivityState.phase(isStale:)`). Verificato con l'app chiusa: il passaggio arriva
+  puntuale, ma iOS ridisegna una volta sola, quindi senza un altro aggiornamento alla fine della seconda fase il conto
+  alla rovescia resta a 0:00. `liveactivitiesd` segna scaduta un'attività non prima di 120 s dall'ultimo aggiornamento
+  (visto nei log): nelle prove servono fasi più lunghe di 2 minuti. L'attività finisce solo se l'app gira dopo
+  l'ultima lezione (altrimenti la chiude iOS dopo 8 ore).
+- Avvio programmato (iOS 26, `request(…start:)` con `alertConfiguration` obbligatoria): il prossimo giorno di scuola
+  (e oggi, prima della finestra) resta `pending` e parte da solo all'ora indicata anche con l'app chiusa, con un avviso
+  (materia, ora, aula). Verificato: parte con ~2 s di ritardo e iOS apre l'app in background ("Activity started"),
+  che subito allinea il contenuto. Un'attività in attesa con un altro inizio (orario cambiato) viene rifatta
+  (`scheduledStart` negli attributi).
+- Avvio e fermata: Impostazioni › Orario › "Attività in diretta" (`Preferences.liveActivities`, di serie sì, solo su
+  questo dispositivo); pulsante a icona nella `TimetableNowCard` (pieno quando è in corso). Fermata a mano o tolta
+  dalla schermata di blocco, quel giorno non riparte da sola (`liveActivityStoppedDay`); avviata a mano resta anche
+  senza avvio automatico. Senza permesso (`areActivitiesEnabled`) l'interruttore è spento e c'è il collegamento alle
+  Impostazioni di iOS, il pulsante della card sparisce.
+- Viste: schermata di blocco = scheda sul contenitore della superficie con il colore della materia come accento
+  (forma con la sigla, etichetta, titolo, aula e docente, tempo, barra con gli orari, pillola della successiva);
+  Dynamic Island sempre con i ruoli scuri: compatta = forma con l'iniziale e tempo, minima = anello di avanzamento con
+  l'iniziale, espansa = etichetta e posizione ai lati della fotocamera, sotto la scheda più compatta. Niente
+  `minimumScaleFactor` nell'isola (tagliava invece di rimpicciolire). Sul simulatore la schermata di blocco passa
+  sempre `colorScheme` scuro (testo bianco su questo sfondo), anche in tema chiaro: la scheda chiara si vede solo
+  nella galleria. `simctl io screenshot` non disegna la Dynamic Island: usare lo screenshot dello strumento del
+  simulatore. Dopo due LOCK il simulatore può restare nello schermo sempre acceso (cifre "1:--", i tocchi non lo
+  svegliano): un terzo LOCK lo sveglia.
+- Altre attività: nessuna. Le verifiche del giorno sono già nella stessa attività; un conto alla rovescia verso una
+  verifica di un altro giorno non sta nelle 8 ore di un'attività (c'è il widget "Prossima verifica").
 - Prove (solo DEBUG): `-BCWWidgetGallery YES` apre nell'app la galleria dei widget (stesse viste, dimensioni reali) con
   `-BCWWidgetGalleryScheme light|dark`, `-BCWWidgetGalleryLook fullColor|accented|vibrant`,
   `-BCWWidgetGalleryKind timetable|now|agenda|average|nextTest`, `-BCWWidgetGallerySource app|sample|signedOut|empty`
   (stati vuoti) e `-BCWNowMinute N` (i timer seguono comunque l'ora vera). `-BCWWidgetNowLesson YES` sposta gli orari
   dell'istantanea perché la prima lezione di oggi sia cominciata da 20 minuti: così i widget veri mostrano la lezione
   in corso a qualsiasi ora (rilanciare l'app senza l'argomento per tornare ai dati veri).
+  `-BCWWidgetGalleryKind live` mostra solo l'attività in diretta (schermata di blocco e isola, tutte le fasi).
+- Prove dell'attività (solo DEBUG): `-BCWLiveActivityDemo YES` la avvia con un orario finto attorno a adesso (prima
+  lezione tra N secondi, lezioni da 2N, un intervallo da N, verifica alla seconda; `-BCWLiveActivitySeconds N`, 60 di
+  serie, almeno 130 per vedere i passaggi a tempo), `-BCWLiveActivityDemoStart S` la programma tra S secondi (poi
+  chiudere l'app). La prova resta salvata (`BCWLiveActivityDemoPlan`) finché non finisce, perché iOS riapre l'app
+  senza argomenti; il pulsante della card la ferma come quella vera, e `-BCWLiveActivityDemoPlan '()' -liveActivities NO`
+  chiude tutto (prima di lasciare il simulatore condiviso: un'attività in attesa parte anche giorni dopo). I messaggi `BCW-LIVE` nella console dicono cosa
+  viene richiesto, aggiornato e chiuso. Isola espansa: pressione lunga (`touch_path` di ~1 s) sull'isola con l'app in
+  secondo piano. La presentazione minima non si vede sul simulatore: con due attività della stessa app l'isola resta
+  compatta (verificato) e non c'è un'altra app con attività (niente Orologio); si vede nella galleria.
 
 ## Prestazioni
 - Eventi, assenze e giorni del calendario per giorno: usare `model.events(on:)`, `absences(on:)`, `calendarStatus(on:)`,
