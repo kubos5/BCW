@@ -15,6 +15,9 @@ struct DashboardView: View {
     @State private var selectedDay = Date().adding(days: DashboardView.initialOffset).startOfDay
     /// Larghezza della barra di navigazione, per capire se il titolo esteso ci sta.
     @State private var barWidth: CGFloat = 0
+    /// Ultima larghezza misurata, non osservata: sull'iPad largo il titolo non si abbrevia, quindi
+    /// ridimensionando la finestra la pagina non si ricalcola a ogni passo.
+    @State private var measuredWidth = UnobservedValue<CGFloat>(0)
     /// "Domani" nella barra (vedi `onChange` del giorno scelto).
     @State private var showsTomorrow = false
     /// Ricerca aperta dalla barra in alto (senza Liquid Glass).
@@ -73,8 +76,15 @@ struct DashboardView: View {
                         .zIndex(1)
                 }
             }
-            // Per abbreviare il titolo quando non entra.
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { barWidth = $0 }
+            // Per abbreviare il titolo quando non entra (solo con il layout del telefono: sull'iPad
+            // largo il titolo è "Dashboard").
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                measuredWidth.value = width
+                if windowClass == .compact { barWidth = width }
+            }
+            .onChange(of: windowClass) { _, windowClass in
+                if windowClass == .compact { barWidth = measuredWidth.value }
+            }
             .onChange(of: selectedDay, initial: true) { _, day in
                 guard showsTomorrow == day.isTomorrow else { return }
                 withAnimation(Motion.spatial) { showsTomorrow = !day.isTomorrow }
