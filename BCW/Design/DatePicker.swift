@@ -288,6 +288,11 @@ struct M3TimePickerSheet: View {
                     .frame(maxWidth: .infinity)
                     .transition(.opacity)
             }
+            if WindowClass.isPad {
+                // Sull'iPad la finestra resta alta come con il quadrante anche inserendo i numeri:
+                // i pulsanti restano in fondo.
+                Spacer(minLength: 0)
+            }
             HStack(spacing: 4) {
                 IconButton(typing ? "schedule" : "keyboard",
                            label: typing ? "Scegli dal quadrante" : "Inserisci con la tastiera") {
@@ -312,6 +317,10 @@ struct M3TimePickerSheet: View {
         .background(Theme.surfaceContainerHigh.ignoresSafeArea())
         .presentationBackground(Theme.surfaceContainerHigh)
         .modifier(PickerPresentation(height: typing ? 260 : 540))
+        #if DEBUG
+        // Script di prova (`-BCWScript`): passa ai campi da tastiera.
+        .debugAction("timetyping") { withAnimation(Motion.spatial) { setTyping(true) } }
+        #endif
         .presentationDragIndicator(.hidden)
         .sensoryFeedback(.selection, trigger: hour * 60 + minute)
     }
