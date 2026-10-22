@@ -1,7 +1,6 @@
 import ActivityKit
 import BackgroundTasks
 import Foundation
-import UIKit
 
 /// Avvia, aggiorna e chiude l'attività in diretta "Orario di oggi" (`TimetableActivityAttributes`),
 /// senza server: tutto parte dall'app.
@@ -28,13 +27,8 @@ final class LiveActivityManager {
     /// Dopo l'ultima lezione "Lezioni finite" resta per poco nella schermata di blocco.
     private static let finishedLinger: TimeInterval = 10 * 60
 
-    /// Le attività in diretta ci sono solo sull'iPhone: sull'iPad iOS non le mostra (niente schermata
-    /// di blocco né Dynamic Island per loro), quindi impostazione e pulsante della card non compaiono.
-    static let isSupported = UIDevice.current.userInterfaceIdiom == .phone
-
     /// iOS permette le attività in diretta di BCW (Impostazioni di iOS › BCW).
-    private(set) var areActivitiesEnabled = LiveActivityManager.isSupported
-        && ActivityAuthorizationInfo().areActivitiesEnabled
+    private(set) var areActivitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
     /// L'attività di oggi è in corso (per il pulsante della card "Adesso").
     private(set) var isRunningToday = false
 
@@ -63,7 +57,7 @@ final class LiveActivityManager {
         self.model = model
         Task { [weak self] in
             for await enabled in ActivityAuthorizationInfo().activityEnablementUpdates {
-                self?.areActivitiesEnabled = enabled && LiveActivityManager.isSupported
+                self?.areActivitiesEnabled = enabled
                 self?.sync()
             }
         }

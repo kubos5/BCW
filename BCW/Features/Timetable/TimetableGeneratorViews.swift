@@ -225,8 +225,10 @@ private struct LiveActivitySettingsGroup: View {
 
     var body: some View {
         let live = model.liveActivities
+        // L'iPad non ha la Dynamic Island: l'attività sta solo nella schermata di blocco.
+        let places = WindowClass.isPad ? "nella schermata di blocco" : "nella schermata di blocco e nella Dynamic Island"
         ListGroup("Schermata di blocco", footer: live.areActivitiesEnabled
-            ? "Nei giorni con lezioni la lezione in corso, il tempo che manca e la successiva restano nella schermata di blocco e nella Dynamic Island, da mezz'ora prima della prima lezione alla fine dell'ultima. Si avvia e si ferma anche a mano dalla scheda in cima all'orario di oggi. Vale solo su questo dispositivo."
+            ? "Nei giorni con lezioni la lezione in corso, il tempo che manca e la successiva restano \(places), da mezz'ora prima della prima lezione alla fine dell'ultima. Si avvia e si ferma anche a mano dalla scheda in cima all'orario di oggi. Vale solo su questo dispositivo."
             : "Le attività in diretta di BCW sono spente nelle Impostazioni di iOS (BCW › Attività in diretta).") {
             ToggleRow("Attività in diretta", subtitle: "Si avvia da sola nei giorni di lezione", icon: "lockClock",
                       isOn: Bindable(model.preferences).liveActivities)
@@ -259,10 +261,7 @@ struct TimetableSettingsSection: View {
             ToggleRow("Mostra le verifiche nella lista", icon: "test", isOn: Bindable(model.preferences).timetableShowsTests)
         }
 
-        // Sull'iPad le attività in diretta non ci sono.
-        if LiveActivityManager.isSupported {
-            LiveActivitySettingsGroup()
-        }
+        LiveActivitySettingsGroup()
 
         ListGroup("Backup dell'orario", footer: "\(model.isCloud ? "L'orario di ogni account abbinato si sincronizza con il tuo account BCW." : "L'orario è salvato solo su questo dispositivo, separato per ogni account.") Il backup contiene eventi, colori, palette, note, verifiche segnate e file allegati; importandolo sostituisce l'orario attuale. È compatibile con la versione web di BCW.") {
             ButtonRow("Esporta un backup dell'orario", icon: "upload") { export() }
