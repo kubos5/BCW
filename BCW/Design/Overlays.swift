@@ -102,6 +102,7 @@ private struct OverlayHostModifier: ViewModifier {
 
 private struct OverlayLayer: View {
     @Bindable var host: OverlayHost
+    @Environment(\.windowClass) private var windowClass
 
     var body: some View {
         GeometryReader { proxy in
@@ -127,7 +128,8 @@ private struct OverlayLayer: View {
                 if let toast = host.toast {
                     ToastView(toast: toast)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        .padding(.bottom, 96)
+                        // Sopra la barra in basso; sull'iPad largo (senza barra in basso) vicino al fondo.
+                        .padding(.bottom, windowClass == .regular ? 24 : 96)
                         .padding(.horizontal, 12)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .allowsHitTesting(false)

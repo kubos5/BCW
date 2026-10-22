@@ -45,6 +45,7 @@ struct GradeBookView: View {
     @State private var period: Int?
     @State private var subjectFilter: Int?
     @State private var expanded: Set<Int> = []
+    @Environment(\.pageGutter) private var gutter
 
     private var filteredGrades: [Grade] {
         book.grades(in: period)
@@ -95,7 +96,7 @@ struct GradeBookView: View {
 
     private var sectionTabs: some View {
         PrimaryTabs(selection: $section, tabs: Section.allCases.map { ($0, $0.title, nil) })
-            .padding(.horizontal, -16)
+            .padding(.horizontal, -gutter)
     }
 
     @ViewBuilder

@@ -2,9 +2,13 @@ import SwiftUI
 
 struct YouView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.appNavigation) private var navigation
+    @Environment(\.windowClass) private var windowClass
     @State private var switchingAccount = false
     @State private var showingSettings = false
     @State private var showingAccount = false
+    /// Sezione aperta nella pila (finestra dell'iPad tornata stretta con la sezione aperta).
+    @State private var openedSection: AppSection?
     #if DEBUG
     /// Per le prove: `-BCWOpenPage bacheca` apre una pagina di Tu all'avvio (vedi `debugPage`).
     @State private var debugPage: String?
@@ -68,14 +72,31 @@ struct YouView: View {
             .themedBackground()
             .refreshable { await model.refreshAll() }
             .pageChrome("Tu", style: .inline) {
-                BarButton("Impostazioni", icon: "gear") { showingSettings = true }
+                // Sull'iPad largo senza Liquid Glass l'ingranaggio è nella barra superiore.
+                if ThemeStore.shared.liquidGlass || windowClass == .compact {
+                    BarButton("Impostazioni", icon: "gear") { showingSettings = true }
+                }
             }
             .navigationDestination(isPresented: $showingSettings) { SettingsView() }
             .navigationDestination(isPresented: $showingAccount) { AccountView() }
+            .navigationDestination(item: $openedSection) { section in section.destination }
+            // Impostazioni dalla barra superiore o dalla barra laterale dell'iPad.
+            .onChange(of: navigation?.openSettings ?? false, initial: true) { _, open in
+                guard open else { return }
+                navigation?.openSettings = false
+                showingSettings = true
+            }
+            .onChange(of: navigation?.pendingSection, initial: true) { _, section in
+                guard let section else { return }
+                navigation?.pendingSection = nil
+                openedSection = section
+            }
             #if DEBUG
             .navigationDestination(item: $debugPage) { page in debugDestination(page) }
             .task {
                 if debugPage == nil, let page = UserDefaults.standard.string(forKey: "BCWOpenPage") {
+                    // Sull'iPad largo le sezioni si scelgono nella barra di navigazione (`MainTabView`).
+                    if windowClass == .regular && AppSection(debugKey: page) != nil { return }
                     if page == "cambia-account" { switchingAccount = true } else { debugPage = page }
                 }
             }

@@ -4,18 +4,46 @@ import SwiftUI
 /// Cerca); altrimenti la barra di navigazione di Material 3 con quattro destinazioni (64 punti,
 /// `surface-container`, indicatore a pillola 56 × 32 dietro l'icona della scheda aperta) e la
 /// ricerca nella barra in cima alla Dashboard.
+///
+/// Sull'iPad con la finestra larga (`WindowClass.regular`) le sezioni di Tu sono destinazioni a
+/// sé: senza Liquid Glass nella barra di navigazione laterale (`NavigationRail`), con la barra
+/// superiore della ricerca e la pagina in un pannello (`WideShell.swift`); con Liquid Glass nella
+/// barra laterale di sistema (`.sidebarAdaptable`).
+/// La `TabView` è una sola e sta sempre nella stessa posizione: barra superiore e barra laterale
+/// sono elementi facoltativi accanto a lei, così ruotando, ridimensionando la finestra o
+/// cambiando Liquid Glass pile di navigazione, giorni scelti e pagine aperte restano.
 struct MainTabView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.windowClass) private var windowClass
+    @Environment(\.railExpands) private var railExpands
     @State private var selection: AppTab = MainTabView.initialTab
+    /// Ultima scheda prima della ricerca (iPad largo senza Liquid Glass): la X della ricerca ci torna.
+    @State private var lastSelection: AppTab = .dashboard
     @State private var searchQuery = ""
+    @FocusState private var searchFocused: Bool
     /// Incrementato toccando di nuovo la scheda già aperta.
     @State private var reselections: [AppTab: Int] = [:]
     @State private var switchingAccount = false
     /// Una pagina può nascondere la barra delle schede (es. la modifica dell'orario).
     @State private var chrome = TabChrome()
+    @State private var navigation = AppNavigation()
+    /// Barra di navigazione ridotta dall'utente (solo dove può restare espansa, da 1100 punti).
+    @AppStorage("railCollapsed") private var railCollapsed = false
+    /// Barra di navigazione espansa aperta sopra il pannello (finestre sotto i 1100 punti).
+    @State private var railOverlayOpen = false
+    #if DEBUG
+    @State private var consumedDebugSection = false
+    #endif
 
-    enum AppTab: Hashable, CaseIterable {
+    enum AppTab: Hashable {
         case dashboard, timetable, grades, you, search
+        /// Sezione di Tu come destinazione a sé (solo sull'iPad).
+        case section(AppSection)
+
+        /// Le quattro destinazioni principali.
+        static let mainTabs: [AppTab] = [.dashboard, .timetable, .grades, .you]
+        /// Schede della barra di sistema, nell'ordine (per le icone piene e la pressione su Tu).
+        static let barTabs: [AppTab] = [.dashboard, .timetable, .grades, .you, .search]
 
         var title: String {
             switch self {
@@ -24,7 +52,14 @@ struct MainTabView: View {
             case .grades: "Voti"
             case .you: "Tu"
             case .search: "Cerca"
+            case let .section(section): section.title
             }
+        }
+
+        /// Etichetta della barra di navigazione ridotta.
+        var shortTitle: String {
+            if case let .section(section) = self { return section.shortTitle }
+            return title
         }
 
         var icon: String {
@@ -34,6 +69,7 @@ struct MainTabView: View {
             case .grades: "grades"
             case .you: "you"
             case .search: "search"
+            case let .section(section): section.icon
             }
         }
 
@@ -44,6 +80,7 @@ struct MainTabView: View {
             case .grades: "gradesFill"
             case .you: "youFill"
             case .search: "search"
+            case let .section(section): section.icon
             }
         }
     }
@@ -62,11 +99,153 @@ struct MainTabView: View {
         return .dashboard
     }
 
+    private var isRegular: Bool { windowClass == .regular }
+
+    /// La barra di navigazione resta espansa accanto al pannello.
+    private var railPinned: Bool { railExpands && !railCollapsed }
+
     var body: some View {
+        let glass = ThemeStore.shared.liquidGlass
+        let wide = isRegular && !glass
+        let railWidth = railPinned ? WideShellMetrics.railExpanded : WideShellMetrics.railCollapsed
+        VStack(spacing: 0) {
+            if wide {
+                WideTopBar(railWidth: railWidth, railCollapsed: !railPinned && !railOverlayOpen,
+                           query: $searchQuery, focus: $searchFocused, isSearching: selection == .search,
+                           toggleRail: toggleRail, closeSearch: closeSearch,
+                           openSettings: openSettings, switchAccount: { switchingAccount = true })
+            }
+            HStack(spacing: 0) {
+                if wide {
+                    NavigationRail(expanded: railPinned, selection: selection, select: selectFromRail,
+                                   longPressYou: { switchingAccount = true })
+                }
+                // Sempre qui, mai dentro rami diversi: cambiando shell la `TabView` resta la stessa.
+                tabs
+                    .clipShape(.rect(cornerRadius: wide ? Theme.radii.xl : 0, style: .continuous))
+                    .padding(.trailing, wide ? WideShellMetrics.panelInset : 0)
+                    .padding(.bottom, wide ? WideShellMetrics.panelInset : 0)
+            }
+            .overlay(alignment: .leading) {
+                if wide && railOverlayOpen && !railPinned {
+                    railOverlay
+                }
+            }
+        }
+        // Il pannello arriva fino a 12 punti dal fondo dello schermo, anche sotto l'indicatore della Home.
+        .ignoresSafeArea(.container, edges: wide ? .bottom : [])
+        .background((wide ? Theme.surfaceContainer : Theme.background).ignoresSafeArea())
+        .environment(\.tabChrome, chrome)
+        .environment(\.appNavigation, navigation)
+        .environment(\.pageGutter, isRegular ? 24 : 16)
+        // La barra sta sopra le schede: lo spazio che occupa lo riserva ogni pagina (`pageChrome`),
+        // perché né la `TabView` né le pile di navigazione passano il margine di un `safeAreaInset`.
+        .overlay(alignment: .bottom) {
+            if !glass && !isRegular && !chrome.hidesBar {
+                M3NavigationBar(selection: selection, badge: model.unreadNoticesCount) { tab in
+                    tabSelection.wrappedValue = tab
+                } longPress: { tab in
+                    if tab == .you { switchingAccount = true }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .ignoresSafeArea(.keyboard)
+            }
+        }
+        .animation(Motion.spatial, value: chrome.hidesBar)
+        // Tenendo premuta la scheda Tu si cambia account al volo.
+        .background {
+            if glass && !isRegular {
+                TabBarItemLongPress(index: 3) { switchingAccount = true }
+                TabBarSelectedImages(names: AppTab.barTabs.map(\.selectedIcon))
+            }
+        }
+        .sheet(isPresented: $switchingAccount) {
+            AccountSwitcherSheet()
+        }
+        // Collegamenti dei widget: la scheda; il giorno lo sceglie la scheda stessa.
+        .onChange(of: model.openedLink, initial: true) { _, link in
+            switch link {
+            case .dashboard: selection = .dashboard
+            case .timetable: selection = .timetable
+            case .grades:
+                selection = .grades
+                model.openedLink = nil
+            case nil: break
+            }
+        }
+        // Senza Liquid Glass la scheda Cerca non è nella barra in basso: si torna alla Dashboard.
+        .onChange(of: glass, initial: true) { _, glass in
+            if !glass && !isRegular && selection == .search { selection = .dashboard }
+            railOverlayOpen = false
+            // La barra laterale di sistema aperta con Liquid Glass resterebbe sopra il pannello.
+            if WindowClass.isPad { applySidebarMode(glass: glass) }
+        }
+        .onChange(of: windowClass, initial: true) { old, new in
+            windowClassChanged(from: old, to: new)
+        }
+        .onChange(of: selection) { old, new in
+            // Scegliendo un'altra destinazione la ricerca generale si chiude.
+            if old == .search && new != .search && wide {
+                searchQuery = ""
+                searchFocused = false
+            }
+        }
+        .onChange(of: searchFocused) { _, focused in
+            // Il campo della barra superiore apre la scheda Cerca.
+            if focused && wide && selection != .search {
+                lastSelection = selection
+                selection = .search
+            }
+        }
+        .onChange(of: navigation.requestedSection) { _, section in
+            guard let section else { return }
+            navigation.requestedSection = nil
+            tabSelection.wrappedValue = .section(section)
+        }
+        #if DEBUG
+        .onChange(of: DebugScript.shared.tab) { _, name in
+            guard let name else { return }
+            DebugScript.shared.tab = nil
+            switch name {
+            case "dashboard": tabSelection.wrappedValue = .dashboard
+            case "timetable": tabSelection.wrappedValue = .timetable
+            case "grades": tabSelection.wrappedValue = .grades
+            case "you": tabSelection.wrappedValue = .you
+            case "search": tabSelection.wrappedValue = .search
+            default: if let section = AppSection(debugKey: name) { tabSelection.wrappedValue = .section(section) }
+            }
+        }
+        .debugAction("settings") { openSettings() }
+        .debugAction("rail") { toggleRail() }
+        .debugAction("search") { searchFocused = true }
+        #endif
+    }
+
+    /// La `TabView` con tutte le schede. Sull'iPad (costante: la struttura non cambia mai a finestra
+    /// aperta) ha lo stile con la barra laterale e le sezioni di Tu, solo nella barra laterale.
+    @ViewBuilder
+    private var tabs: some View {
+        if WindowClass.isPad {
+            tabView
+                .tabViewStyle(.sidebarAdaptable)
+                .tabViewSidebarHeader {
+                    SidebarAccountHeader(model: model) { switchingAccount = true }
+                        .appTheme()
+                }
+                .tabViewSidebarBottomBar {
+                    SidebarBottomActions(model: model, openSettings: openSettings)
+                        .appTheme()
+                }
+        } else {
+            tabView
+        }
+    }
+
+    private var tabView: some View {
         let glass = ThemeStore.shared.liquidGlass
         // Una sola `TabView` per entrambi gli aspetti: cambiando Liquid Glass nelle Impostazioni
         // le schede (e le pagine aperte) restano dove sono, cambia solo la barra.
-        TabView(selection: tabSelection) {
+        return TabView(selection: tabSelection) {
             Tab(value: AppTab.dashboard) {
                 DashboardView(reselection: reselections[.dashboard, default: 0])
                     .modifier(MaterialTab(reselection: reselections[.dashboard, default: 0]))
@@ -98,49 +277,50 @@ struct MainTabView: View {
             } label: {
                 tabLabel(.search)
             }
+            // Dopo Cerca, così le schede della barra in basso restano ai loro indici.
+            if WindowClass.isPad {
+                ForEach(AppSection.Group.allCases) { group in
+                    TabSection(group.title) {
+                        ForEach(group.sections) { section in
+                            Tab(value: AppTab.section(section)) {
+                                PlatformNavigationStack { section.destination }
+                                    .modifier(MaterialTab(reselection: reselections[.section(section), default: 0]))
+                            } label: {
+                                tabLabel(.section(section))
+                            }
+                            .tabPlacement(.sidebarOnly)
+                            .badge(section.badge(model))
+                        }
+                    }
+                    // Anche il gruppo: altrimenti la barra delle schede in alto lo mostrava (freccia ›).
+                    .tabPlacement(.sidebarOnly)
+                }
+            }
         }
-        .environment(\.tabChrome, chrome)
         .modifier(SeparateSearchTab())
         .tabBarMinimizeBehavior(glass ? .onScrollDown : .never)
-        // La barra sta sopra le schede: lo spazio che occupa lo riserva ogni pagina (`pageChrome`),
-        // perché né la `TabView` né le pile di navigazione passano il margine di un `safeAreaInset`.
-        .overlay(alignment: .bottom) {
-            if !glass && !chrome.hidesBar {
-                M3NavigationBar(selection: selection, badge: model.unreadNoticesCount) { tab in
-                    tabSelection.wrappedValue = tab
-                } longPress: { tab in
-                    if tab == .you { switchingAccount = true }
+    }
+
+    /// Barra di navigazione espansa sopra il pannello, con il velo (finestre sotto i 1100 punti).
+    private var railOverlay: some View {
+        ZStack(alignment: .leading) {
+            Theme.scrim
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { setRailOverlay(false) }
+                .accessibilityHidden(true)
+            NavigationRail(expanded: true, selection: selection, select: selectFromRail,
+                           longPressYou: { switchingAccount = true })
+                .background {
+                    UnevenRoundedRectangle(bottomTrailingRadius: Theme.radii.l, topTrailingRadius: Theme.radii.l,
+                                           style: .continuous)
+                        .fill(Theme.surfaceContainer)
+                        .shadow(color: Theme.shadow.opacity(0.2), radius: 12, y: 4)
+                        .ignoresSafeArea(edges: .bottom)
                 }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .ignoresSafeArea(.keyboard)
-            }
+                .transition(.move(edge: .leading))
         }
-        .animation(Motion.spatial, value: chrome.hidesBar)
-        // Tenendo premuta la scheda Tu si cambia account al volo.
-        .background {
-            if glass {
-                TabBarItemLongPress(index: 3) { switchingAccount = true }
-                TabBarSelectedImages(names: AppTab.allCases.map(\.selectedIcon))
-            }
-        }
-        .sheet(isPresented: $switchingAccount) {
-            AccountSwitcherSheet()
-        }
-        // Collegamenti dei widget: la scheda; il giorno lo sceglie la scheda stessa.
-        .onChange(of: model.openedLink, initial: true) { _, link in
-            switch link {
-            case .dashboard: selection = .dashboard
-            case .timetable: selection = .timetable
-            case .grades:
-                selection = .grades
-                model.openedLink = nil
-            case nil: break
-            }
-        }
-        // Senza Liquid Glass la scheda Cerca non è nella barra: si torna alla Dashboard.
-        .onChange(of: glass) { _, glass in
-            if !glass && selection == .search { selection = .dashboard }
-        }
+        .transition(.opacity)
     }
 
     /// Etichetta della scheda per la barra di sistema: sempre l'icona vuota; quella piena (la scheda
@@ -163,6 +343,73 @@ struct MainTabView: View {
             selection = tab
         }
     }
+
+    // MARK: Shell larga
+
+    private func selectFromRail(_ tab: AppTab) {
+        tabSelection.wrappedValue = tab
+        if railOverlayOpen { setRailOverlay(false) }
+    }
+
+    /// Pulsante del menu: riduce o espande la barra (da 1100 punti, ricordato), altrimenti apre la
+    /// barra espansa sopra il pannello.
+    private func toggleRail() {
+        if railExpands {
+            withAnimation(Motion.spatial) { railCollapsed.toggle() }
+        } else {
+            setRailOverlay(!railOverlayOpen)
+        }
+    }
+
+    /// Barra laterale di sistema solo con Liquid Glass (`TabSidebar`). La `TabView` può non esistere
+    /// ancora all'avvio: si riprova al giro dopo e dopo un attimo.
+    private func applySidebarMode(glass: Bool) {
+        TabSidebar.setAvailable(glass)
+        DispatchQueue.main.async { TabSidebar.setAvailable(ThemeStore.shared.liquidGlass) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { TabSidebar.setAvailable(ThemeStore.shared.liquidGlass) }
+    }
+
+    private func setRailOverlay(_ open: Bool) {
+        withAnimation(Motion.spatial) { railOverlayOpen = open }
+    }
+
+    private func closeSearch() {
+        searchQuery = ""
+        searchFocused = false
+        if selection == .search { selection = lastSelection == .search ? .dashboard : lastSelection }
+    }
+
+    private func openSettings() {
+        if railOverlayOpen { setRailOverlay(false) }
+        selection = .you
+        navigation.openSettings = true
+    }
+
+    /// Passando alla finestra stretta le sezioni tornano dentro Tu (la sezione aperta sopra il menu
+    /// di Tu) e senza Liquid Glass la ricerca torna nella barra della Dashboard.
+    private func windowClassChanged(from old: WindowClass, to new: WindowClass) {
+        navigation.sectionsAreDestinations = new == .regular && WindowClass.isPad
+        railOverlayOpen = false
+        if new == .compact {
+            if case let .section(section) = selection {
+                selection = .you
+                navigation.pendingSection = section
+            }
+            if selection == .search && !ThemeStore.shared.liquidGlass {
+                selection = lastSelection == .search ? .dashboard : lastSelection
+                searchQuery = ""
+            }
+            searchFocused = false
+        }
+        #if DEBUG
+        // `-BCWOpenPage <sezione>` sull'iPad largo sceglie la sezione nella barra di navigazione.
+        if new == .regular, !consumedDebugSection, let key = UserDefaults.standard.string(forKey: "BCWOpenPage"),
+           let section = AppSection(debugKey: key) {
+            consumedDebugSection = true
+            selection = .section(section)
+        }
+        #endif
+    }
 }
 
 /// Senza Liquid Glass la barra delle schede di sistema è nascosta (c'è quella di Material 3) e le
@@ -170,15 +417,19 @@ struct MainTabView: View {
 private struct MaterialTab: ViewModifier {
     let reselection: Int
     @Environment(\.tabChrome) private var chrome
+    @Environment(\.windowClass) private var windowClass
 
     func body(content: Content) -> some View {
         let glass = ThemeStore.shared.liquidGlass
-        let hidden = chrome?.hidesBar ?? false
+        let regular = windowClass == .regular
+        // Sull'iPad largo la barra di navigazione (laterale o in alto) resta anche in modifica: M3
+        // vieta la barra degli strumenti insieme alla barra in basso, non insieme a quella laterale.
+        let hidden = (chrome?.hidesBar ?? false) && !regular
         content
             .environment(\.tabReselection, glass ? 0 : reselection)
             .toolbarVisibility(glass && !hidden ? .automatic : .hidden, for: .tabBar)
             // Le pagine (dentro le loro pile di navigazione) lasciano lo spazio della barra.
-            .environment(\.bottomBarInset, glass || hidden ? 0 : M3NavigationBar.height)
+            .environment(\.bottomBarInset, glass || hidden || regular ? 0 : M3NavigationBar.height)
     }
 }
 
@@ -193,7 +444,7 @@ private struct M3NavigationBar: View {
     var body: some View {
         HStack(spacing: 0) {
             // La ricerca sta nella barra in cima alla Dashboard, come nelle app Google.
-            ForEach(MainTabView.AppTab.allCases.filter { $0 != .search }, id: \.self) { tab in
+            ForEach(MainTabView.AppTab.mainTabs, id: \.self) { tab in
                 NavigationBarItem(tab: tab, selected: tab == selection, badge: tab == .you ? badge : 0,
                                   select: { select(tab) }, longPress: { longPress(tab) })
             }

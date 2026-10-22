@@ -74,11 +74,19 @@ extension View {
         navigationBarTitleDisplayMode(.inline)
     }
 
-    /// Margini laterali delle pagine.
+    /// Margini laterali delle pagine: 16 punti (24 sull'iPad con la finestra larga).
     func pagePadding() -> some View {
-        padding(.horizontal)
+        modifier(PagePadding())
     }
 
+}
+
+private struct PagePadding: ViewModifier {
+    @Environment(\.pageGutter) private var gutter
+
+    func body(content: Content) -> some View {
+        content.padding(.horizontal, gutter)
+    }
 }
 
 /// Elenco di card in una colonna.
@@ -100,17 +108,19 @@ extension View {
 }
 
 /// Riga di filtri che scorre in orizzontale.
+/// Arriva fino ai bordi della pagina (oltre il margine laterale), allineata al contenuto.
 struct ChipRow<Content: View>: View {
     @ViewBuilder let content: () -> Content
+    @Environment(\.pageGutter) private var gutter
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) { content() }
                 .padding(.vertical, 2)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, gutter)
         }
         .scrollClipDisabled()
-        .padding(.horizontal, -16)
+        .padding(.horizontal, -gutter)
     }
 }
 

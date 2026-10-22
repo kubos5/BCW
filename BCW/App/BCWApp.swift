@@ -86,6 +86,11 @@ struct RootView: View {
         .appTheme()
         .modifier(AppIconFailureReporter())
         .overlayHost()
+        // Classe della finestra (iPad largo o layout dell'iPhone), anche per menu e dialoghi.
+        .modifier(WindowLayoutReader())
+        #if DEBUG
+        .modifier(FakeWindow())
+        #endif
         #if DEBUG
         .fullScreenCover(isPresented: Binding(get: { showsWidgetGallery && model.phase == .signedIn },
                                               set: { showsWidgetGallery = $0 })) {
@@ -97,6 +102,10 @@ struct RootView: View {
         .task {
             // La finestra ora esiste: prende il colore d'accento del tema per i componenti di UIKit.
             Theme.applyTint()
+            #if DEBUG
+            DebugOrientation.applyIfRequested()
+            DebugScript.shared.start()
+            #endif
             model.bootstrap()
             AppIconController.shared.start()
             if model.preferences.useBiometrics && model.phase == .signedIn {

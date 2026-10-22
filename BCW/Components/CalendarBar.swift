@@ -10,7 +10,10 @@ struct CalendarBar: View {
     @Binding var selectedDay: Date
     /// Il mese intero; altrimenti la settimana del giorno scelto.
     var showsMonth = false
+    /// Margine laterale: di serie quello della pagina; 0 nelle colonne laterali dell'iPad.
+    var horizontalPadding: CGFloat?
     let pickDate: () -> Void
+    @Environment(\.pageGutter) private var gutter
 
     private static let weekdaySymbols = ["L", "M", "M", "G", "V", "S", "D"]
 
@@ -45,7 +48,7 @@ struct CalendarBar: View {
                     }
             )
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, horizontalPadding ?? gutter)
         .padding(.bottom, 12)
     }
 

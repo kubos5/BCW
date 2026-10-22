@@ -3,6 +3,7 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.tabChrome) private var tabChrome
+    @Environment(\.windowClass) private var windowClass
     /// Cambia quando si tocca di nuovo la scheda Dashboard (iOS): si torna in cima alla
     /// pagina o, se si è già in cima, alla giornata di domani.
     var reselection = 0
@@ -86,8 +87,17 @@ struct DashboardView: View {
                 }
             }
             .onDisappear { if searching { tabChrome?.hidesBar = false } }
-            .modifier(DashboardChrome(title: title, query: $searchQuery, searching: $searching, focus: $searchFocused) {
-                if showsTomorrow && ThemeStore.shared.liquidGlass {
+            // Sull'iPad largo la ricerca è nella barra superiore della finestra.
+            .onChange(of: windowClass) { _, windowClass in
+                if windowClass == .regular && searching { searching = false }
+            }
+            .modifier(DashboardChrome(title: windowClass == .regular ? "Dashboard" : title, regular: windowClass == .regular,
+                                      query: $searchQuery, searching: $searching, focus: $searchFocused) {
+                let glass = ThemeStore.shared.liquidGlass
+                let regular = windowClass == .regular
+                // Con Liquid Glass sul telefono il giorno è il titolo della barra e "Domani" sta accanto;
+                // altrimenti "Domani" è accanto al giorno in grande.
+                if showsTomorrow && glass && !regular {
                     BarTextButton(title: "Domani") {
                         select(Date().adding(days: 1).startOfDay)
                     }
@@ -95,7 +105,9 @@ struct DashboardView: View {
                     .transition(.scale(scale: 0.6).combined(with: .opacity))
                 }
                 viewMenu
-                if !ThemeStore.shared.liquidGlass {
+                // L'avatar: nella barra di ricerca (Material sul telefono) e, sull'iPad largo con
+                // Liquid Glass, tra le azioni (senza Liquid Glass è nella barra superiore della finestra).
+                if (!glass && !regular) || (glass && regular) {
                     AccountAvatarButton { switchingAccount = true }
                 }
             })
@@ -347,6 +359,8 @@ extension UpcomingDayCard: Equatable {
 /// tornare indietro) e i risultati prendono il posto della pagina.
 private struct DashboardChrome<Actions: View>: ViewModifier {
     let title: String
+    /// iPad con la finestra largo: titolo "Dashboard" (la ricerca è nella barra della finestra).
+    let regular: Bool
     @Binding var query: String
     @Binding var searching: Bool
     var focus: FocusState<Bool>.Binding
@@ -354,7 +368,7 @@ private struct DashboardChrome<Actions: View>: ViewModifier {
     @Environment(\.bottomBarInset) private var bottomBarInset
 
     func body(content: Content) -> some View {
-        if ThemeStore.shared.liquidGlass {
+        if ThemeStore.shared.liquidGlass || regular {
             content.pageChrome(title, style: .inline, actions: actions)
         } else {
             content

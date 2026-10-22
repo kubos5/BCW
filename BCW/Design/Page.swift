@@ -107,16 +107,20 @@ private struct PageChrome<Actions: View>: ViewModifier {
     @Environment(\.isRootPage) private var isRootPage
     @Environment(\.dismiss) private var dismiss
     @Environment(\.bottomBarInset) private var bottomBarInset
+    @Environment(\.windowClass) private var windowClass
 
     func body(content: Content) -> some View {
         if ThemeStore.shared.liquidGlass {
             // Le pagine principali delle schede hanno il titolo grande nella riga dei pulsanti
             // (`.inlineLarge`): solo così toccando di nuovo la scheda il sistema torna in cima con il
             // titolo per intero. Le pagine aperte da un'altra hanno il titolo piccolo al centro.
+            // Sull'iPad largo, con la barra delle schede in alto, né il titolo grande nella riga dei
+            // pulsanti né quello piccolo al centro compaiono (verificato: al centro c'è la barra delle
+            // schede): le pagine principali hanno il titolo grande sotto la barra, come le app di sistema.
             let pushed = showsBack ?? !isRootPage
             content
                 .navigationTitle(title)
-                .toolbarTitleDisplayMode(pushed ? .inline : .inlineLarge)
+                .toolbarTitleDisplayMode(pushed ? .inline : (windowClass == .regular ? .large : .inlineLarge))
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) { actions() }
                 }
@@ -153,6 +157,7 @@ struct TopAppBar<Actions: View>: View {
     var large = false
     var back: (() -> Void)?
     @ViewBuilder let actions: () -> Actions
+    @Environment(\.pageGutter) private var gutter
 
     var body: some View {
         HStack(spacing: 4) {
@@ -175,7 +180,8 @@ struct TopAppBar<Actions: View>: View {
                         .lineLimit(1)
                 }
             }
-            .padding(.leading, back == nil ? 12 : 4)
+            // Il titolo si allinea al contenuto (margine della pagina meno i 4 punti della barra).
+            .padding(.leading, back == nil ? gutter - 4 : 4)
             .opacity(titleShown ? 1 : 0)
             .offset(y: titleShown ? 0 : 6)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -429,6 +435,9 @@ private struct M3SheetPresentation: ViewModifier {
         content
             .background(Theme.surfaceContainerLow.ignoresSafeArea())
             .environment(\.bottomBarInset, 0)
+            // Dentro un foglio si usa il layout del telefono, anche sull'iPad.
+            .environment(\.windowClass, .compact)
+            .environment(\.pageGutter, 16)
             .overlayHost()
             .presentationBackground(Theme.surfaceContainerLow)
             // Angoli del sistema: un raggio fisso varrebbe anche per quelli in basso, che così non

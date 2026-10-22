@@ -348,7 +348,7 @@ struct TimetableView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .padding(.horizontal)
+            .pagePadding()
             .padding(.bottom, 12)
         }
     }

@@ -13,6 +13,7 @@ struct SearchView: View {
 
     private var trimmed: String { query.trimmingCharacters(in: .whitespaces) }
     @FocusState private var fieldFocused: Bool
+    @Environment(\.windowClass) private var windowClass
 
     /// Risultati della ricerca, calcolati una volta per aggiornamento (a ogni lettera digitata):
     /// prima ogni elenco veniva rifiltrato e riordinato più volte, anche una per ogni riga.
@@ -57,7 +58,8 @@ struct SearchView: View {
     private var page: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                if !ThemeStore.shared.liquidGlass && !embedded {
+                // Sull'iPad largo il campo è nella barra superiore della finestra.
+                if !ThemeStore.shared.liquidGlass && !embedded && windowClass == .compact {
                     PageLargeTitle()
                         .padding(.bottom, -4)
                     M3SearchBar(text: $query, prompt: Self.prompt, focus: $fieldFocused)
