@@ -63,6 +63,13 @@ struct YouView: View {
                 if debugPage == nil, let page = UserDefaults.standard.string(forKey: "BCWOpenPage") {
                     // Sull'iPad largo le sezioni si scelgono nella barra di navigazione (`MainTabView`).
                     if windowClass == .regular && AppSection(debugKey: page) != nil { return }
+                    // Sull'iPad largo un pannello delle Impostazioni si apre accanto al loro elenco.
+                    if windowClass == .regular, page.hasPrefix("impostazioni-"),
+                       let pane = SettingsPane(rawValue: String(page.dropFirst(13))) {
+                        navigation?.settingsPane = pane
+                        showingSettings = true
+                        return
+                    }
                     if page == "cambia-account" { switchingAccount = true } else { debugPage = page }
                 }
             }

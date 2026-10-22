@@ -177,6 +177,8 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 final class AppNavigation {
     /// Aprire le Impostazioni nella pila di Tu (`YouView` la consuma e la rimette a `false`).
     var openSettings = false
+    /// Pannello da mostrare aprendo le Impostazioni affiancate (`SettingsView` lo consuma).
+    var settingsPane: SettingsPane?
     /// Sezione da aprire nella pila di Tu (finestra tornata stretta con la sezione aperta).
     var pendingSection: AppSection?
     /// Le sezioni sono destinazioni della barra di navigazione (iPad con la finestra larga): le righe

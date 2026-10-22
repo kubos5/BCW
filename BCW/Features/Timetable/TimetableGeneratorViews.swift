@@ -259,7 +259,10 @@ struct TimetableSettingsSection: View {
             ToggleRow("Mostra le verifiche nella lista", icon: "test", isOn: Bindable(model.preferences).timetableShowsTests)
         }
 
-        LiveActivitySettingsGroup()
+        // Sull'iPad le attività in diretta non ci sono.
+        if LiveActivityManager.isSupported {
+            LiveActivitySettingsGroup()
+        }
 
         ListGroup("Backup dell'orario", footer: "\(model.isCloud ? "L'orario di ogni account abbinato si sincronizza con il tuo account BCW." : "L'orario è salvato solo su questo dispositivo, separato per ogni account.") Il backup contiene eventi, colori, palette, note, verifiche segnate e file allegati; importandolo sostituisce l'orario attuale. È compatibile con la versione web di BCW.") {
             ButtonRow("Esporta un backup dell'orario", icon: "upload") { export() }
