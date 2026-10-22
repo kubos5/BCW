@@ -19,7 +19,7 @@ struct MainTabView: View {
     @State private var selection: AppTab = MainTabView.initialTab
     /// Ultima scheda prima della ricerca (iPad largo senza Liquid Glass): la X della ricerca ci torna.
     @State private var lastSelection: AppTab = .dashboard
-    @State private var searchQuery = ""
+    @State private var searchQuery = MainTabView.initialQuery
     @FocusState private var searchFocused: Bool
     /// Incrementato toccando di nuovo la scheda già aperta.
     @State private var reselections: [AppTab: Int] = [:]
@@ -97,6 +97,15 @@ struct MainTabView: View {
         }
         #endif
         return .dashboard
+    }
+
+    /// Per le prove di sviluppo: `-BCWSearchQuery testo` apre la ricerca con quel testo (con `-BCWTab search`).
+    private static var initialQuery: String {
+        #if DEBUG
+        return UserDefaults.standard.string(forKey: "BCWSearchQuery") ?? ""
+        #else
+        return ""
+        #endif
     }
 
     private var isRegular: Bool { windowClass == .regular }

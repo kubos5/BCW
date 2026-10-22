@@ -72,6 +72,9 @@ struct SearchView: View {
                     if results.isEmpty {
                         EmptyState("Nessun risultato per \"\(trimmed)\"", icon: "search",
                                    description: "Controlla l'ortografia o prova con un'altra ricerca.")
+                    } else if windowClass == .regular {
+                        // Sull'iPad largo i gruppi di risultati stanno in colonne (come la versione web).
+                        AdaptiveColumns(minimum: 360, spacing: 20) { resultGroups(results) }
                     } else {
                         resultGroups(results)
                     }
