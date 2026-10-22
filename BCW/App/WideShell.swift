@@ -228,6 +228,8 @@ private struct RailItem: View {
         .accessibilityLabel(tab.title)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityValue(badge > 0 ? "\(badge)" : "")
+        // La pressione prolungata su Tu anche con VoiceOver.
+        .modifier(OptionalAccessibilityAction(name: "Cambia account", action: longPress))
     }
 
     private var icon: String { selected ? tab.selectedIcon : tab.icon }
@@ -293,6 +295,20 @@ private struct RailItem: View {
         .padding(.bottom, 6)
         .frame(maxWidth: .infinity)
         .contentShape(.rect)
+    }
+}
+
+/// Azione di accessibilità solo se c'è (es. la pressione prolungata su Tu).
+private struct OptionalAccessibilityAction: ViewModifier {
+    let name: String
+    let action: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let action {
+            content.accessibilityAction(named: name, action)
+        } else {
+            content
+        }
     }
 }
 

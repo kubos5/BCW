@@ -267,6 +267,7 @@ struct BarButton: View {
             Label { Text(label) } icon: { Icon(icon) }
         }
         .help(label)
+        .accessibilityLabel(label)
     }
 }
 
@@ -313,6 +314,8 @@ struct BarMenu<Content: View>: View {
             Label { Text(label) } icon: { ThemeStore.shared.liquidGlass ? AnyView(Image.m(icon)) : AnyView(Icon(icon)) }
         }
         .help(label)
+        // Il pulsante mostra solo l'icona: senza, VoiceOver non lo nominava.
+        .accessibilityLabel(label)
     }
 }
 
