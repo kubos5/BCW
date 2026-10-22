@@ -4,9 +4,15 @@ import SwiftUI
 struct NoticeboardView: View {
     private static let searchPrompt = "Cerca nelle comunicazioni"
     @Environment(AppModel.self) private var model
+    @Environment(\.windowClass) private var windowClass
+    @Environment(\.pageGutter) private var gutter
     @State private var search = ""
     @State private var category: String?
     @State private var onlyUnread = false
+    /// iPad largo con la pagina larga almeno 792 punti: elenco e comunicazione affiancati.
+    @State private var isSplit = false
+    /// Comunicazione aperta accanto all'elenco (pagina affiancata).
+    @State private var selected: Notice.ID?
 
     private var categories: [String] {
         Array(Set(model.notices.map(\.category))).sorted()
@@ -20,20 +26,78 @@ struct NoticeboardView: View {
         }
     }
 
-    var body: some View {
-        ScrollView {
-            list
-                .pagePadding()
-                .padding(.bottom, 32)
-        }
-        .tracksPageScroll()
-        .themedBackground()
-        .pageChrome("Bacheca", subtitle: nil, style: .inline)
-        .localSearchable(text: $search, prompt: Self.searchPrompt)
-        .refreshable { await model.loadNotices() }
+    /// Sull'iPad largo il numero delle comunicazioni da leggere sta sotto il titolo.
+    private var subtitle: String? {
+        let unread = model.unreadNoticesCount
+        guard windowClass == .regular, unread > 0 else { return nil }
+        return unread == 1 ? "1 da leggere" : "\(unread) da leggere"
     }
 
-    private var list: some View {
+    var body: some View {
+        // Calcolato una volta per aggiornamento (a ogni lettera della ricerca).
+        let filtered = filtered
+        ZStack {
+            if isSplit {
+                splitContent(filtered)
+            } else {
+                ScrollView {
+                    list(filtered, selectable: false)
+                        .pagePadding()
+                        .padding(.bottom, 32)
+                }
+                .tracksPageScroll()
+                .refreshable { await model.loadNotices() }
+            }
+        }
+        // Sull'iPad largo, da 792 punti di pagina, come la posta: elenco a sinistra e la
+        // comunicazione scelta a destra (come la versione web). Filtri e scelta stanno qui.
+        .widthAtLeast(SplitMetrics.threshold, isOn: $isSplit)
+        #if DEBUG
+        // Script di prova (`-BCWScript`): apre la prima comunicazione nel pannello.
+        .debugAction("notice") { selected = filtered.first?.id }
+        #endif
+        .themedBackground()
+        .pageChrome("Bacheca", subtitle: subtitle, style: .inline)
+        .localSearchable(text: $search, prompt: Self.searchPrompt)
+    }
+
+    /// Elenco a sinistra (scorre per conto suo) e la comunicazione scelta in un pannello.
+    private func splitContent(_ filtered: [Notice]) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            ScrollView {
+                list(filtered, selectable: true)
+                    .padding(.leading, gutter)
+                    .padding(.trailing, SplitMetrics.sideTrailing)
+                    .padding(.top, SplitMetrics.sideTop)
+                    .padding(.bottom, SplitMetrics.bottom)
+            }
+            .scrollIndicators(.hidden)
+            .tracksPageScroll()
+            .scrollsToTopOnReselect()
+            .refreshable { await model.loadNotices() }
+            .frame(width: 380 + gutter + SplitMetrics.sideTrailing)
+
+            ZStack {
+                if let notice = model.notices.first(where: { $0.id == selected }) {
+                    NoticeDetailView(notice: notice, insets: EdgeInsets(top: 24, leading: 28, bottom: 40, trailing: 28))
+                        .id(notice.id)
+                } else {
+                    EmptyState("Nessuna comunicazione aperta", icon: "megaphone",
+                               description: "Scegli una comunicazione dall'elenco per leggerla.")
+                        .padding(24)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Theme.surfaceContainerLow, in: .rect(cornerRadius: Theme.radii.xl, style: .continuous))
+            .clipShape(.rect(cornerRadius: Theme.radii.xl, style: .continuous))
+            .padding(.leading, 4)
+            .padding(.trailing, gutter - 8)
+            .padding(.bottom, gutter - 8)
+        }
+    }
+
+    private func list(_ filtered: [Notice], selectable: Bool) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             PageSearchBar(text: $search, prompt: Self.searchPrompt)
             ChipRow {
@@ -54,13 +118,26 @@ struct NoticeboardView: View {
             } else {
                 ListGroup {
                     ForEach(filtered) { notice in
-                        NavigationLink {
-                            NoticeDetailView(notice: notice)
-                                .pageChrome("", style: .inline)
-                        } label: {
-                            NoticeRow(notice: notice)
+                        if selectable {
+                            // Pagina affiancata: la comunicazione si apre nel pannello accanto.
+                            Button {
+                                guard selected != notice.id else { return }
+                                Haptics.selection()
+                                selected = notice.id
+                            } label: {
+                                NoticeRow(notice: notice)
+                            }
+                            .buttonStyle(ListRowButtonStyle(selected: selected == notice.id))
+                            .accessibilityAddTraits(selected == notice.id ? .isSelected : [])
+                        } else {
+                            NavigationLink {
+                                NoticeDetailView(notice: notice)
+                                    .pageChrome("", style: .inline)
+                            } label: {
+                                NoticeRow(notice: notice)
+                            }
+                            .buttonStyle(.listRow)
                         }
-                        .buttonStyle(.listRow)
                     }
                 }
             }
@@ -114,6 +191,8 @@ private struct NoticeRow: View {
 struct NoticeDetailView: View {
     @Environment(AppModel.self) private var model
     let notice: Notice
+    /// Margini del contenuto (più ampi nel pannello della Bacheca affiancata sull'iPad).
+    var insets = EdgeInsets(top: 4, leading: 16, bottom: 32, trailing: 16)
 
     @State private var detail: NoticeDetail?
     @State private var error: String?
@@ -190,9 +269,7 @@ struct NoticeDetailView: View {
 
                 actions
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 4)
-            .padding(.bottom, 32)
+            .padding(insets)
             .frame(maxWidth: 780, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }

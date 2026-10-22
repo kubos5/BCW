@@ -603,12 +603,14 @@ private struct ScrollToTopOnReselect: ViewModifier {
 
 /// Ricerca dentro una singola pagina (Bacheca, Agenda, Materiale): con Liquid Glass è il campo di
 /// sistema nella barra; altrimenti la pagina mostra la barra di ricerca di Material 3 nel contenuto.
+/// Sull'iPad largo il campo sta sempre nel contenuto (in cima all'elenco, come la versione web).
 struct GlassLocalSearch: ViewModifier {
     @Binding var text: String
     let prompt: String
+    @Environment(\.windowClass) private var windowClass
 
     func body(content: Content) -> some View {
-        if ThemeStore.shared.liquidGlass {
+        if ThemeStore.shared.liquidGlass && windowClass == .compact {
             content.searchable(text: $text, prompt: prompt)
         } else {
             content
@@ -616,13 +618,15 @@ struct GlassLocalSearch: ViewModifier {
     }
 }
 
-/// Barra di ricerca della pagina su iPhone senza Liquid Glass (con Liquid Glass è nella barra).
+/// Barra di ricerca della pagina su iPhone senza Liquid Glass (con Liquid Glass è nella barra) e
+/// sempre sull'iPad largo.
 struct PageSearchBar: View {
     @Binding var text: String
     let prompt: String
+    @Environment(\.windowClass) private var windowClass
 
     var body: some View {
-        if !ThemeStore.shared.liquidGlass {
+        if !ThemeStore.shared.liquidGlass || windowClass == .regular {
             M3SearchBar(text: $text, prompt: prompt)
         }
     }
