@@ -408,9 +408,15 @@ private struct MenuPanel: View {
     var body: some View {
         let anchor = menu.anchor.offsetBy(dx: -origin.x, dy: -origin.y)
         let width = min(max(ideal.width, 200), min(320, container.width - 16))
-        let maxHeight = container.height - 16
+        // Spazio sotto e sopra il pulsante. Se il menu non entra da nessuna parte (elenchi lunghi,
+        // fogli bassi come i moduli dell'iPad) sta dal lato più ampio, alto quanto quello spazio, e
+        // scorre: prima partiva sotto il pulsante alto quanto tutto il contenitore e usciva dal fondo.
+        let spaceBelow = container.height - 8 - (anchor.maxY + 4)
+        let spaceAbove = anchor.minY - 4 - 8
+        let fitsBelow = ideal.height <= spaceBelow
+        let below = fitsBelow || (ideal.height > spaceAbove && spaceBelow >= spaceAbove)
+        let maxHeight = max(below ? spaceBelow : spaceAbove, min(ideal.height, 120))
         let height = min(ideal.height, maxHeight)
-        let below = anchor.maxY + 4 + height <= container.height - 8 || anchor.minY - 4 - height < 8
         let x = menu.alignment == .leading ? anchor.minX : anchor.maxX - width
         let y = below ? anchor.maxY + 4 : anchor.minY - 4 - height
         ZStack(alignment: .topLeading) {
