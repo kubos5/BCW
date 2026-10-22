@@ -250,6 +250,7 @@ struct MenuItem: View {
             }
             .buttonStyle(MenuRowStyle(checked: checked, destructive: role == .destructive))
             .opacity(isEnabled || checked ? 1 : 0.38)
+            .modifier(CheckedMenuItemAnchor(checked: checked))
         }
     }
 
@@ -259,6 +260,21 @@ struct MenuItem: View {
             Text(subtitle)
         } else {
             Text(title)
+        }
+    }
+}
+
+/// La voce scelta di un menu che scorre: il menu si apre con lei in vista (es. 13:00 tra gli orari
+/// a mezz'ora dell'editor dell'evento, invece di 00:00).
+private struct CheckedMenuItemAnchor: ViewModifier {
+    static let id = "BCW.menu.checked"
+    let checked: Bool
+
+    func body(content: Content) -> some View {
+        if checked {
+            content.id(Self.id)
+        } else {
+            content
         }
     }
 }
@@ -430,11 +446,14 @@ private struct MenuPanel: View {
                 Group {
                     // Lo scorrimento solo se serve: dentro uno scorrimento i tocchi brevi arrivano in ritardo.
                     if ideal.height > maxHeight {
-                        ScrollView {
-                            items
-                                .frame(width: width, alignment: .leading)
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                items
+                                    .frame(width: width, alignment: .leading)
+                            }
+                            .scrollBounceBehavior(.basedOnSize)
+                            .onAppear { proxy.scrollTo(CheckedMenuItemAnchor.id, anchor: .center) }
                         }
-                        .scrollBounceBehavior(.basedOnSize)
                     } else {
                         items
                             .frame(width: width, alignment: .leading)
