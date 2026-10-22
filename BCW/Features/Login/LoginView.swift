@@ -138,7 +138,7 @@ struct LoginView: View {
                 choices = []
                 signIn(ident: choice.ident)
             }
-            .presentationDetents([.medium, .large])
+            .m3Detents([.medium, .large])
         }
         .sheet(isPresented: $editingServer) {
             CloudServerSheet()
@@ -495,7 +495,7 @@ struct CloudServerSheet: View {
                          trailing: model.isCloud ? [] : [.confirm("Salva") { save() }])
         }
         .m3Sheet()
-        .presentationDetents([.medium, .large])
+        .m3Detents([.medium, .large])
     }
 
     private func save() {

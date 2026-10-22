@@ -146,5 +146,9 @@ struct TimeField: View {
         .sheet(isPresented: $picking) {
             M3TimePickerSheet(minutes: minutes) { minutes = $0 }
         }
+        #if DEBUG
+        // Script di prova (`-BCWScript`): apre il selettore dell'orario.
+        .debugAction("timepicker") { picking = true }
+        #endif
     }
 }

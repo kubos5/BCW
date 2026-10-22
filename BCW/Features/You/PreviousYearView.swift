@@ -51,6 +51,7 @@ struct PreviousYearView: View {
         .sheet(isPresented: $showingWeb) {
             SafariView(url: ArchiveModel.webURL)
                 .ignoresSafeArea()
+                .m3SheetSizing(.page)
         }
         .task(id: "\(model.sessionID)-\(startYear)") {
             error = nil

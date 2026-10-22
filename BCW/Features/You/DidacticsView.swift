@@ -92,7 +92,7 @@ struct DidacticsView: View {
                 .sheetChrome(item.title, trailing: [.confirm("Fine") { textItem = nil }])
             }
             .m3Sheet()
-            .presentationDetents([.medium, .large])
+            .m3Detents([.medium, .large])
         }
         .task {
             if model.didactics.isEmpty {

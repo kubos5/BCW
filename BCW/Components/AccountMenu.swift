@@ -19,7 +19,7 @@ struct AccountSwitcherSheet: View {
             .sheetChrome("Account", leading: .close { dismiss() })
         }
         .m3Sheet()
-        .presentationDetents([.medium, .large])
+        .m3Detents([.medium, .large])
         // Si chiude appena comincia il cambio, prima della dissolvenza dell'app.
         .onChange(of: model.isChangingSession) { _, changing in if changing { dismiss() } }
         .onChange(of: model.sessionID) { dismiss() }

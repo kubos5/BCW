@@ -77,7 +77,7 @@ struct TimetableGeneratorSheet: View {
                 #endif
             }
         }
-        .m3Sheet()
+        .m3Sheet(size: .page)
     }
 
     private var hoursFooter: String {

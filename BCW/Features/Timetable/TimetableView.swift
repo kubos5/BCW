@@ -170,10 +170,18 @@ struct TimetableView: View {
         #if DEBUG
         // Per gli screenshot di sviluppo: `-BCWTimetableEditing YES` apre la modalità di modifica.
         if UserDefaults.standard.bool(forKey: "BCWTimetableEditing") { isEditing = true }
-        // `-BCWTimetableSheet generator|hidden` apre il generatore o le verifiche nascoste.
+        // `-BCWTimetableSheet generator|hidden|date|editor|detail` apre il generatore, le verifiche
+        // nascoste, il selettore della data, l'editor di un evento nuovo o il dettaglio del primo evento.
         switch UserDefaults.standard.string(forKey: "BCWTimetableSheet") {
         case "generator": showingGenerator = true
         case "hidden": showingHiddenTests = true
+        case "date": pickingDate = true
+        case "editor": editor = TimetableEditorRequest(weekday: Date().timetableWeekday)
+        case "detail":
+            let day = Date().adding(days: UserDefaults.standard.integer(forKey: "BCWTimetableDay")).startOfDay
+            if let entry = store.entries(on: day).first(where: { !$0.isBreak }) {
+                detail = TimetableDetailRequest(entryID: entry.id, day: day)
+            }
         default: break
         }
         // `-BCWTimetableDay N` apre l'orario N giorni dopo oggi (come argomento solo valori positivi).

@@ -464,7 +464,7 @@ struct PaletteSeriesSheet: View {
                 PaletteEditor(palette: palette)
             }
         }
-        .m3Sheet()
+        .m3Sheet(size: .page)
     }
 
     /// Un tocco aggiunge o toglie un evento.

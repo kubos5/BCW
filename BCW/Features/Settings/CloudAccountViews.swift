@@ -141,7 +141,7 @@ struct CloudPasswordSheet: View {
                          trailing: [.confirm("Salva", disabled: isSaving || current.isEmpty || new.isEmpty) { save() }])
         }
         .m3Sheet()
-        .presentationDetents([.medium, .large])
+        .m3Detents([.medium, .large])
     }
 
     private func save() {
@@ -210,7 +210,7 @@ struct CloudDeleteSheet: View {
             }
         }
         .m3Sheet()
-        .presentationDetents([.medium, .large])
+        .m3Detents([.medium, .large])
     }
 
     private func delete() {

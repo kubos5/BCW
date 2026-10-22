@@ -348,9 +348,55 @@ extension View {
     }
 
     /// Aspetto dei fogli di Material 3: sfondo `surface-container-low`, angoli del sistema (in basso
-    /// seguono quelli dello schermo).
-    func m3Sheet() -> some View {
-        modifier(M3SheetPresentation())
+    /// seguono quelli dello schermo). Sull'iPad il foglio è centrato, della misura indicata.
+    func m3Sheet(size: M3SheetSize = .form) -> some View {
+        modifier(M3SheetPresentation(size: size))
+    }
+
+    /// Misura di un foglio sull'iPad (sull'iPhone non cambia nulla: il foglio sale dal basso).
+    func m3SheetSizing(_ size: M3SheetSize) -> some View {
+        modifier(M3SheetSizing(size: size))
+    }
+
+    /// Rilevamenti di un foglio, solo sull'iPhone: sull'iPad il foglio è centrato con la sua misura
+    /// (`m3Sheet(size:)`) e un rilevamento medio lo accorciava lasciandolo in basso.
+    func m3Detents(_ detents: Set<PresentationDetent>) -> some View {
+        modifier(M3Detents(detents: detents))
+    }
+}
+
+/// Misura dei fogli sull'iPad.
+enum M3SheetSize {
+    /// Modulo centrato (editor, accesso, account).
+    case form
+    /// Quasi tutta la finestra (generatore dell'orario, verifiche nascoste, palette, pagine web).
+    case page
+}
+
+private struct M3SheetSizing: ViewModifier {
+    let size: M3SheetSize
+
+    func body(content: Content) -> some View {
+        if WindowClass.isPad {
+            switch size {
+            case .form: content.presentationSizing(.form)
+            case .page: content.presentationSizing(.page)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+private struct M3Detents: ViewModifier {
+    let detents: Set<PresentationDetent>
+
+    func body(content: Content) -> some View {
+        if WindowClass.isPad {
+            content
+        } else {
+            content.presentationDetents(detents)
+        }
     }
 }
 
@@ -478,6 +524,8 @@ struct SheetBar: View {
 }
 
 private struct M3SheetPresentation: ViewModifier {
+    let size: M3SheetSize
+
     func body(content: Content) -> some View {
         content
             .background(Theme.surfaceContainerLow.ignoresSafeArea())
@@ -489,7 +537,9 @@ private struct M3SheetPresentation: ViewModifier {
             .presentationBackground(Theme.surfaceContainerLow)
             // Angoli del sistema: un raggio fisso varrebbe anche per quelli in basso, che così non
             // seguirebbero più la curva dello schermo.
-            .presentationDragIndicator(.visible)
+            // Sull'iPad il foglio è centrato e non si trascina: niente maniglia.
+            .presentationDragIndicator(WindowClass.isPad ? .hidden : .visible)
+            .m3SheetSizing(size)
     }
 }
 
