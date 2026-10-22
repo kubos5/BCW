@@ -107,34 +107,7 @@ struct MainTabView: View {
     var body: some View {
         let glass = ThemeStore.shared.liquidGlass
         let wide = isRegular && !glass
-        let railWidth = railPinned ? WideShellMetrics.railExpanded : WideShellMetrics.railCollapsed
-        VStack(spacing: 0) {
-            if wide {
-                WideTopBar(railWidth: railWidth, railCollapsed: !railPinned && !railOverlayOpen,
-                           query: $searchQuery, focus: $searchFocused, isSearching: selection == .search,
-                           toggleRail: toggleRail, closeSearch: closeSearch,
-                           openSettings: openSettings, switchAccount: { switchingAccount = true })
-            }
-            HStack(spacing: 0) {
-                if wide {
-                    NavigationRail(expanded: railPinned, selection: selection, select: selectFromRail,
-                                   longPressYou: { switchingAccount = true })
-                }
-                // Sempre qui, mai dentro rami diversi: cambiando shell la `TabView` resta la stessa.
-                tabs
-                    .clipShape(.rect(cornerRadius: wide ? Theme.radii.xl : 0, style: .continuous))
-                    .padding(.trailing, wide ? WideShellMetrics.panelInset : 0)
-                    .padding(.bottom, wide ? WideShellMetrics.panelInset : 0)
-            }
-            .overlay(alignment: .leading) {
-                if wide && railOverlayOpen && !railPinned {
-                    railOverlay
-                }
-            }
-        }
-        // Il pannello arriva fino a 12 punti dal fondo dello schermo, anche sotto l'indicatore della Home.
-        .ignoresSafeArea(.container, edges: wide ? .bottom : [])
-        .background((wide ? Theme.surfaceContainer : Theme.background).ignoresSafeArea())
+        shell
         .environment(\.tabChrome, chrome)
         .environment(\.appNavigation, navigation)
         .environment(\.pageGutter, isRegular ? 24 : 16)
@@ -219,6 +192,46 @@ struct MainTabView: View {
         .debugAction("rail") { toggleRail() }
         .debugAction("search") { searchFocused = true }
         #endif
+    }
+
+    /// Sull'iPhone la `TabView` da sola, come sempre. Sull'iPad (costante: la struttura non cambia mai
+    /// a finestra aperta) la `TabView` con accanto, sulla finestra larga senza Liquid Glass, la barra
+    /// superiore e la barra di navigazione, e la pagina in un pannello con angoli ampi.
+    @ViewBuilder
+    private var shell: some View {
+        if WindowClass.isPad {
+            let wide = isRegular && !ThemeStore.shared.liquidGlass
+            let railWidth = railPinned ? WideShellMetrics.railExpanded : WideShellMetrics.railCollapsed
+            VStack(spacing: 0) {
+                if wide {
+                    WideTopBar(railWidth: railWidth, railCollapsed: !railPinned && !railOverlayOpen,
+                               query: $searchQuery, focus: $searchFocused, isSearching: selection == .search,
+                               toggleRail: toggleRail, closeSearch: closeSearch,
+                               openSettings: openSettings, switchAccount: { switchingAccount = true })
+                }
+                HStack(spacing: 0) {
+                    if wide {
+                        NavigationRail(expanded: railPinned, selection: selection, select: selectFromRail,
+                                       longPressYou: { switchingAccount = true })
+                    }
+                    // Sempre qui, mai dentro rami diversi: cambiando shell la `TabView` resta la stessa.
+                    tabs
+                        .clipShape(PanelShape(radius: Theme.radii.xl, clips: wide))
+                        .padding(.trailing, wide ? WideShellMetrics.panelInset : 0)
+                        .padding(.bottom, wide ? WideShellMetrics.panelInset : 0)
+                }
+                .overlay(alignment: .leading) {
+                    if wide && railOverlayOpen && !railPinned {
+                        railOverlay
+                    }
+                }
+            }
+            // Il pannello arriva fino a 12 punti dal fondo dello schermo, anche sotto l'indicatore della Home.
+            .ignoresSafeArea(.container, edges: wide ? .bottom : [])
+            .background((wide ? Theme.surfaceContainer : Theme.background).ignoresSafeArea())
+        } else {
+            tabs
+        }
     }
 
     /// La `TabView` con tutte le schede. Sull'iPad (costante: la struttura non cambia mai a finestra
@@ -409,6 +422,21 @@ struct MainTabView: View {
             selection = .section(section)
         }
         #endif
+    }
+}
+
+/// Ritaglio del pannello della pagina: angoli ampi sulla finestra larga senza Liquid Glass; altrove
+/// un rettangolo molto più grande della `TabView`, che quindi non ritaglia nulla (la barra delle
+/// schede di sistema e gli sfondi delle pagine escono dai bordi della `TabView`, nella zona sicura:
+/// ritagliati, l'indicatore della Home restava su una fascia vuota). Una forma sola per i due
+/// casi, così la `TabView` non cambia identità.
+private struct PanelShape: Shape {
+    var radius: CGFloat
+    var clips: Bool
+
+    func path(in rect: CGRect) -> Path {
+        clips ? Path(roundedRect: rect, cornerRadius: radius, style: .continuous)
+            : Path(rect.insetBy(dx: -4000, dy: -4000))
     }
 }
 
