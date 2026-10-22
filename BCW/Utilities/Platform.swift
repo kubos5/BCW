@@ -89,14 +89,20 @@ private struct PagePadding: ViewModifier {
     }
 }
 
-/// Elenco di card in una colonna.
+/// Elenco di card in una colonna; sull'iPad largo in colonne larghe almeno `minWidth`.
 struct CardGrid<Content: View>: View {
     var minWidth: CGFloat = 340
     var spacing: CGFloat = 10
     @ViewBuilder let content: () -> Content
+    @Environment(\.windowClass) private var windowClass
 
     var body: some View {
-        LazyVStack(spacing: spacing, content: content)
+        if windowClass == .regular {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: minWidth), spacing: spacing, alignment: .top)],
+                      spacing: spacing, content: content)
+        } else {
+            LazyVStack(spacing: spacing, content: content)
+        }
     }
 }
 

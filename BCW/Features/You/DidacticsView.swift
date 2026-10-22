@@ -5,6 +5,7 @@ struct DidacticsView: View {
     private static let searchPrompt = "Cerca file o cartelle"
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
+    @Environment(\.windowClass) private var windowClass
     @State private var teacherFilter: String?
     @State private var search = ""
     @State private var loading = false
@@ -47,13 +48,11 @@ struct DidacticsView: View {
                 }
 
                 if !model.didactics.isEmpty {
-                    ChipRow {
-                        FilterChip(title: "Tutti i docenti", isSelected: teacherFilter == nil) { teacherFilter = nil }
-                        ForEach(model.didactics) { teacher in
-                            FilterChip(title: teacher.name, isSelected: teacherFilter == teacher.id) {
-                                teacherFilter = teacherFilter == teacher.id ? nil : teacher.id
-                            }
-                        }
+                    // Sull'iPad largo i docenti vanno a capo invece di scorrere di lato.
+                    if windowClass == .regular {
+                        FlowLayout(spacing: 8) { teacherChips }
+                    } else {
+                        ChipRow { teacherChips }
                     }
                 }
 
@@ -63,31 +62,11 @@ struct DidacticsView: View {
                     EmptyState("Nessun materiale", icon: "folder", description: "I file condivisi dai docenti appariranno qui.")
                 }
 
-                ForEach(teachers) { teacher in
-                    let list = folders(of: teacher)
-                    if !list.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(spacing: 12) {
-                                Text(String(teacher.name.prefix(1)))
-                                    .font(.numeral(16))
-                                    .foregroundStyle(Theme.surface)
-                                    .frame(width: 36, height: 36)
-                                    .background(Theme.subjectColor(StableID.make(teacher.id)),
-                                                in: .rect(cornerRadius: Theme.radii.m, style: .continuous))
-                                Text(teacher.name)
-                                    .font(.m3(18, weight: 550))
-                                    .foregroundStyle(Theme.ink)
-                            }
-                            .padding(.leading, 4)
-
-                            // Le cartelle di un docente formano una lista segmentata.
-                            ListGroup {
-                                ForEach(list) { folder in
-                                    folderCard(folder, teacher: teacher)
-                                }
-                            }
-                        }
-                    }
+                // Sull'iPad largo i docenti stanno in colonne.
+                if windowClass == .regular {
+                    AdaptiveColumns(minimum: 400, spacing: 18) { teacherGroups }
+                } else {
+                    teacherGroups
                 }
             }
             .pagePadding()
@@ -123,6 +102,47 @@ struct DidacticsView: View {
             }
         }
         .refreshable { error = await model.loadDidactics() }
+    }
+
+    @ViewBuilder
+    private var teacherChips: some View {
+        FilterChip(title: "Tutti i docenti", isSelected: teacherFilter == nil) { teacherFilter = nil }
+        ForEach(model.didactics) { teacher in
+            FilterChip(title: teacher.name, isSelected: teacherFilter == teacher.id) {
+                teacherFilter = teacherFilter == teacher.id ? nil : teacher.id
+            }
+        }
+    }
+
+    /// Le cartelle di ogni docente, sotto il suo nome.
+    @ViewBuilder
+    private var teacherGroups: some View {
+        ForEach(teachers) { teacher in
+            let list = folders(of: teacher)
+            if !list.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 12) {
+                        Text(String(teacher.name.prefix(1)))
+                            .font(.numeral(16))
+                            .foregroundStyle(Theme.surface)
+                            .frame(width: 36, height: 36)
+                            .background(Theme.subjectColor(StableID.make(teacher.id)),
+                                        in: .rect(cornerRadius: Theme.radii.m, style: .continuous))
+                        Text(teacher.name)
+                            .font(.m3(18, weight: 550))
+                            .foregroundStyle(Theme.ink)
+                    }
+                    .padding(.leading, 4)
+
+                    // Le cartelle di un docente formano una lista segmentata.
+                    ListGroup {
+                        ForEach(list) { folder in
+                            folderCard(folder, teacher: teacher)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private func folderCard(_ folder: DidacticFolder, teacher: DidacticTeacher) -> some View {

@@ -31,6 +31,8 @@ struct SubjectsView: View {
                     .buttonStyle(.listRow)
                 }
             }
+            // Sull'iPad largo larga al massimo 860 punti (come la versione web).
+            .readableWidth()
             .pagePadding()
             .padding(.bottom, Theme.bottomInset)
         }
@@ -120,6 +122,7 @@ struct SchoolbooksView: View {
                     }
                 }
             }
+            .readableWidth()
             .pagePadding()
             .padding(.bottom, Theme.bottomInset)
         }
@@ -174,6 +177,8 @@ private struct BookRow: View {
 
 struct SchoolCalendarView: View {
     @Environment(AppModel.self) private var model
+    /// iPad largo con il contenuto largo almeno 640 punti: anno e prossima vacanza affiancati.
+    @State private var wideSummary = false
 
     /// Periodi consecutivi di vacanza nei giorni feriali.
     private var holidays: [(start: Date, end: Date)] {
@@ -202,13 +207,32 @@ struct SchoolCalendarView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                // Anno scolastico e prossima vacanza formano una lista segmentata.
-                ListGroup {
-                    yearProgress
-                    nextHoliday
+                if wideSummary {
+                    // iPad largo: le due card affiancate; la prossima vacanza, con meno contenuto,
+                    // è più stretta (come la versione web).
+                    HStack(alignment: .top, spacing: 12) {
+                        yearProgress
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Theme.card, in: .rect(cornerRadius: Theme.radii.li, style: .continuous))
+                        nextHoliday
+                            .frame(width: 300, alignment: .leading)
+                            .frame(maxHeight: .infinity)
+                            .background(Theme.card, in: .rect(cornerRadius: Theme.radii.li, style: .continuous))
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    // Anno scolastico e prossima vacanza formano una lista segmentata.
+                    ListGroup {
+                        yearProgress
+                        nextHoliday
+                    }
                 }
-                holidayList
+                VStack(alignment: .leading, spacing: 24) {
+                    holidayList
+                }
+                .readableWidth()
             }
+            .widthAtLeast(640, isOn: $wideSummary)
             .pagePadding()
             .padding(.bottom, 32)
         }

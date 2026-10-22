@@ -8,6 +8,8 @@ struct ReportsView: View {
     @State private var previewURL: URL?
     @State private var downloading: String?
     @State private var error: String?
+    /// iPad largo con la pagina larga almeno 792 punti: riepilogo a sinistra, documenti a destra.
+    @State private var isSplit = false
 
     var body: some View {
         content
@@ -18,7 +20,6 @@ struct ReportsView: View {
                 error = await model.loadDocuments()
                 loading = false
             }
-            .refreshable { error = await model.loadDocuments() }
     }
 
     @ViewBuilder
@@ -28,18 +29,33 @@ struct ReportsView: View {
         }
     }
 
-    @ViewBuilder
     private var content: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                errorBanner
-                periodSummary
-                documentsList
+        ZStack {
+            if isSplit {
+                SplitPage(sideWidth: 380, refresh: { error = await model.loadDocuments() }) {
+                    periodSummary
+                } main: {
+                    VStack(alignment: .leading, spacing: 18) {
+                        errorBanner
+                        documentsList
+                    }
+                }
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        errorBanner
+                        periodSummary
+                        documentsList
+                    }
+                    .pagePadding()
+                    .padding(.bottom, 32)
+                }
+                .tracksPageScroll()
+                .refreshable { error = await model.loadDocuments() }
             }
-            .pagePadding()
-            .padding(.bottom, 32)
         }
-        .tracksPageScroll()
+        // Sull'iPad largo, da 792 punti di pagina, in due colonne (come la versione web).
+        .widthAtLeast(SplitMetrics.threshold, isOn: $isSplit)
         .themedBackground()
     }
 

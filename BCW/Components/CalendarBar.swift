@@ -12,6 +12,8 @@ struct CalendarBar: View {
     var showsMonth = false
     /// Margine laterale: di serie quello della pagina; 0 nelle colonne laterali dell'iPad.
     var horizontalPadding: CGFloat?
+    /// Pallini di verifiche, compiti, eventi e assenze sotto i giorni (non nel Registro delle lezioni).
+    var showsDots = true
     let pickDate: () -> Void
     @Environment(\.pageGutter) private var gutter
 
@@ -85,7 +87,8 @@ struct CalendarBar: View {
         return WeightedRow(weights: days.indices.map { !compact && $0 == selectedIndex ? 1.45 : 1 }, spacing: 4) {
             ForEach(days, id: \.self) { day in
                 CalendarDayButton(day: day, isSelected: day.isSameDay(as: selectedDay), isToday: day.isToday, compact: compact,
-                                  outside: month.map { !CVDate.calendar.isDate(day, equalTo: $0, toGranularity: .month) } ?? false) {
+                                  outside: month.map { !CVDate.calendar.isDate(day, equalTo: $0, toGranularity: .month) } ?? false,
+                                  showsDots: showsDots) {
                     guard !day.isSameDay(as: selectedDay) else { return }
                     Haptics.selection()
                     selectedDay = day
@@ -138,6 +141,7 @@ private struct CalendarDayButton: View {
     let compact: Bool
     /// Giorno di un mese accanto (nel mese): attenuato.
     let outside: Bool
+    var showsDots = true
     let action: () -> Void
 
     var body: some View {
@@ -153,7 +157,7 @@ private struct CalendarDayButton: View {
                 }
                 Text(day.it("d"))
                     .font(.numeral(compact ? 16 : 20, weight: isSelected || isToday ? 700 : 550))
-                dots
+                if showsDots { dots }
             }
             .foregroundStyle(isSelected ? Theme.onPrimary
                              : (isToday ? Theme.primary : (quiet ? Theme.onSurfaceVariant : Theme.ink)))
@@ -189,7 +193,7 @@ private struct CalendarDayButton: View {
 extension CalendarDayButton: Equatable {
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.day == rhs.day && lhs.isSelected == rhs.isSelected && lhs.isToday == rhs.isToday
-            && lhs.compact == rhs.compact && lhs.outside == rhs.outside
+            && lhs.compact == rhs.compact && lhs.outside == rhs.outside && lhs.showsDots == rhs.showsDots
     }
 }
 
