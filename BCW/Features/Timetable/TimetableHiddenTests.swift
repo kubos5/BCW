@@ -87,7 +87,7 @@ struct TimetableHiddenTestsView: View {
             }
             .sheetChrome("Verifiche nascoste", leading: .close { dismiss() }, trailing: [.confirm("Fine") { dismiss() }])
         }
-        .m3Sheet()
+        .m3Sheet(size: .page)
     }
 
     private var rulesSummary: String {

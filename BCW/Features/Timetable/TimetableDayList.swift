@@ -18,8 +18,9 @@ struct TimetableDayList: View {
     @Environment(AppModel.self) private var model
     let content: TimetableDayContent
     let actions: TimetableActions
-    /// "Oggi" accanto al giorno in grande, se il giorno è un altro (senza Liquid Glass).
+    /// "Oggi" accanto al giorno in grande, se il giorno è un altro (senza Liquid Glass, o sull'iPad largo).
     var jump: (() -> Void)?
+    @Environment(\.windowClass) private var windowClass
 
     /// Righe dell'elenco: le lezioni di seguito (senza pause tra loro) formano una lista segmentata.
     private enum Row: Identifiable {
@@ -109,7 +110,7 @@ struct TimetableDayList: View {
                         .foregroundStyle(Theme.secondaryInk)
                 }
                 Spacer(minLength: 0)
-                if let jump, !ThemeStore.shared.liquidGlass {
+                if let jump, !ThemeStore.shared.liquidGlass || windowClass == .regular {
                     Button(action: jump) {
                         Label { Text("Oggi") } icon: { Icon("today") }
                     }

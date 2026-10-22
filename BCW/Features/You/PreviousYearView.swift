@@ -12,23 +12,35 @@ struct PreviousYearView: View {
     @State private var downloading: String?
     @State private var error: String?
     @State private var showingWeb = false
+    /// iPad largo con la pagina larga almeno 792 punti: archivio sul web a sinistra, pagelle a destra.
+    @State private var isSplit = false
 
     /// L'archivio appartiene alla sessione: cambiando account o uscendo dalla demo viene azzerato.
     private var archive: ArchiveModel { model.archive(for: startYear) }
 
     var body: some View {
-        Group {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+        ZStack {
+            if isSplit {
+                SplitPage(sideWidth: 380) {
                     webArchiveCard
+                } main: {
                     documentsSection
                 }
-                .pagePadding()
-                .padding(.bottom, 32)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        webArchiveCard
+                        documentsSection
+                    }
+                    .pagePadding()
+                    .padding(.bottom, 32)
+                }
+                .tracksPageScroll()
             }
-            .tracksPageScroll()
-            .themedBackground()
         }
+        // Sull'iPad largo, da 792 punti di pagina, in due colonne (come la versione web).
+        .widthAtLeast(SplitMetrics.threshold, isOn: $isSplit)
+        .themedBackground()
         .pageChrome("Anno \(archive.title)", style: .inline) {
             BarMenu(icon: "calendarClock", label: "Scegli l'anno") {
                 MenuPicker(title: "Anno scolastico", selection: $startYear,
@@ -39,6 +51,7 @@ struct PreviousYearView: View {
         .sheet(isPresented: $showingWeb) {
             SafariView(url: ArchiveModel.webURL)
                 .ignoresSafeArea()
+                .m3SheetSizing(.page)
         }
         .task(id: "\(model.sessionID)-\(startYear)") {
             error = nil

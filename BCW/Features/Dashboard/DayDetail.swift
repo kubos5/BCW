@@ -5,6 +5,7 @@ import SwiftUI
 /// una sezione segmentata di M3 Expressive.
 struct DayDetail: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.windowClass) private var windowClass
     let day: Date
     /// Pulsante per tornare al giorno predefinito (es. "Domani"), se il giorno è un altro.
     var jump: (title: String, action: () -> Void)?
@@ -67,15 +68,17 @@ struct DayDetail: View {
     // MARK: Giorno in grande
 
     /// "Domani" (o il giorno della settimana) in grande, la data sotto e i chip di stato. Con
-    /// Liquid Glass il nome del giorno è già il titolo della barra: resta solo la data.
+    /// Liquid Glass sul telefono il nome del giorno è già il titolo della barra: resta solo la data
+    /// (sull'iPad largo il titolo è "Dashboard" e il giorno resta qui).
     private func hero(_ content: Content) -> some View {
         let relative = day.isToday || day.isTomorrow || day.isYesterday
         let title = relative ? day.relativeDayName : day.it("EEEE").capitalizedFirst
         let subtitle = relative ? day.longDay : day.it("dMMMMyyyy")
+        let showsName = !ThemeStore.shared.liquidGlass || windowClass == .regular
         return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 0) {
-                    if !ThemeStore.shared.liquidGlass {
+                    if showsName {
                         Text(title)
                             .font(.m3(40, weight: 500, rounded: true))
                             .tracking(-0.5)
@@ -89,7 +92,7 @@ struct DayDetail: View {
                         .foregroundStyle(Theme.secondaryInk)
                 }
                 Spacer(minLength: 0)
-                if let jump, !ThemeStore.shared.liquidGlass {
+                if let jump, showsName {
                     Button(action: jump.action) {
                         Label { Text(jump.title) } icon: { Icon("today") }
                     }

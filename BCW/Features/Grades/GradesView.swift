@@ -45,6 +45,11 @@ struct GradeBookView: View {
     @State private var period: Int?
     @State private var subjectFilter: Int?
     @State private var expanded: Set<Int> = []
+    /// iPad largo con la pagina larga almeno 792 punti: media e andamento a sinistra, voti a destra.
+    @State private var isSplit = false
+    /// iPad largo in colonna (es. verticale con la barra di navigazione): media e andamento affiancati.
+    @State private var heroBesideTrend = false
+    @Environment(\.pageGutter) private var gutter
 
     private var filteredGrades: [Grade] {
         book.grades(in: period)
@@ -61,9 +66,6 @@ struct GradeBookView: View {
 
     var body: some View {
         content
-            .refreshable {
-                if allowsRefresh { await model.loadGrades() }
-            }
             .pageChrome("Voti") {
                 BarMenu(icon: period != nil || subjectFilter != nil ? "filterFill" : "filter", label: "Filtri") {
                     MenuPicker(title: "Periodo", selection: $period,
@@ -95,11 +97,26 @@ struct GradeBookView: View {
 
     private var sectionTabs: some View {
         PrimaryTabs(selection: $section, tabs: Section.allCases.map { ($0, $0.title, nil) })
-            .padding(.horizontal, -16)
+            // Sul telefono da bordo a bordo; nella colonna dei voti dell'iPad largo quanto la colonna.
+            .padding(.horizontal, isSplit ? 0 : -gutter)
     }
 
-    @ViewBuilder
     private var content: some View {
+        ZStack {
+            if isSplit && !book.grades.isEmpty {
+                splitContent
+            } else {
+                columnContent
+            }
+        }
+        // Sull'iPad largo, da 792 punti di pagina: media e andamento a sinistra, voti a destra
+        // (come la versione web). Filtri, scheda e voti espansi stanno qui, sopra il ramo.
+        .widthAtLeast(SplitMetrics.threshold, isOn: $isSplit)
+        .themedBackground()
+    }
+
+    /// Telefono (e iPad stretto o in colonna): tutto in una colonna.
+    private var columnContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 banner
@@ -107,34 +124,65 @@ struct GradeBookView: View {
                 if book.grades.isEmpty {
                     emptyBook
                 } else {
-                    AverageHero(book: book, selectedPeriod: $period)
-                    TrendCard(book: book, period: period, subjectId: subjectFilter)
-
-                    VStack(alignment: .leading, spacing: 16) {
-                        sectionTabs
-                        filters
-                        // Asse condiviso orizzontale tra le schede: gli ultimi voti stanno a sinistra,
-                        // le materie a destra.
-                        Group {
-                            switch section {
-                            case .recent: recentList
-                            case .subjects: subjectList
-                            }
+                    if heroBesideTrend {
+                        // iPad in colonna: c'è spazio per media e andamento uno accanto all'altro.
+                        HStack(alignment: .center, spacing: 20) {
+                            AverageHero(book: book, selectedPeriod: $period, size: 168)
+                                .frame(maxWidth: .infinity)
+                            TrendCard(book: book, period: period, subjectId: subjectFilter)
+                                .frame(maxWidth: .infinity)
                         }
-                        .id(section)
-                        .transition(.sharedAxisX(forward: section == .subjects))
+                    } else {
+                        AverageHero(book: book, selectedPeriod: $period)
+                        TrendCard(book: book, period: period, subjectId: subjectFilter)
                     }
+                    lists
                 }
             }
             .pagePadding()
             .padding(.bottom, 32)
-            .animation(Motion.spatial, value: period)
-            .animation(Motion.spatial, value: subjectFilter)
-            .animation(Motion.spatial, value: section)
+            .modifier(FilterAnimations(period: period, subject: subjectFilter, section: section))
+            .widthAtLeast(640, isOn: $heroBesideTrend)
         }
         .tracksPageScroll()
         .scrollsToTopOnReselect()
-        .themedBackground()
+        .refreshable {
+            if allowsRefresh { await model.loadGrades() }
+        }
+    }
+
+    /// iPad largo: la media e l'andamento in una colonna laterale, la scheda con i voti a destra.
+    private var splitContent: some View {
+        SplitPage(sideWidth: 380, mainMaxWidth: 760, refresh: allowsRefresh ? { await model.loadGrades() } : nil) {
+            VStack(alignment: .leading, spacing: 24) {
+                AverageHero(book: book, selectedPeriod: $period, size: 168)
+                TrendCard(book: book, period: period, subjectId: subjectFilter)
+            }
+        } main: {
+            VStack(alignment: .leading, spacing: 20) {
+                banner
+                lists
+            }
+        }
+        .modifier(FilterAnimations(period: period, subject: subjectFilter, section: section))
+    }
+
+    /// Schede (ultimi voti e materie), filtro ed elenco.
+    private var lists: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionTabs
+            filters
+            // Asse condiviso orizzontale tra le schede: gli ultimi voti stanno a sinistra,
+            // le materie a destra.
+            Group {
+                switch section {
+                case .recent: recentList
+                case .subjects: subjectList
+                }
+            }
+            .id(section)
+            .transition(.sharedAxisX(forward: section == .subjects))
+        }
     }
 
     /// Filtro per materia (il periodo si sceglie con il gruppo di pulsanti della media).
@@ -206,6 +254,20 @@ struct GradeBookView: View {
     }
 }
 
+/// Molle dei cambi di periodo, materia e scheda.
+private struct FilterAnimations: ViewModifier {
+    let period: Int?
+    let subject: Int?
+    let section: GradeBookView.Section
+
+    func body(content: Content) -> some View {
+        content
+            .animation(Motion.spatial, value: period)
+            .animation(Motion.spatial, value: subject)
+            .animation(Motion.spatial, value: section)
+    }
+}
+
 // MARK: - Media generale
 
 /// La media in primo piano: un grande indicatore circolare ondulato al centro, sotto il periodo
@@ -214,13 +276,15 @@ struct GradeBookView: View {
 private struct AverageHero: View {
     let book: GradeBook
     @Binding var selectedPeriod: Int?
+    /// Diametro dell'anello (più piccolo nella colonna laterale dell'iPad).
+    var size: CGFloat = 188
 
     var body: some View {
         let insufficient = book.subjects(in: selectedPeriod).filter { ($0.average ?? 10) < 6 }.count
         let count = book.grades(in: selectedPeriod).filter(\.countsTowardAverage).count
         VStack(spacing: 20) {
             VStack(spacing: 14) {
-                AverageRing(value: book.average(period: selectedPeriod), size: 188, lineWidth: 14)
+                AverageRing(value: book.average(period: selectedPeriod), size: size, lineWidth: size >= 180 ? 14 : 13)
                 VStack(spacing: 4) {
                     Text(selectedPeriod.flatMap { p in book.activePeriods.first { $0.position == p }?.name }
                          .map { "Media del \($0.lowercased())" } ?? "Media generale")

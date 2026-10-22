@@ -76,6 +76,9 @@ struct SearchAppBar<Trailing: View>: View {
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 8)
+        // In una finestra piccola dell'iPad la barra sta nell'angolo dei controlli della finestra.
+        .avoidsWindowControls()
+        .frame(maxWidth: .infinity)
         .background(Theme.surface.ignoresSafeArea(edges: .top))
         .animation(Motion.spatial, value: query.isEmpty)
     }
@@ -119,6 +122,7 @@ struct FABMenu: View {
     let label: String
     let items: [FABMenuItem]
     @State private var isExpanded = false
+    @Environment(\.windowClass) private var windowClass
 
     var body: some View {
         if ThemeStore.shared.liquidGlass {
@@ -154,7 +158,8 @@ struct FABMenu: View {
                     toggleButton
                         .padding(.top, isExpanded ? 6 : 0)
                 }
-                .padding(16)
+                // Sull'iPad largo a 24 punti dai bordi del pannello, come sul web.
+                .padding(windowClass == .regular ? 24 : 16)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             .sensoryFeedback(.impact(weight: .light), trigger: isExpanded)
@@ -195,6 +200,7 @@ private struct GlassFABMenu: View {
     let items: [FABMenuItem]
     @Binding var isExpanded: Bool
     @Namespace private var glass
+    @Environment(\.windowClass) private var windowClass
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -243,8 +249,10 @@ private struct GlassFABMenu: View {
                     .accessibilityLabel(isExpanded ? "Chiudi il menu" : label)
                 }
             }
-            .padding(.trailing, 21)
-            .padding(.bottom, 12)
+            // Sopra il pulsante di ricerca della barra delle schede; sull'iPad largo (barra in alto)
+            // a 24 punti dai bordi.
+            .padding(.trailing, windowClass == .regular ? 24 : 21)
+            .padding(.bottom, windowClass == .regular ? 24 : 12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         .sensoryFeedback(.impact(weight: .light), trigger: isExpanded)

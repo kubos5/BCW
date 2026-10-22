@@ -372,13 +372,17 @@ struct NavigationRow: View {
     var icon: String?
     var tint: Color = Theme.onSurfaceVariant
     var badge: Int = 0
+    /// Freccia a destra (no nelle voci di un elenco con il dettaglio accanto, sull'iPad).
+    var showsChevron = true
 
-    init(_ title: String, subtitle: String? = nil, icon: String? = nil, tint: Color = Theme.onSurfaceVariant, badge: Int = 0) {
+    init(_ title: String, subtitle: String? = nil, icon: String? = nil, tint: Color = Theme.onSurfaceVariant, badge: Int = 0,
+         showsChevron: Bool = true) {
         self.title = title
         self.subtitle = subtitle
         self.icon = icon
         self.tint = tint
         self.badge = badge
+        self.showsChevron = showsChevron
     }
 
     var body: some View {
@@ -397,8 +401,10 @@ struct NavigationRow: View {
                         .frame(minWidth: 24, minHeight: 22)
                         .background(Theme.error.opacity(0.15), in: .capsule)
                 }
-                Icon("chevronRight", size: 20)
-                    .foregroundStyle(Theme.onSurfaceVariant)
+                if showsChevron {
+                    Icon("chevronRight", size: 20)
+                        .foregroundStyle(Theme.onSurfaceVariant)
+                }
             }
         }
     }

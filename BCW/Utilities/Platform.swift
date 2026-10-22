@@ -74,21 +74,35 @@ extension View {
         navigationBarTitleDisplayMode(.inline)
     }
 
-    /// Margini laterali delle pagine.
+    /// Margini laterali delle pagine: 16 punti (24 sull'iPad con la finestra larga).
     func pagePadding() -> some View {
-        padding(.horizontal)
+        modifier(PagePadding())
     }
 
 }
 
-/// Elenco di card in una colonna.
+private struct PagePadding: ViewModifier {
+    @Environment(\.pageGutter) private var gutter
+
+    func body(content: Content) -> some View {
+        content.padding(.horizontal, gutter)
+    }
+}
+
+/// Elenco di card in una colonna; sull'iPad largo in colonne larghe almeno `minWidth`.
 struct CardGrid<Content: View>: View {
     var minWidth: CGFloat = 340
     var spacing: CGFloat = 10
     @ViewBuilder let content: () -> Content
+    @Environment(\.windowClass) private var windowClass
 
     var body: some View {
-        LazyVStack(spacing: spacing, content: content)
+        if windowClass == .regular {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: minWidth), spacing: spacing, alignment: .top)],
+                      spacing: spacing, content: content)
+        } else {
+            LazyVStack(spacing: spacing, content: content)
+        }
     }
 }
 
@@ -100,17 +114,19 @@ extension View {
 }
 
 /// Riga di filtri che scorre in orizzontale.
+/// Arriva fino ai bordi della pagina (oltre il margine laterale), allineata al contenuto.
 struct ChipRow<Content: View>: View {
     @ViewBuilder let content: () -> Content
+    @Environment(\.pageGutter) private var gutter
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) { content() }
                 .padding(.vertical, 2)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, gutter)
         }
         .scrollClipDisabled()
-        .padding(.horizontal, -16)
+        .padding(.horizontal, -gutter)
     }
 }
 

@@ -26,6 +26,8 @@ struct LoginView: View {
     /// Tastiera visibile (dalle notifiche di UIKit, non dal campo attivo: cambiando tra Classeviva e
     /// Account BCW il campo attivo cambia ma la tastiera resta).
     @State private var keyboardVisible = false
+    /// iPad largo con la pagina larga almeno 760 punti: accesso in una card a due colonne.
+    @State private var wideCard = false
     @FocusState private var focused: Field?
 
     private enum Field { case username, password, bcwUsername, bcwPassword, bcwConfirm }
@@ -39,7 +41,12 @@ struct LoginView: View {
 
     /// Tastiera aperta: disposizione compatta, in alto, con logo piccolo accanto al titolo, il gruppo
     /// Classeviva/Account BCW, campi e "Accedi" subito sotto; demo e note tornano chiudendo la tastiera.
-    private var compact: Bool { keyboardVisible }
+    /// Non nella card larga dell'iPad: lì c'è spazio e lo scorrimento porta in vista il campo.
+    private var compact: Bool { keyboardVisible && !wideCard }
+
+    /// Card a due colonne (solo nella schermata di accesso: aggiungendo un account, in un foglio,
+    /// resta la disposizione del telefono).
+    private var showsWideCard: Bool { wideCard && !isAddingAccount && !cloudOnly }
 
     /// Con l'account BCW ma senza account abbinati: si abbina il primo.
     private var linkingFirst: Bool { !isAddingAccount && !cloudOnly && model.isCloud }
@@ -61,46 +68,14 @@ struct LoginView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: compact ? 20 : 24) {
-                if compact { compactHeader } else { header }
-
-                if showsModePicker {
-                    SegmentedButtons(selection: $mode, options: [(Mode.classeviva, "Classeviva", nil), (Mode.bcw, "Account BCW", nil)],
-                                     height: 48)
-                }
-
-                if linkingFirst && !compact {
-                    Text("Abbina il tuo primo account Classeviva: con il tuo account BCW entrerai in tutti gli account abbinati, su ogni dispositivo.")
-                        .font(.m3(15))
-                        .foregroundStyle(Theme.secondaryInk)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .transition(.opacity)
-                }
-
-                if currentMode == .bcw {
-                    cloudForm
-                } else {
-                    classevivaForm
-                }
-
-                if !compact {
-                    footerArea
-                        .transition(.opacity)
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, compact ? 16 : 32)
-            .frame(maxWidth: 440)
-            .frame(maxWidth: .infinity)
-            .containerRelativeFrame(.vertical, alignment: compact ? .top : .center) { length, _ in length }
-            // Un tocco nello spazio vuoto chiude la tastiera (campi e pulsanti hanno i loro tocchi).
-            .background {
-                Color.clear
-                    .contentShape(.rect)
-                    .onTapGesture { focused = nil }
+            if showsWideCard {
+                wideLayout
+            } else {
+                phoneLayout
             }
         }
+        // Sull'iPad largo, da 760 punti, l'accesso è una card a due colonne (come la versione web).
+        .widthAtLeast(760, isOn: $wideCard)
         .scrollBounceBehavior(.basedOnSize)
         .scrollDismissesKeyboard(.interactively)
         .themedBackground()
@@ -108,6 +83,11 @@ struct LoginView: View {
         .animation(Motion.spatial, value: focused)
         .animation(Motion.spatial, value: registering)
         .animation(Motion.spatial, value: mode)
+        #if DEBUG
+        // Script di prova (`-BCWScript`): cambia modulo o dà il fuoco al primo campo.
+        .debugAction("loginmode") { mode = mode == .bcw ? .classeviva : .bcw }
+        .debugAction("loginfocus") { focused = currentMode == .bcw ? .bcwUsername : .username }
+        #endif
         .onAppear {
             // Dopo una sessione BCW scaduta si riparte dall'accesso con l'account BCW.
             if showsModePicker, model.cloudNotice != nil { mode = .bcw }
@@ -138,7 +118,7 @@ struct LoginView: View {
                 choices = []
                 signIn(ident: choice.ident)
             }
-            .presentationDetents([.medium, .large])
+            .m3Detents([.medium, .large])
         }
         .sheet(isPresented: $editingServer) {
             CloudServerSheet()
@@ -147,6 +127,181 @@ struct LoginView: View {
                   message: "Gli account Classeviva abbinati e i loro dati verranno rimossi da questo dispositivo. Restano nel tuo account BCW: li ritroverai accedendo di nuovo.") {
             [.cancel(), DialogAction(title: "Esci", style: .destructive) { Task { await model.cloudSignOut() } }]
         }
+    }
+
+    /// Telefono (e iPad stretto o nei fogli): una colonna centrata.
+    private var phoneLayout: some View {
+        VStack(spacing: compact ? 20 : 24) {
+            if compact { compactHeader } else { header }
+
+            if showsModePicker {
+                SegmentedButtons(selection: $mode, options: [(Mode.classeviva, "Classeviva", nil), (Mode.bcw, "Account BCW", nil)],
+                                 height: 48)
+            }
+
+            if linkingFirst && !compact {
+                Text("Abbina il tuo primo account Classeviva: con il tuo account BCW entrerai in tutti gli account abbinati, su ogni dispositivo.")
+                    .font(.m3(15))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+            }
+
+            if currentMode == .bcw {
+                cloudForm
+            } else {
+                classevivaForm
+            }
+
+            if !compact {
+                footerArea
+                    .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, compact ? 16 : 32)
+        .frame(maxWidth: 440)
+        .frame(maxWidth: .infinity)
+        .containerRelativeFrame(.vertical, alignment: compact ? .top : .center) { length, _ in length }
+        // Un tocco nello spazio vuoto chiude la tastiera (campi e pulsanti hanno i loro tocchi).
+        .background {
+            Color.clear
+                .contentShape(.rect)
+                .onTapGesture { focused = nil }
+        }
+    }
+
+    /// iPad largo: card a due colonne (logo, titolo e spiegazione a sinistra, il modulo a destra),
+    /// con le note e il server sotto.
+    private var wideLayout: some View {
+        VStack(spacing: 16) {
+            HStack(alignment: .top, spacing: 48) {
+                VStack(alignment: .leading, spacing: 32) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        BCWLogo(size: 40)
+                        Text("Better ClasseViVa")
+                            .font(.m3(16, weight: 500))
+                            .foregroundStyle(Theme.secondaryInk)
+                    }
+                    .accessibilityElement(children: .combine)
+                    wideCopies
+                    Spacer(minLength: 0)
+                    LoginArt(wide: true)
+                        .frame(height: 150)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+                VStack(spacing: 24) {
+                    if showsModePicker {
+                        SegmentedButtons(selection: $mode, options: [(Mode.classeviva, "Classeviva", nil), (Mode.bcw, "Account BCW", nil)],
+                                         height: 48)
+                    }
+                    if currentMode == .bcw {
+                        cloudForm
+                    } else {
+                        classevivaForm
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(48)
+            .background(Theme.surfaceContainer, in: .rect(cornerRadius: Theme.radii.xli, style: .continuous))
+
+            wideLegal
+                .padding(.horizontal, 24)
+        }
+        .frame(maxWidth: 1040)
+        .padding(40)
+        .frame(maxWidth: .infinity)
+        .containerRelativeFrame(.vertical, alignment: .center) { length, _ in length }
+        // Un tocco nello spazio vuoto chiude la tastiera (campi e pulsanti hanno i loro tocchi).
+        .background {
+            Color.clear
+                .contentShape(.rect)
+                .onTapGesture { focused = nil }
+        }
+    }
+
+    /// Titolo e spiegazione dei due moduli, uno sopra l'altro: occupano sempre lo spazio del più
+    /// lungo, così cambiando Classeviva/Account BCW la card non cambia altezza.
+    @ViewBuilder
+    private var wideCopies: some View {
+        if linkingFirst {
+            wideCopy(title: title,
+                     text: "Abbina il tuo primo account Classeviva: con il tuo account BCW entrerai in tutti gli account abbinati, su ogni dispositivo.",
+                     note: footerText(for: .classeviva))
+        } else {
+            ZStack(alignment: .topLeading) {
+                ForEach([Mode.classeviva, .bcw], id: \.self) { mode in
+                    wideCopy(title: mode == .bcw ? (registering ? "Crea un account BCW" : "Accedi con un account BCW")
+                             : "Accedi con Classeviva",
+                             text: footerText(for: mode))
+                        .opacity(mode == currentMode ? 1 : 0)
+                        .accessibilityHidden(mode != currentMode)
+                }
+            }
+        }
+    }
+
+    private func wideCopy(title: String, text: String, note: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.m3(36, weight: 500, rounded: true))
+                .foregroundStyle(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(text)
+                .font(.m3(16))
+                .foregroundStyle(Theme.secondaryInk)
+                .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
+            if let note {
+                Text(note)
+                    .font(.m3(14))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: 440, alignment: .leading)
+    }
+
+    /// Note sotto la card: affiliazione, account BCW e server.
+    private var wideLegal: some View {
+        HStack(spacing: 24) {
+            Text("BCW non è affiliata a Gruppo Spaggiari Parma.")
+            if linkingFirst, let username = model.cloud?.user.username {
+                Text("Account BCW: \(username)")
+            }
+            Spacer(minLength: 0)
+            if currentMode == .bcw || linkingFirst {
+                serverLine
+            }
+        }
+        .font(.m3(12))
+        .foregroundStyle(Theme.secondaryInk)
+    }
+
+    private var serverLine: some View {
+        HStack(spacing: 6) {
+            Icon("cloud", size: 16)
+            Text("Server BCW: \(BCWServer.host)")
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text("·")
+            Button("Modifica") { editingServer = true }
+                .buttonStyle(LinkButtonStyle())
+        }
+    }
+
+    /// Spiegazione di un modulo (note del telefono, titolo della card dell'iPad).
+    private func footerText(for mode: Mode) -> String {
+        if mode == .bcw {
+            return "Con un account BCW entri in tutti i tuoi account Classeviva abbinati e ritrovi impostazioni e orario su ogni dispositivo. Le credenziali di Classeviva sono salvate cifrate sul server di BCW."
+        } else if model.isCloud {
+            return "Usa le credenziali di Classeviva. Il server di BCW le verifica e le salva cifrate nel tuo account BCW."
+        }
+        return "Usa le stesse credenziali di Classeviva. Restano solo su questo dispositivo, nel Portachiavi, e vengono inviate esclusivamente ai server di Classeviva."
     }
 
     // MARK: Moduli
@@ -365,26 +520,12 @@ struct LoginView: View {
 
     private func footer(for mode: Mode) -> some View {
         VStack(spacing: 8) {
-            if mode == .bcw {
-                Text("Con un account BCW entri in tutti i tuoi account Classeviva abbinati e ritrovi impostazioni e orario su ogni dispositivo. Le credenziali di Classeviva sono salvate cifrate sul server di BCW.")
-            } else if model.isCloud {
-                Text("Usa le credenziali di Classeviva. Il server di BCW le verifica e le salva cifrate nel tuo account BCW.")
-            } else {
-                Text("Usa le stesse credenziali di Classeviva. Restano solo su questo dispositivo, nel Portachiavi, e vengono inviate esclusivamente ai server di Classeviva.")
-            }
+            Text(footerText(for: mode))
             if !isAddingAccount {
                 Text("BCW non è affiliata a Gruppo Spaggiari Parma.")
             }
             if mode == .bcw || linkingFirst {
-                HStack(spacing: 6) {
-                    Icon("cloud", size: 16)
-                    Text("Server BCW: \(BCWServer.host)")
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                    Text("·")
-                    Button("Modifica") { editingServer = true }
-                        .buttonStyle(LinkButtonStyle())
-                }
+                serverLine
                 if linkingFirst, let username = model.cloud?.user.username {
                     Text("Account BCW: \(username)")
                 }
@@ -495,7 +636,7 @@ struct CloudServerSheet: View {
                          trailing: model.isCloud ? [] : [.confirm("Salva") { save() }])
         }
         .m3Sheet()
-        .presentationDetents([.medium, .large])
+        .m3Detents([.medium, .large])
     }
 
     private func save() {
@@ -530,8 +671,10 @@ private struct LoginField<Content: View>: View {
     }
 }
 
-/// Forme di Material 3 Expressive che ruotano lentamente dietro al logo.
+/// Forme di Material 3 Expressive che ruotano lentamente dietro al logo (nella card larga
+/// dell'iPad più grandi, in basso a sinistra, come la versione web).
 private struct LoginArt: View {
+    var wide = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -542,19 +685,19 @@ private struct LoginArt: View {
                 ZStack(alignment: .topLeading) {
                     MaterialShape(.softBurst)
                         .fill(Theme.primaryContainer)
-                        .frame(width: 96, height: 96)
+                        .frame(width: wide ? 128 : 96, height: wide ? 128 : 96)
                         .rotationEffect(.degrees(t / 40 * 360))
-                        .offset(x: mid - 190, y: 4)
+                        .offset(x: wide ? 0 : mid - 190, y: wide ? 18 : 4)
                     MaterialShape(.cookie9Sided)
                         .fill(Theme.tertiaryContainer)
-                        .frame(width: 76, height: 76)
+                        .frame(width: wide ? 92 : 76, height: wide ? 92 : 76)
                         .rotationEffect(.degrees(-t / 32 * 360))
-                        .offset(x: mid + 112, y: 92)
+                        .offset(x: wide ? 150 : mid + 112, y: wide ? 54 : 92)
                     MaterialShape(.pill)
                         .fill(Theme.secondaryContainer)
-                        .frame(width: 44, height: 44)
+                        .frame(width: wide ? 52 : 44, height: wide ? 52 : 44)
                         .rotationEffect(.degrees(t / 24 * 360))
-                        .offset(x: mid + 64, y: 6)
+                        .offset(x: wide ? 118 : mid + 64, y: wide ? 0 : 6)
                 }
                 .opacity(0.9)
             }

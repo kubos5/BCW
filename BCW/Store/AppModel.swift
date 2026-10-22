@@ -41,6 +41,8 @@ final class AppModel {
     var linkFailureMessage: String?
     @ObservationIgnored private var cloudRefreshedAt = Date.distantPast
     @ObservationIgnored private var cloudRefreshing = false
+    /// `bootstrap` già fatto (una seconda finestra dell'iPad lo richiamerebbe).
+    @ObservationIgnored private var didBootstrap = false
 
     // Account salvati
     private(set) var accounts: [SavedAccount] = []
@@ -134,6 +136,9 @@ final class AppModel {
     }
 
     func bootstrap() {
+        // Su iPad ogni finestra in più ripasserebbe di qui (`RootView.task`): l'avvio si fa una volta.
+        guard !didBootstrap else { return }
+        didBootstrap = true
         // L'aspetto è in `ThemeStore`: anche i suoi cambi vanno all'account BCW.
         ThemeStore.shared.onSyncedChange = { [weak self] in self?.cloudSync.settingsChanged() }
         defer {

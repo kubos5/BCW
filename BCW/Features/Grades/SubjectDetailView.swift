@@ -9,6 +9,9 @@ struct SubjectDetailView: View {
 
     @State private var period: Int?
     @State private var expanded: Set<Int> = []
+    /// iPad largo con la pagina larga almeno 792 punti: media, periodi e obiettivo a sinistra,
+    /// grafico e voti a destra.
+    @State private var isSplit = false
 
     private var grades: [Grade] {
         book.grades(in: period).filter { $0.subjectId == subjectId }.sorted { $0.date > $1.date }
@@ -55,31 +58,54 @@ struct SubjectDetailView: View {
         }
     }
 
-    @ViewBuilder
     private var content: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header
-                periodPicker
-                chart
-                GoalCalculator(grades: grades, weighted: book.weighted)
-
-                SectionHeader("Voti", subtitle: grades.count == 1 ? "1 valutazione" : "\(grades.count) valutazioni")
-                    .padding(.bottom, -8)
-                gradeList
+        ZStack {
+            if isSplit {
+                SplitPage(sideWidth: 360, mainMaxWidth: 760) {
+                    VStack(alignment: .leading, spacing: 20) {
+                        header(ringSize: 140)
+                        periodPicker
+                        GoalCalculator(grades: grades, weighted: book.weighted)
+                    }
+                } main: {
+                    VStack(alignment: .leading, spacing: 20) {
+                        chart(height: 240)
+                        gradesSection
+                    }
+                }
+                .animation(Motion.spatial, value: period)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        header(ringSize: 156)
+                        periodPicker
+                        chart(height: 170)
+                        GoalCalculator(grades: grades, weighted: book.weighted)
+                        gradesSection
+                    }
+                    .pagePadding()
+                    .padding(.bottom, 32)
+                    .animation(Motion.spatial, value: period)
+                }
+                .tracksPageScroll()
             }
-            .pagePadding()
-            .padding(.bottom, 32)
-            .animation(Motion.spatial, value: period)
         }
-        .tracksPageScroll()
+        // Sull'iPad largo, da 792 punti di pagina, in due colonne (come la versione web).
+        .widthAtLeast(SplitMetrics.threshold, isOn: $isSplit)
         .themedBackground()
     }
 
+    @ViewBuilder
+    private var gradesSection: some View {
+        SectionHeader("Voti", subtitle: grades.count == 1 ? "1 valutazione" : "\(grades.count) valutazioni")
+            .padding(.bottom, -8)
+        gradeList
+    }
+
     /// La media della materia in primo piano, al centro, con docenti e voto migliore e peggiore.
-    private var header: some View {
+    private func header(ringSize: CGFloat) -> some View {
         VStack(spacing: 14) {
-            AverageRing(value: GradeBook.average(of: grades, weighted: book.weighted), size: 156, lineWidth: 12)
+            AverageRing(value: GradeBook.average(of: grades, weighted: book.weighted), size: ringSize, lineWidth: 12)
             VStack(spacing: 4) {
                 Text(name)
                     .font(.m3(24, weight: 500, rounded: true))
@@ -107,7 +133,7 @@ struct SubjectDetailView: View {
     }
 
     @ViewBuilder
-    private var chart: some View {
+    private func chart(height: CGFloat) -> some View {
         let sorted = grades.filter(\.countsTowardAverage).sorted { $0.date < $1.date }
         let running = book.runningAverage(for: subjectId, period: period)
         if sorted.count >= 2 {
@@ -141,7 +167,7 @@ struct SubjectDetailView: View {
                         AxisValueLabel().font(.m3(11, weight: 500)).foregroundStyle(Theme.onSurfaceVariant)
                     }
                 }
-                .frame(height: 170)
+                .frame(height: height)
             }
             .card(padding: 18, color: Theme.surfaceContainerLow, radius: Theme.radii.xl)
         }

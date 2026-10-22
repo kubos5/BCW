@@ -10,6 +10,8 @@ struct AppIconSettingsView: View {
             VStack(spacing: 24) {
                 AppIconSettingsSection()
             }
+            // Sull'iPad largo larga al massimo 760 punti (le griglie si adattano da sole).
+            .readableWidth(760)
             .pagePadding()
             .padding(.bottom, Theme.bottomInset)
         }

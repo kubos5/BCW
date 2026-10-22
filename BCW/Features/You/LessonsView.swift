@@ -14,6 +14,9 @@ struct LessonsView: View {
     @State private var subjectFilter: Int?
     /// Vero mentre si scaricano le lezioni della settimana del giorno scelto.
     @State private var loadingDay = false
+    /// iPad largo con la pagina larga almeno 792 punti: scelta e mese a sinistra, lezioni a destra.
+    @State private var isSplit = false
+    @State private var pickingDate = false
 
     /// Si riscarica cambiando giorno, sessione o client e dopo ogni aggiornamento dei dati
     /// (`refreshAll` svuota le lezioni già scaricate: senza, restava "Caricamento…").
@@ -53,26 +56,71 @@ struct LessonsView: View {
         SegmentedButtons(selection: $mode, options: Mode.allCases.map { ($0, $0.title, nil) })
     }
 
-    @ViewBuilder
     private var content: some View {
-        ScrollView {
+        ZStack {
+            if isSplit {
+                splitContent
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        modePicker
+
+                        switch mode {
+                        case .day:
+                            dayNavigator
+                            dayLessons
+                        case .subject:
+                            if !loadingAll { subjectChips }
+                            subjectCards
+                        }
+                    }
+                    .pagePadding()
+                    .padding(.bottom, 32)
+                }
+                .tracksPageScroll()
+            }
+        }
+        // Sull'iPad largo, da 792 punti di pagina, in due colonne (come la versione web).
+        .widthAtLeast(SplitMetrics.threshold, isOn: $isSplit)
+        .themedBackground()
+        .sheet(isPresented: $pickingDate) {
+            M3DatePickerSheet(selection: day) { picked in
+                day = min(max(picked.startOfDay, CVDate.schoolYear().start.startOfDay), Date().startOfDay)
+            }
+        }
+    }
+
+    /// iPad largo: a sinistra la scelta (per giorno o per materia) con il mese o le materie, a
+    /// destra le lezioni del giorno o le card per materia.
+    private var splitContent: some View {
+        SplitPage(sideWidth: 320) {
             VStack(alignment: .leading, spacing: 16) {
                 modePicker
-
                 switch mode {
                 case .day:
-                    dayNavigator
-                    dayLessons
+                    CalendarBar(selectedDay: $day, showsMonth: true, horizontalPadding: 0, showsDots: false) {
+                        pickingDate = true
+                    }
                 case .subject:
-                    if !loadingAll { subjectChips }
-                    subjectCards
+                    if !loadingAll {
+                        FlowLayout(spacing: 8) { subjectChipList }
+                    }
                 }
             }
-            .pagePadding()
-            .padding(.bottom, 32)
+        } main: {
+            switch mode {
+            case .day:
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(day.longDay)
+                        .font(.m3(28, weight: 500, rounded: true))
+                        .foregroundStyle(Theme.ink)
+                        .accessibilityAddTraits(.isHeader)
+                    dayLessons
+                }
+            case .subject:
+                subjectCards
+            }
         }
-        .tracksPageScroll()
-        .themedBackground()
     }
 
     private var dayNavigator: some View {
@@ -118,12 +166,15 @@ struct LessonsView: View {
     }
 
     private var subjectChips: some View {
-        ChipRow {
-            FilterChip(title: "Tutte", isSelected: subjectFilter == nil) { subjectFilter = nil }
-            ForEach(subjectGroups, id: \.id) { s in
-                FilterChip(title: s.name, isSelected: subjectFilter == s.id) {
-                    subjectFilter = subjectFilter == s.id ? nil : s.id
-                }
+        ChipRow { subjectChipList }
+    }
+
+    @ViewBuilder
+    private var subjectChipList: some View {
+        FilterChip(title: "Tutte", isSelected: subjectFilter == nil) { subjectFilter = nil }
+        ForEach(subjectGroups, id: \.id) { s in
+            FilterChip(title: s.name, isSelected: subjectFilter == s.id) {
+                subjectFilter = subjectFilter == s.id ? nil : s.id
             }
         }
     }

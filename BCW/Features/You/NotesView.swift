@@ -32,6 +32,8 @@ struct NotesView: View {
                     }
                 }
             }
+            // Sull'iPad largo larga al massimo 860 punti (come la versione web).
+            .readableWidth()
             .pagePadding()
             .padding(.bottom, 32)
             .animation(Motion.spatial, value: category)

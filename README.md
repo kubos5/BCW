@@ -97,6 +97,23 @@ Su iPhone la lezione in corso resta nella schermata di blocco e nella Dynamic Is
 - in Impostazioni › Orario si sceglie se farla partire da sola nei giorni di lezione: compare mezz'ora prima della prima lezione e sparisce dopo l'ultima, e il giorno di scuola successivo viene preparato in anticipo, così parte anche con l'app chiusa
 - dalla scheda in cima all'orario di oggi si avvia o si ferma a mano; fermata o tolta dalla schermata di blocco, quel giorno non riparte da sola
 
+### iPad
+
+Sull'iPad con la finestra larga l'app prende la struttura della versione web sugli schermi grandi, con i componenti dell'app:
+
+- senza Liquid Glass in alto il logo, la ricerca in tutto il registro, Aggiorna, Impostazioni e l'account; a sinistra la barra di navigazione con Dashboard, Orario, Voti, Tu e tutte le sezioni di Tu (Bacheca, note, scrutini, assenze, materiale e le altre) divise in gruppi, con i conteggi da leggere; la pagina sta in un pannello con angoli ampi. In orizzontale la barra è espansa con i nomi, in verticale è ridotta e il pulsante del menu la apre sopra la pagina
+- con Liquid Glass la barra delle schede in vetro in alto e la barra laterale di sistema con le stesse sezioni, l'account, Impostazioni e Aggiorna
+- la Dashboard affianca la settimana (o il mese) e "Nei prossimi giorni" al giorno scelto
+- l'Orario nella vista Lista affianca la settimana e il riepilogo dei giorni alle lezioni del giorno; la vista Giorno mostra la settimana intera, con il mese e il riepilogo a lato quando c'è spazio, e nella modifica gli eventi si spostano anche da un giorno all'altro
+- i Voti mettono la media e l'andamento accanto agli ultimi voti, e la materia mette media, periodi e obiettivo accanto al grafico e ai voti
+- Tu ha il profilo accanto alle statistiche e le sezioni in colonne; la Bacheca e le Impostazioni hanno l'elenco a sinistra e la comunicazione o il pannello scelto a destra, come la posta
+- scrutini, anni precedenti, assenze e registro delle lezioni sono in due colonne; agenda, assenze, materiale e risultati della ricerca in colonne; note, materie e libri in una larghezza comoda da leggere
+- l'accesso è una card a due colonne, con il logo e la spiegazione a sinistra e il modulo a destra
+- fogli e moduli sono finestre centrate; i selettori della data e dell'orario sono finestre di dialogo piccole
+- nelle finestre strette (Split View, Slide Over, finestre piccole) torna il layout dell'iPhone e la sezione aperta resta aperta dentro Tu; ruotando, la comunicazione o il pannello delle Impostazioni aperti restano aperti
+- l'attività in diretta dell'orario compare anche nella schermata di blocco dell'iPad
+- nelle finestre di iPadOS le barre in cima lasciano libero l'angolo con i controlli della finestra
+
 ### Design
 
 L'app segue Material 3 Expressive, con colori, font e pagina Aspetto della [versione web](https://kubos5.github.io/BCW-web): font Google Sans Flex, icone Material Symbols e colori generati dal colore d'accento scelto in Impostazioni › Aspetto (con stile dei colori, contrasto, angoli e animazioni).
@@ -141,7 +158,7 @@ Voti, assenze e note degli anni passati non sono disponibili tramite le API, qui
 
 ```
 BCW/
-├── App/            Entry point, barra delle schede, blocco biometrico
+├── App/            Entry point, barra delle schede, barra laterale e pannello dell'iPad, blocco biometrico
 ├── Networking/     Client Classeviva e BCW-api, cache su disco, Portachiavi
 ├── Models/         Modelli decodificati in modo tollerante
 ├── Store/          Stato dell'app, sincronizzazione con l'account BCW, orario e sua generazione, calcolo medie, preferenze, promemoria, widget e attività in diretta, server demo
