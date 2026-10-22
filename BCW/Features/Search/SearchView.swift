@@ -83,6 +83,9 @@ struct SearchView: View {
             .pagePadding()
             .padding(.top, embedded ? 4 : 0)
             .padding(.bottom, 32)
+            // Sull'iPad largo i suggerimenti sono più stretti della pagina: senza, l'intera pagina si
+            // stringeva attorno a loro e ai lati restava lo sfondo bianco di sistema (verificato).
+            .frame(maxWidth: windowClass == .regular ? .infinity : nil, alignment: .leading)
             .animation(Motion.spatial, value: trimmed.isEmpty)
         }
         .tracksPageScroll()
