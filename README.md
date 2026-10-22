@@ -111,7 +111,8 @@ Sull'iPad con la finestra larga l'app prende la struttura della versione web sug
 - l'accesso è una card a due colonne, con il logo e la spiegazione a sinistra e il modulo a destra
 - fogli e moduli sono finestre centrate; i selettori della data e dell'orario sono finestre di dialogo piccole
 - nelle finestre strette (Split View, Slide Over, finestre piccole) torna il layout dell'iPhone e la sezione aperta resta aperta dentro Tu; ruotando, la comunicazione o il pannello delle Impostazioni aperti restano aperti
-- le attività in diretta ci sono solo sull'iPhone, perché iPadOS non le mostra
+- l'attività in diretta dell'orario compare anche nella schermata di blocco dell'iPad
+- nelle finestre di iPadOS le barre in cima lasciano libero l'angolo con i controlli della finestra
 
 ### Design
 

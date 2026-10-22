@@ -377,11 +377,15 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Shell (`MainTabView.shell`): sull'iPhone la `TabView` da sola, come prima. Sull'iPad la `TabView` sta sempre nello
   stesso posto e accanto ci sono, facoltativi, `WideTopBar` e `NavigationRail` (`App/WideShell.swift`): cambiando
   classe o Liquid Glass pile di navigazione, giorni scelti e pagine aperte restano. Il pannello è ritagliato da
-  `PanelShape`, che fuori dalla finestra larga senza Liquid Glass non ritaglia nulla (con un raggio 0 tagliava la barra
-  delle schede di vetro e gli sfondi nella zona dell'indicatore della Home).
+  `PanelShape`, che fuori dalla finestra larga senza Liquid Glass ritaglia la `TabView` più le zone non sicure attorno
+  (la finestra intera), cioè nulla: con un raggio 0 tagliava la barra delle schede di vetro e gli sfondi nella zona
+  dell'indicatore della Home; con un rettangolo enorme il contenitore del ritaglio usciva dalla finestra e UIKit non
+  vedeva più l'angolo dei controlli della finestra (freccia indietro sotto i tre pallini, verificato).
 - Sezioni di Tu (`App/AppSection.swift`: titoli, titoli brevi, icone, colori, gruppi e conteggi come
   `sections-meta.js` del web) come `Tab` solo sull'iPad, in `TabSection` con `.tabPlacement(.sidebarOnly)` (anche sul
   gruppo, altrimenti la barra in alto mostrava la freccia ›), dopo Cerca, così gli indici della barra non cambiano.
+  Nella finestra stretta sono `.hidden`: con più di 5 schede la barra in basso di sistema (Liquid Glass) metteva
+  "Altro" al posto di Cerca (verificato).
   Tornando `compact` la sezione aperta passa nella pila di Tu (`AppNavigation.pendingSection`); `openSettings` apre le
   Impostazioni in Tu dalla barra superiore o dalla barra laterale. `-BCWOpenPage <sezione>` in regular sceglie la sezione.
 - Senza Liquid Glass, finestra larga (come il web da 840 px): barra superiore (logo, ricerca generale che apre la
@@ -424,15 +428,25 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `glass`, `tab`, `class=compact|regular|auto`, `orientation`, `sidebar=open|close`, `action=settings|rail|search`,
   e per Dashboard e Orario `next`, `prev`, `scroll`, `top`, `nextweek`, `editing`, `mode`; `notice` apre la prima
   comunicazione nella Bacheca affiancata, `loginmode` e `loginfocus` cambiano modulo e danno il fuoco nell'accesso,
-  `timepicker` e `timetyping` aprono il selettore dell'orario e passano ai numeri). Servono quando lo strumento del
-  simulatore non ha il permesso di toccare. Un'azione arriva solo alle viste già presenti: aspettare che il foglio sia
+  `timepicker` e `timetyping` aprono il selettore dell'orario e passano ai numeri; `press=Etichetta` attiva un elemento
+  come VoiceOver, `custom=Etichetta|Azione`, `type=testo`, `ax=filtro` elenca le etichette, `navbars` le barre di
+  navigazione con i margini degli angoli). Servono quando lo strumento del simulatore non ha il permesso di toccare. Un'azione arriva solo alle viste già presenti: aspettare che il foglio sia
   aperto prima della successiva (qualche secondo).
 - Controllo dell'iPhone: screenshot prima/dopo (Dashboard, Orario Lista, Giorno e modifica, Voti, Tu, Bacheca,
   Aspetto, con e senza Liquid Glass) identici al pixel tranne la barra di stato; autotest dell'orario e dei widget PASS.
 - Seconda finestra dell'iPad: `AppModel.bootstrap()` si fa una volta sola (`didBootstrap`).
-- Non verificati: ridimensionamento reale delle finestre e rotazione vera (lo strumento del simulatore non ha avuto il
-  permesso; la finestra finta li approssima). Con `-BCWWindowClass compact` e Liquid Glass la barra delle schede resta
-  in alto, perché la classe di dimensione vera è ancora regular.
+- Finestre di iPadOS 26 (provate trascinando l'angolo con lo strumento del simulatore, `touch_path` dall'angolo in basso
+  a destra della finestra verso il centro; i tre pallini in alto a sinistra: il verde torna a tutto schermo): sotto
+  700 punti torna il layout del telefono, la sezione aperta passa in Tu e riallargando resta lì. Le barre in cima
+  disegnate dall'app (`TopAppBar`, `SearchAppBar`, `WideTopBar`) si spostano per i controlli con
+  `avoidsWindowControls()` (`Design/Adaptive.swift`): legge dalla finestra UIKit
+  `edgeInsets(for: .safeArea(cornerAdaptation: .horizontal/.vertical))` e sposta il contenuto se la barra tocca
+  l'angolo; a tutto schermo no (iPadOS riserva ancora l'angolo, ma i controlli non si vedono e le barre di sistema non
+  si spostano). `containerCornerOffset` di SwiftUI non bastava: nelle finestre non spostava nulla (verificato).
+- Non verificata la rotazione vera: con le finestre `requestGeometryUpdate` viene rifiutato e lo strumento del
+  simulatore non ruota; l'orizzontale è provato con la finestra finta. Con `-BCWWindowClass compact` e Liquid Glass
+  la barra delle schede resta in alto, perché la classe di dimensione vera è ancora regular (con la finestra stretta
+  vera è in basso).
 - Voti: affiancati = media (anello da 168) e andamento in una colonna da 380, schede, filtro e voti a destra (larghi al
   massimo 760); in colonna da 640 punti di contenuto media e andamento uno accanto all'altro. Materia: colonna da 360
   con media, periodi e obiettivo, a destra il grafico (alto 240) e i voti.
@@ -460,22 +474,30 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Fogli: `m3Sheet(size: .form | .page)` sull'iPad dà `presentationSizing` e toglie la maniglia; `m3Detents` mette i
   rilevamenti solo sull'iPhone (sull'iPad un rilevamento medio accorciava il foglio lasciandolo in basso). `.page`:
   generatore, verifiche nascoste, palette su una serie, Safari degli anni precedenti; il resto `.form`, anche il cambio
-  account (con `.form.fitted` uno `ScrollView` misura troppo poco: restava tagliato). Selettori della data e dell'orario
+  account (con `.form.fitted` uno `ScrollView` misura troppo poco: restava tagliato; anche una `PresentationSizing`
+  propria con l'altezza misurata non funziona, perché il sistema chiede la misura una volta sola all'apertura e una
+  `NavigationStack` dichiara altezza 0: il modulo resta più alto del contenuto). Selettori della data e dell'orario
   (`PickerPresentation`): sull'iPad `.fitted` largo 360; passando ai numeri il foglio non si rimpicciolisce, quindi i
   pulsanti restano in fondo (`Spacer` solo sull'iPad). Il tastierino numerico dell'iPad è un riquadro sopra il campo.
 - Accesso: in regular da 760 punti una card `surfaceContainer` (angoli `radii.xli`, larga al massimo 1040) in due
   colonne: logo, titolo e spiegazione del modulo (i due testi sovrapposti, così la card non cambia altezza) con
   `LoginArt(wide:)`, a destra gruppo e modulo; sotto affiliazione e server. Niente disposizione compatta con la
   tastiera. Nei fogli (aggiungere un account, account BCW) resta quella del telefono.
-- Attività in diretta solo sull'iPhone (`LiveActivityManager.isSupported`): sull'iPad niente impostazione né pulsante
-  nella card "Adesso" (`areActivitiesEnabled` è falso).
+- Attività in diretta anche sull'iPad: con iPadOS 26.3 `areActivitiesEnabled` è vero e l'attività compare nella
+  schermata di blocco (verificato con `-BCWLiveActivityDemo YES`, pulsante LOCK due volte). Impostazione e pulsante
+  della card "Adesso" restano; il testo dell'impostazione sull'iPad non parla della Dynamic Island.
+- Menu di Material (`MenuPanel`): un menu più alto dello spazio sotto e sopra il pulsante (gli orari a mezz'ora
+  dell'editor) sta dal lato più ampio e scorre, aperto sulla voce scelta. Prima partiva sotto il pulsante alto quanto
+  tutto il contenitore e usciva dal fondo (nei moduli dell'iPad tagliato, sull'iPhone fuori dallo schermo).
 - La Dashboard segue la larghezza (titolo abbreviato) solo in compact; in regular la misura resta in un
   `UnobservedValue`.
 - Le conversioni delle schede per la finestra stretta (sezione in Tu, ricerca chiusa) valgono solo nel passaggio da
   regular a compact, non all'avvio: all'avvio sull'iPhone toglievano la scheda Cerca di `-BCWTab search`.
-- Non verificati a mano (anche nel passo 2 senza permesso di toccare): trascinamenti, file e foto scelti dai fogli
-  centrati, QuickLook e l'evento nel Calendario da un foglio; iPad mini e 13 pollici. Il resto è provato con
-  `-BCWFakeWindow`, `-BCWWindowClass` e `-BCWScript`.
+- Provati a mano sull'iPad (strumento del simulatore): spostamento di un evento da un giorno all'altro nella settimana,
+  editor e selettori dal modulo, cambio di settimana, menu della barra di navigazione sopra il pannello, pressione
+  prolungata su Tu (cambio account), comunicazione aperta accanto all'elenco e allegato in QuickLook, finestre
+  ridimensionate con Material e con Liquid Glass. Non verificati: file e foto scelti dai fogli centrati, l'evento nel
+  Calendario da un foglio, iPad mini e 13 pollici.
 
 ## Prestazioni
 - Eventi, assenze e giorni del calendario per giorno: usare `model.events(on:)`, `absences(on:)`, `calendarStatus(on:)`,
