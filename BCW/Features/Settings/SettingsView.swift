@@ -67,6 +67,11 @@ struct SettingsView: View {
     @State private var isSplit = false
     /// Pannello mostrato accanto all'elenco (pagina affiancata).
     @State private var pane: SettingsPane = .general
+    /// Il pannello è stato scelto (non è quello di serie): tornando in colonna resta aperto.
+    @State private var paneChosen = false
+    /// Pannello aperto nella pila quando la pagina torna in colonna (es. ruotando l'iPad), come
+    /// l'elenco e dettaglio di sistema che si richiude.
+    @State private var collapsedPane: SettingsPane?
 
     var body: some View {
         ZStack {
@@ -130,11 +135,28 @@ struct SettingsView: View {
         .widthAtLeast(SplitMetrics.threshold, isOn: $isSplit)
         .themedBackground()
         .pageChrome("Impostazioni", style: .inline)
+        .navigationDestination(item: $collapsedPane) { pane in
+            Group {
+                if pane == .accounts { AccountView() } else { SettingsPaneView(pane: pane) }
+            }
+            .dismissesWhenSplit()
+        }
+        // Sull'iPhone la pagina non si affianca mai, quindi questo non scatta.
+        .onChange(of: isSplit) { _, split in
+            // Di nuovo affiancata il pannello aperto nella pila si chiude da sé (`dismissesWhenSplit`)
+            // e `pane` è ancora quello: ricompare accanto all'elenco.
+            if !split && paneChosen {
+                collapsedPane = pane
+            }
+        }
         // Pannello richiesto da chi apre le Impostazioni (es. `-BCWOpenPage impostazioni-appearance`).
         .onChange(of: navigation?.settingsPane, initial: true) { _, requested in
             guard let requested else { return }
             pane = requested
+            paneChosen = true
             navigation?.settingsPane = nil
+            // In colonna (pagina stretta) il pannello si apre nella pila.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { if !isSplit { collapsedPane = requested } }
         }
     }
 
@@ -153,6 +175,7 @@ struct SettingsView: View {
             guard self.pane != pane else { return }
             Haptics.selection()
             self.pane = pane
+            paneChosen = true
         } label: {
             NavigationRow(pane.title, icon: pane.icon, tint: pane.tint, showsChevron: false)
         }

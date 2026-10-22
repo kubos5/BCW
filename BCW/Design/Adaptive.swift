@@ -34,6 +34,14 @@ extension View {
         modifier(ReadableWidth(max: max))
     }
 
+    /// Per il dettaglio aperto nella pila quando una pagina con elenco e dettaglio torna in colonna
+    /// (es. ruotando l'iPad): se lo spazio torna abbastanza per affiancare, la pagina si chiude e il
+    /// dettaglio ricompare accanto all'elenco. La pagina sotto non lo può fare da sé: finché è
+    /// coperta non si ridimensiona.
+    func dismissesWhenSplit() -> some View {
+        modifier(DismissWhenSplit())
+    }
+
     /// Margini del contenuto della colonna principale di una pagina affiancata composta a mano
     /// (Dashboard, Orario), come in `SplitPage`: 12 verso la colonna laterale, il margine della
     /// pagina a destra, largo al massimo `maxWidth` e allineato all'inizio.
@@ -57,6 +65,19 @@ private struct SplitMainPadding: ViewModifier {
             .padding(.top, top)
             .padding(.bottom, bottom)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct DismissWhenSplit: ViewModifier {
+    @State private var wide = false
+    @Environment(\.dismiss) private var dismiss
+
+    func body(content: Content) -> some View {
+        content
+            .widthAtLeast(SplitMetrics.threshold, isOn: $wide)
+            .onChange(of: wide) { _, wide in
+                if wide { dismiss() }
+            }
     }
 }
 

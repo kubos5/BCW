@@ -13,6 +13,8 @@ struct NoticeboardView: View {
     @State private var isSplit = false
     /// Comunicazione aperta accanto all'elenco (pagina affiancata).
     @State private var selected: Notice.ID?
+    /// Comunicazione aperta nella pila quando la pagina torna in colonna (es. ruotando l'iPad).
+    @State private var collapsedNotice: Notice?
 
     private var categories: [String] {
         Array(Set(model.notices.map(\.category))).sorted()
@@ -57,6 +59,19 @@ struct NoticeboardView: View {
         .debugAction("notice") { selected = filtered.first?.id }
         #endif
         .themedBackground()
+        .navigationDestination(item: $collapsedNotice) { notice in
+            NoticeDetailView(notice: notice)
+                .pageChrome("", style: .inline)
+                // Di nuovo affiancata si chiude da sé e la comunicazione (ancora `selected`)
+                // ricompare nel pannello.
+                .dismissesWhenSplit()
+        }
+        // Sull'iPhone la pagina non si affianca mai, quindi questo non scatta.
+        .onChange(of: isSplit) { _, split in
+            if !split, let notice = model.notices.first(where: { $0.id == selected }) {
+                collapsedNotice = notice
+            }
+        }
         .pageChrome("Bacheca", subtitle: subtitle, style: .inline)
         .localSearchable(text: $search, prompt: Self.searchPrompt)
     }
