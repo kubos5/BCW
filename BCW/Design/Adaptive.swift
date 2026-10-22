@@ -33,6 +33,31 @@ extension View {
     func readableWidth(_ max: CGFloat = 860) -> some View {
         modifier(ReadableWidth(max: max))
     }
+
+    /// Margini del contenuto della colonna principale di una pagina affiancata composta a mano
+    /// (Dashboard, Orario), come in `SplitPage`: 12 verso la colonna laterale, il margine della
+    /// pagina a destra, largo al massimo `maxWidth` e allineato all'inizio.
+    func splitMainPadding(maxWidth: CGFloat = SplitMetrics.mainMaxWidth, top: CGFloat = SplitMetrics.sideTop,
+                          bottom: CGFloat = SplitMetrics.bottom) -> some View {
+        modifier(SplitMainPadding(maxWidth: maxWidth, top: top, bottom: bottom))
+    }
+}
+
+private struct SplitMainPadding: ViewModifier {
+    let maxWidth: CGFloat
+    let top: CGFloat
+    let bottom: CGFloat
+    @Environment(\.pageGutter) private var gutter
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: maxWidth, alignment: .leading)
+            .padding(.leading, SplitMetrics.mainLeading)
+            .padding(.trailing, gutter)
+            .padding(.top, top)
+            .padding(.bottom, bottom)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
 }
 
 private struct WidthThreshold: ViewModifier {
@@ -92,19 +117,13 @@ struct SplitPage<SideHeader: View, Side: View, Main: View>: View {
     @ViewBuilder let sideHeader: () -> SideHeader
     @ViewBuilder let side: () -> Side
     @ViewBuilder let main: () -> Main
-    @Environment(\.pageGutter) private var gutter
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             SplitSide(width: sideWidth, header: sideHeader, content: side)
             ScrollView {
                 main()
-                    .frame(maxWidth: mainMaxWidth, alignment: .leading)
-                    .padding(.leading, SplitMetrics.mainLeading)
-                    .padding(.trailing, gutter)
-                    .padding(.top, SplitMetrics.sideTop)
-                    .padding(.bottom, SplitMetrics.bottom)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .splitMainPadding(maxWidth: mainMaxWidth)
             }
             .tracksPageScroll()
             .scrollsToTopOnReselect()

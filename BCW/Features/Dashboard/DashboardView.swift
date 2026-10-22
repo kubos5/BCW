@@ -23,6 +23,8 @@ struct DashboardView: View {
     @FocusState private var searchFocused: Bool
     @State private var switchingAccount = false
     @State private var pickingDate = false
+    /// iPad largo con la pagina larga almeno 792 punti: giorno e calendario affiancati.
+    @State private var isSplit = false
 
     private var mode: DashboardMode { model.preferences.dashboardMode }
 
@@ -133,7 +135,7 @@ struct DashboardView: View {
             MenuItem("Nascondi compiti fatti", icon: "checkCircle", checked: model.preferences.hideCompletedHomework) {
                 model.preferences.hideCompletedHomework.toggle()
             }
-            if mode == .list {
+            if mode == .list || windowClass == .regular {
                 MenuItem("Mostra i prossimi giorni", icon: "timeline", checked: model.preferences.showUpcomingDays) {
                     model.preferences.showUpcomingDays.toggle()
                 }
@@ -155,43 +157,24 @@ struct DashboardView: View {
     /// Vista Calendario: sempre il mese; vista Lista: sempre la settimana.
     private var showsMonth: Bool { mode == .calendar }
 
+    /// "Nei prossimi giorni": sul telefono solo nella vista Lista; sull'iPad largo, dove c'è spazio
+    /// accanto al giorno, anche con il mese (come la versione web sugli schermi larghi).
+    private var showsUpcoming: Bool {
+        model.preferences.showUpcomingDays && (mode == .list || windowClass == .regular)
+    }
+
     @ViewBuilder
     private var content: some View {
-        // In alto la settimana (o il mese), ferma; sotto il giorno, che scorre.
-        VStack(spacing: 0) {
-            CalendarBar(selectedDay: daySelection, showsMonth: showsMonth,
-                        pickDate: { pickingDate = true })
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if let error = model.lastError {
-                        StatusBanner(message: error, icon: model.isOffline ? "wifiOff" : "alertTriangle")
-                    }
-                    DayPage(swipe: swipe, day: selectedDay) { day in
-                        VStack(alignment: .leading, spacing: 20) {
-                            DayDetail(day: day, jump: day.isTomorrow ? nil : ("Domani", {
-                                select(Date().adding(days: 1).startOfDay)
-                            }))
-                            if mode == .list && model.preferences.showUpcomingDays {
-                                UpcomingDays(after: day) { select($0) }
-                                    .equatable()
-                            }
-                        }
-                    }
-                }
-                .pagePadding()
-                .padding(.top, 4)
-                .padding(.bottom, 32)
-                .background { DaySwipeGesture(swipe: swipe) }
-            }
-            .refreshable { await model.refreshAll() }
-            .scrollPosition($scrollPosition)
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentOffset.y + geometry.contentInsets.top <= 1
-            } action: { _, atTop in
-                isAtTop = atTop
+        ZStack {
+            if isSplit {
+                splitContent
+            } else {
+                columnContent
             }
         }
+        // Sull'iPad largo, da 792 punti di pagina: settimana (o mese) e prossimi giorni a sinistra,
+        // il giorno a destra. Il giorno scelto e lo scorrimento stanno qui, sopra il ramo.
+        .widthAtLeast(SplitMetrics.threshold, isOn: $isSplit)
         .onAppear {
             swipe.onSwipe = { direction in
                 select(selectedDay.adding(days: direction))
@@ -211,7 +194,105 @@ struct DashboardView: View {
                 select(Date().adding(days: 1).startOfDay)
             }
         }
+        #if DEBUG
+        // Script di prova (`-BCWScript`): giorno dopo o prima, scorrimento del giorno.
+        .debugAction("next") { select(selectedDay.adding(days: 1)) }
+        .debugAction("prev") { select(selectedDay.adding(days: -1)) }
+        .debugAction("scroll") { withAnimation(Motion.spatialSlow) { scrollPosition.scrollTo(y: 600) } }
+        .debugAction("top") { withAnimation(Motion.spatialSlow) { scrollPosition.scrollTo(edge: .top) } }
+        #endif
         .themedBackground()
+    }
+
+    /// Telefono (e iPad stretto): in alto la settimana (o il mese), ferma; sotto il giorno, che scorre.
+    private var columnContent: some View {
+        VStack(spacing: 0) {
+            CalendarBar(selectedDay: daySelection, showsMonth: showsMonth,
+                        pickDate: { pickingDate = true })
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    banner
+                    dayPage(includingUpcoming: showsUpcoming)
+                }
+                .pagePadding()
+                .padding(.top, 4)
+                .padding(.bottom, 32)
+                .background { DaySwipeGesture(swipe: swipe) }
+            }
+            .modifier(dayScrolling)
+        }
+    }
+
+    /// iPad largo, come la Dashboard della versione web: a sinistra la settimana (o il mese),
+    /// ferma, e sotto "Nei prossimi giorni", che scorre per conto suo; a destra il giorno.
+    private var splitContent: some View {
+        HStack(alignment: .top, spacing: 0) {
+            SplitSide(width: 380) {
+                CalendarBar(selectedDay: daySelection, showsMonth: showsMonth, horizontalPadding: 0,
+                            pickDate: { pickingDate = true })
+                    .padding(.top, SplitMetrics.sideTop)
+            } content: {
+                if showsUpcoming {
+                    UpcomingDays(after: selectedDay) { select($0) }
+                        .equatable()
+                }
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    banner
+                    dayPage(includingUpcoming: false)
+                }
+                .splitMainPadding(maxWidth: 760)
+                .background { DaySwipeGesture(swipe: swipe) }
+            }
+            .modifier(dayScrolling)
+        }
+    }
+
+    @ViewBuilder
+    private var banner: some View {
+        if let error = model.lastError {
+            StatusBanner(message: error, icon: model.isOffline ? "wifiOff" : "alertTriangle")
+        }
+    }
+
+    /// Il giorno scelto (con "Nei prossimi giorni" sotto, se richiesto), con il cambio ad asse condiviso.
+    private func dayPage(includingUpcoming: Bool) -> some View {
+        DayPage(swipe: swipe, day: selectedDay) { day in
+            VStack(alignment: .leading, spacing: 20) {
+                DayDetail(day: day, jump: day.isTomorrow ? nil : ("Domani", {
+                    select(Date().adding(days: 1).startOfDay)
+                }))
+                if includingUpcoming {
+                    UpcomingDays(after: day) { select($0) }
+                        .equatable()
+                }
+            }
+        }
+    }
+
+    /// Aggiornamento tirando verso il basso e ritorno in cima dello scorrimento del giorno.
+    private var dayScrolling: DayScrolling {
+        DayScrolling(position: $scrollPosition, isAtTop: $isAtTop) { await model.refreshAll() }
+    }
+}
+
+/// Aggiornamento tirando verso il basso, posizione e "in cima" dello scorrimento del giorno.
+private struct DayScrolling: ViewModifier {
+    @Binding var position: ScrollPosition
+    @Binding var isAtTop: Bool
+    let refresh: () async -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .refreshable { await refresh() }
+            .scrollPosition($position)
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top <= 1
+            } action: { _, atTop in
+                isAtTop = atTop
+            }
     }
 }
 

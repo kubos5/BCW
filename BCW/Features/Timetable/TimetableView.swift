@@ -11,6 +11,8 @@ struct TimetableView: View {
     @Environment(AppModel.self) private var model
     /// Per nascondere la barra delle schede durante la modifica (al suo posto la barra degli strumenti).
     @Environment(\.tabChrome) private var tabChrome
+    @Environment(\.windowClass) private var windowClass
+    @Environment(\.pageGutter) private var gutter
     /// Cambia quando si tocca di nuovo la scheda Orario (iOS): si torna a oggi.
     var reselection = 0
 
@@ -30,6 +32,12 @@ struct TimetableView: View {
     /// Cambio di giorno con la transizione ad asse condiviso (anche scorrendo di lato).
     @State private var swipe = DaySwipe()
     @State private var pickingDate = false
+    /// iPad largo: vista Lista con la settimana a sinistra (pagina da 792 punti).
+    @State private var isSplit = false
+    /// iPad largo: la vista Giorno diventa la settimana (pagina da 700 punti)…
+    @State private var showsWeek = false
+    /// …con il mese e il riepilogo a sinistra (pagina da 1000 punti).
+    @State private var weekSide = false
 
     struct PaletteWeekday: Identifiable {
         let weekday: Int
@@ -142,6 +150,14 @@ struct TimetableView: View {
                 .onDisappear { tabChrome?.hidesBar = false }
                 #if DEBUG
                 .task { await DebugTimetable.prepareIfRequested(model: model) }
+                // Script di prova (`-BCWScript`): giorno dopo o prima, settimana dopo, modifica, vista.
+                .debugAction("next") { select(selectedDay.adding(days: 1)) }
+                .debugAction("prev") { select(selectedDay.adding(days: -1)) }
+                .debugAction("nextweek") { select(selectedDay.adding(days: 7)) }
+                .debugAction("editing") { setEditing(!isEditing) }
+                .debugAction("mode") {
+                    withAnimation(Motion.spatial) { model.preferences.timetableMode = mode == .day ? .list : .day }
+                }
                 #endif
         }
     }
@@ -214,8 +230,10 @@ struct TimetableView: View {
     @ViewBuilder
     private var barActions: some View {
         // "Oggi" c'è solo se il giorno scelto non è oggi, come "Domani" nella Dashboard. Senza
-        // Liquid Glass sta accanto al giorno in grande, come nella Dashboard.
-        if showsToday && (ThemeStore.shared.liquidGlass || isEditing) {
+        // Liquid Glass (e sull'iPad largo) sta accanto al giorno in grande, come nella Dashboard;
+        // nella settimana dell'iPad, che non ha il giorno in grande, sta nella barra.
+        let regular = windowClass == .regular
+        if showsToday && ((ThemeStore.shared.liquidGlass && !regular) || isEditing || (regular && mode == .day)) {
             BarTextButton(title: "Oggi") { select(Date()) }
                 .keyboardShortcut("t")
                 .help("Vai a oggi")
@@ -223,8 +241,11 @@ struct TimetableView: View {
         }
         if !isEditing {
             // Passa all'altra vista: l'icona è quella della vista in cui si va.
+            // Sull'iPad largo la vista Giorno mostra la settimana intera.
             let other: TimetableMode = mode == .day ? .list : .day
-            BarButton(other == .day ? "Vista Giorno" : "Vista Lista", icon: other == .day ? "dayView" : "viewAgenda") {
+            let week = regular && showsWeek
+            BarButton(other == .day ? (week ? "Vista Settimana" : "Vista Giorno") : "Vista Lista",
+                      icon: other == .day ? (week ? "weekView" : "dayView") : "viewAgenda") {
                 withAnimation(Motion.spatial) { model.preferences.timetableMode = other }
             }
             optionsMenu
@@ -269,43 +290,20 @@ struct TimetableView: View {
 
     @ViewBuilder
     private var content: some View {
-        // In alto la settimana, ferma, con sotto bozza, modifica e avvisi; poi il giorno, che scorre.
-        VStack(spacing: 0) {
-            // Alla stessa altezza della Dashboard: lì la barra di ricerca (Material) è 4 punti più
-            // alta del titolo grande.
-            CalendarBar(selectedDay: daySelection, pickDate: { pickingDate = true })
-                .padding(.top, ThemeStore.shared.liquidGlass ? 0 : 4)
-            floatingExtras
-            switch mode {
-            case .list, .calendar:
-                ScrollView {
-                    DayPage(swipe: swipe, day: selectedDay) { day in
-                        TimetableDayList(content: TimetableDayContent(day: day, model: model), actions: actions,
-                                         jump: day.isToday ? nil : { select(Date()) })
-                            .equatable()
-                            .pagePadding()
-                            .padding(.top, 4)
-                            // Spazio per il pulsante d'azione flottante.
-                            .padding(.bottom, Theme.bottomInset + 56)
-                    }
-                    .background { DaySwipeGesture(swipe: swipe) }
-                }
-                .scrollDismissesKeyboard(.immediately)
-                .transition(.fadeThrough)
-            case .day:
-                if ThemeStore.shared.liquidGlass {
-                    // La barra di sistema segue il primo scorrimento che trova: questo, fermo, la
-                    // tiene con il titolo grande (la vista Giorno parte già scorsa alla prima ora).
-                    ScrollView { Color.clear.frame(height: 1) }
-                        .frame(height: 0)
-                        .scrollDisabled(true)
-                        .accessibilityHidden(true)
-                }
-                TimetableTimeline(days: [selectedDay], selectedDay: selectedDay, actions: actions, isEditing: isEditing,
-                                  swipe: swipe)
+        ZStack {
+            if usesWideLayout {
+                wideContent
+                    .transition(.fadeThrough)
+            } else {
+                columnContent
                     .transition(.fadeThrough)
             }
         }
+        // Sull'iPad largo: Lista affiancata alla settimana da 792 punti, settimana intera nella vista
+        // Giorno da 700 (con il mese a lato da 1000). Il giorno scelto resta qui, sopra i rami.
+        .widthAtLeast(SplitMetrics.threshold, isOn: $isSplit)
+        .widthAtLeast(700, isOn: $showsWeek)
+        .widthAtLeast(1000, isOn: $weekSide)
         .animation(Motion.spatial, value: isEditing)
         .animation(Motion.spatial, value: store.draft == nil)
         .themedBackground()
@@ -319,18 +317,163 @@ struct TimetableView: View {
         .onChange(of: isEditing) { _, editing in swipe.isEnabled = !editing }
     }
 
-    /// Sotto la settimana: bozza in anteprima, modifica dell'orario e, nella vista Giorno, le
-    /// verifiche senza lezione in orario.
+    /// iPad largo: la Lista affiancata alla settimana o la settimana intera della vista Giorno.
+    private var usesWideLayout: Bool {
+        mode == .day ? showsWeek : isSplit
+    }
+
+    /// Telefono (e iPad stretto): in alto la settimana, ferma, con sotto bozza, modifica e avvisi;
+    /// poi il giorno, che scorre.
+    private var columnContent: some View {
+        VStack(spacing: 0) {
+            // Alla stessa altezza della Dashboard: lì la barra di ricerca (Material, sul telefono) è
+            // 4 punti più alta del titolo grande.
+            CalendarBar(selectedDay: daySelection, pickDate: { pickingDate = true })
+                .padding(.top, ThemeStore.shared.liquidGlass || windowClass == .regular ? 0 : 4)
+            floatingExtras(showsUnmatched: mode == .day)
+            switch mode {
+            case .list, .calendar:
+                ScrollView {
+                    dayList
+                        .pagePadding()
+                        .padding(.top, 4)
+                        // Spazio per il pulsante d'azione flottante.
+                        .padding(.bottom, Theme.bottomInset + 56)
+                        .background { DaySwipeGesture(swipe: swipe) }
+                }
+                .scrollDismissesKeyboard(.immediately)
+                .transition(.fadeThrough)
+            case .day:
+                if ThemeStore.shared.liquidGlass {
+                    stillScroll
+                }
+                TimetableTimeline(days: [selectedDay], selectedDay: selectedDay, actions: actions, isEditing: isEditing,
+                                  swipe: swipe)
+                    .transition(.fadeThrough)
+            }
+        }
+    }
+
+    /// Il giorno scelto nella Lista, con il cambio ad asse condiviso.
+    private var dayList: some View {
+        DayPage(swipe: swipe, day: selectedDay) { day in
+            TimetableDayList(content: TimetableDayContent(day: day, model: model), actions: actions,
+                             jump: day.isToday ? nil : { select(Date()) })
+                .equatable()
+        }
+    }
+
+    /// Con Liquid Glass la barra di sistema segue il primo scorrimento che trova: questo, fermo, la
+    /// tiene con il titolo grande (la vista Giorno parte già scorsa alla prima ora).
+    private var stillScroll: some View {
+        ScrollView { Color.clear.frame(height: 1) }
+            .frame(height: 0)
+            .scrollDisabled(true)
+            .accessibilityHidden(true)
+    }
+
+    /// iPad largo, come l'Orario della versione web sugli schermi larghi.
     @ViewBuilder
-    private var floatingExtras: some View {
-        let unmatched = mode == .day ? TimetableDayContent(day: selectedDay, model: model).unmatchedTests : []
+    private var wideContent: some View {
+        if mode == .day {
+            weekContent
+        } else {
+            // Lista: a sinistra la settimana, ferma, e il riepilogo della settimana; a destra il giorno.
+            HStack(alignment: .top, spacing: 0) {
+                SplitSide(width: 380) {
+                    CalendarBar(selectedDay: daySelection, horizontalPadding: 0, pickDate: { pickingDate = true })
+                        .padding(.top, SplitMetrics.sideTop)
+                } content: {
+                    TimetableWeekOverview(selectedDay: selectedDay) { select($0) }
+                        .equatable()
+                }
+                VStack(spacing: 0) {
+                    floatingExtras(showsUnmatched: false, split: true)
+                    ScrollView {
+                        dayList
+                            .splitMainPadding(maxWidth: 760, bottom: Theme.bottomInset + 56)
+                            .background { DaySwipeGesture(swipe: swipe) }
+                    }
+                    .scrollDismissesKeyboard(.immediately)
+                }
+            }
+        }
+    }
+
+    /// Vista Giorno sull'iPad largo: la settimana intera in una card, come un calendario Material
+    /// sugli schermi larghi. Da 1000 punti a sinistra il mese e il riepilogo della settimana,
+    /// altrimenti la settimana ferma in alto. La settimana cambia con le frecce, scorrendo sulla
+    /// barra, dal mese, dal riepilogo o con "Oggi" (niente scorrimento di lato sulla griglia).
+    @ViewBuilder
+    private var weekContent: some View {
+        if weekSide {
+            HStack(alignment: .top, spacing: 0) {
+                SplitSide(width: 320) {
+                    CalendarBar(selectedDay: daySelection, showsMonth: true, horizontalPadding: 0,
+                                pickDate: { pickingDate = true })
+                        .padding(.top, SplitMetrics.sideTop)
+                } content: {
+                    TimetableWeekOverview(selectedDay: selectedDay) { select($0) }
+                        .equatable()
+                }
+                VStack(spacing: 0) {
+                    floatingExtras(showsUnmatched: false, split: true)
+                    weekTimeline
+                        .padding(.leading, SplitMetrics.mainLeading)
+                        .padding(.trailing, gutter)
+                        .padding(.top, store.draft == nil && !isEditing ? SplitMetrics.sideTop : 0)
+                        .padding(.bottom, 12)
+                }
+            }
+        } else {
+            VStack(spacing: 0) {
+                CalendarBar(selectedDay: daySelection, pickDate: { pickingDate = true })
+                floatingExtras(showsUnmatched: false)
+                weekTimeline
+                    .padding(.horizontal, gutter)
+                    .padding(.bottom, 12)
+            }
+        }
+    }
+
+    /// Le colonne dei giorni della settimana scelta (le verifiche senza lezione le mostra la griglia).
+    private var weekTimeline: some View {
+        // Con Liquid Glass il titolo della pagina è fermo sull'iPad largo (`pageChrome`): non serve
+        // lo scorrimento fermo della vista Giorno del telefono.
+        let days = weekDays
+        return DayPage(swipe: swipe, day: selectedDay.startOfWeek) { _ in
+            TimetableTimeline(days: days, selectedDay: selectedDay, onSelectDay: { select($0) }, actions: actions,
+                              isEditing: isEditing, hourHeight: 52)
+        }
+        .padding(.top, 4)
+        .background(Theme.surfaceContainerLow, in: .rect(cornerRadius: Theme.radii.xl, style: .continuous))
+        .clipShape(.rect(cornerRadius: Theme.radii.xl, style: .continuous))
+    }
+
+    /// Lunedì–venerdì della settimana scelta, più sabato e domenica se scelti o con eventi (come la
+    /// versione web).
+    private var weekDays: [Date] {
+        let monday = selectedDay.startOfWeek
+        return (0..<7).compactMap { offset in
+            let day = monday.adding(days: offset)
+            let keep = offset < 5 || day.isSameDay(as: selectedDay) || !store.entries(on: day).isEmpty
+            return keep ? day : nil
+        }
+    }
+
+    /// Sotto la settimana: bozza in anteprima, modifica dell'orario e, nella vista Giorno del
+    /// telefono, le verifiche senza lezione in orario (nella settimana dell'iPad le mostra la griglia).
+    /// `split`: nella colonna principale di una pagina affiancata.
+    @ViewBuilder
+    private func floatingExtras(showsUnmatched: Bool, split: Bool = false) -> some View {
+        let unmatched = showsUnmatched ? TimetableDayContent(day: selectedDay, model: model).unmatchedTests : []
         if store.draft != nil || isEditing || !unmatched.isEmpty {
             VStack(spacing: 10) {
                 if store.draft != nil {
                     banner
                 }
                 if isEditing {
-                    TimetableEditBar()
+                    TimetableEditBar(multipleDays: windowClass == .regular && showsWeek)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 if !unmatched.isEmpty {
@@ -348,7 +491,9 @@ struct TimetableView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .pagePadding()
+            .padding(.leading, split ? SplitMetrics.mainLeading : gutter)
+            .padding(.trailing, gutter)
+            .padding(.top, split ? SplitMetrics.sideTop : 0)
             .padding(.bottom, 12)
         }
     }

@@ -63,6 +63,8 @@ struct TimetableAlignmentPicker: View {
 /// l'allineamento si sceglie nella barra degli strumenti in basso.
 struct TimetableEditBar: View {
     @Environment(AppModel.self) private var model
+    /// Settimana intera (iPad largo): gli eventi si spostano anche da un giorno all'altro.
+    var multipleDays = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -89,7 +91,9 @@ struct TimetableEditBar: View {
         let alignment = model.timetable.alignment == .automatic
             ? "Scatti di mezz'ora, eventi da 30 minuti o un'ora."
             : "Scatti di 5 minuti; orari esatti dall'evento."
-        let gestures = "Tieni premuto e trascina per spostare, trascina il bordo in basso per la durata, tocca due volte un'ora vuota per aggiungere."
+        let gestures = multipleDays
+            ? "Tieni premuto e trascina per spostare, anche in un altro giorno; trascina il bordo in basso per la durata; tocca due volte un'ora vuota per aggiungere."
+            : "Tieni premuto e trascina per spostare, trascina il bordo in basso per la durata, tocca due volte un'ora vuota per aggiungere."
         return "\(gestures) \(alignment)"
     }
 }

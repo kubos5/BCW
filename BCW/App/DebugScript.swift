@@ -7,7 +7,8 @@ import UIKit
 /// Comandi: `glass=YES|NO`, `tab=dashboard|timetable|grades|you|search|<sezione di -BCWOpenPage>`,
 /// `class=compact|regular|auto` (classe della finestra), `orientation=landscape|portrait`,
 /// `sidebar=open|close` (barra laterale di sistema), `action=<nome>` (azioni delle pagine:
-/// `settings`, `rail`, `search`, `editing`, `next`, `prev`, `today`).
+/// `settings`, `rail`, `search`; Dashboard e Orario: `next`, `prev`; Dashboard: `scroll`, `top`;
+/// Orario: `nextweek`, `editing`, `mode`).
 @Observable
 final class DebugScript {
     static let shared = DebugScript()
