@@ -57,6 +57,7 @@ final class DebugScript {
         case "type": DebugAccessibility.type(value)
         case "ax": DebugAccessibility.dump(filter: value)
         case "views": DebugAccessibility.views(minWidth: Double(value) ?? 300)
+        case "navbars": DebugAccessibility.navigationBars()
         default: print("BCW-SCRIPT comando sconosciuto: \(command)")
         }
     }
@@ -178,6 +179,25 @@ enum DebugAccessibility {
         }
         for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
             for window in scene.windows where !window.isHidden { visit(window, depth: 0) }
+        }
+    }
+
+    static func navigationBars() {
+        func visit(_ view: UIView) {
+            if let bar = view as? UINavigationBar {
+                let frame = bar.convert(bar.bounds, to: nil)
+                print("BCW-NAVBAR \(frame) margins \(bar.layoutMargins) cornerH \(bar.edgeInsets(for: .margins(cornerAdaptation: .horizontal))) safe \(bar.safeAreaInsets) preserves \(bar.preservesSuperviewLayoutMargins)")
+                var ancestor: UIView? = bar
+                while let current = ancestor {
+                    let f = current.convert(current.bounds, to: nil)
+                    print("BCW-NAVBAR   \(Swift.type(of: current)) \(Int(f.minX)),\(Int(f.minY)) \(Int(f.width))x\(Int(f.height)) safeH \(current.edgeInsets(for: .safeArea(cornerAdaptation: .horizontal)).left) safe \(current.safeAreaInsets.top)/\(current.safeAreaInsets.left) insetsFromSafe \(current.insetsLayoutMarginsFromSafeArea)")
+                    ancestor = current.superview
+                }
+            }
+            for subview in view.subviews { visit(subview) }
+        }
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            for window in scene.windows where !window.isHidden { visit(window) }
         }
     }
 

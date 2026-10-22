@@ -34,6 +34,9 @@ struct MainTabView: View {
     #if DEBUG
     @State private var consumedDebugSection = false
     #endif
+    /// Zone non sicure attorno alla `TabView` (barra di stato, indicatore della Home): sull'iPad il
+    /// ritaglio senza pannello le copre esattamente (`PanelShape`). Cambiano di rado.
+    @State private var unsafeArea = EdgeInsets()
 
     enum AppTab: Hashable {
         case dashboard, timetable, grades, you, search
@@ -225,7 +228,12 @@ struct MainTabView: View {
                     }
                     // Sempre qui, mai dentro rami diversi: cambiando shell la `TabView` resta la stessa.
                     tabs
-                        .clipShape(PanelShape(radius: Theme.radii.xl, clips: wide))
+                        .background {
+                            Color.clear
+                                .ignoresSafeArea()
+                                .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { unsafeArea = $0 }
+                        }
+                        .clipShape(PanelShape(radius: Theme.radii.xl, clips: wide, outset: unsafeArea))
                         .padding(.trailing, wide ? WideShellMetrics.panelInset : 0)
                         .padding(.bottom, wide ? WideShellMetrics.panelInset : 0)
                 }
@@ -312,6 +320,10 @@ struct MainTabView: View {
                             }
                             .tabPlacement(.sidebarOnly)
                             .badge(section.badge(model))
+                            // Nella finestra stretta le sezioni stanno in Tu: con più di 5 schede
+                            // la barra in basso di sistema (Liquid Glass) metteva "Altro" al posto
+                            // di Cerca, anche con le sezioni solo nella barra laterale (verificato).
+                            .hidden(!isRegular)
                         }
                     }
                     // Anche il gruppo: altrimenti la barra delle schede in alto lo mostrava (freccia ›).
@@ -436,17 +448,23 @@ struct MainTabView: View {
 }
 
 /// Ritaglio del pannello della pagina: angoli ampi sulla finestra larga senza Liquid Glass; altrove
-/// un rettangolo molto più grande della `TabView`, che quindi non ritaglia nulla (la barra delle
-/// schede di sistema e gli sfondi delle pagine escono dai bordi della `TabView`, nella zona sicura:
-/// ritagliati, l'indicatore della Home restava su una fascia vuota). Una forma sola per i due
-/// casi, così la `TabView` non cambia identità.
+/// la `TabView` più le zone non sicure attorno, cioè l'intera finestra, che quindi non ritaglia
+/// nulla (la barra delle schede di sistema e gli sfondi delle pagine escono dai bordi della
+/// `TabView`, nella zona sicura: ritagliati, l'indicatore della Home restava su una fascia vuota).
+/// Non un rettangolo enorme: il contenitore del ritaglio sarebbe uscito dalla finestra e UIKit non
+/// avrebbe più visto l'angolo dei controlli della finestra di iPadOS 26, così con Liquid Glass la
+/// freccia indietro finiva sotto i tre pallini (verificato). Una forma sola per i due casi, così
+/// la `TabView` non cambia identità.
 private struct PanelShape: Shape {
     var radius: CGFloat
     var clips: Bool
+    var outset: EdgeInsets
 
     func path(in rect: CGRect) -> Path {
-        clips ? Path(roundedRect: rect, cornerRadius: radius, style: .continuous)
-            : Path(rect.insetBy(dx: -4000, dy: -4000))
+        if clips { return Path(roundedRect: rect, cornerRadius: radius, style: .continuous) }
+        return Path(CGRect(x: rect.minX - outset.leading, y: rect.minY - outset.top,
+                           width: rect.width + outset.leading + outset.trailing,
+                           height: rect.height + outset.top + outset.bottom))
     }
 }
 
