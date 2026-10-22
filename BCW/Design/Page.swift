@@ -114,16 +114,31 @@ private struct PageChrome<Actions: View>: ViewModifier {
             // Le pagine principali delle schede hanno il titolo grande nella riga dei pulsanti
             // (`.inlineLarge`): solo così toccando di nuovo la scheda il sistema torna in cima con il
             // titolo per intero. Le pagine aperte da un'altra hanno il titolo piccolo al centro.
-            // Sull'iPad largo, con la barra delle schede in alto, né il titolo grande nella riga dei
-            // pulsanti né quello piccolo al centro compaiono (verificato: al centro c'è la barra delle
-            // schede): le pagine principali hanno il titolo grande sotto la barra, come le app di sistema.
             let pushed = showsBack ?? !isRootPage
-            content
-                .navigationTitle(title)
-                .toolbarTitleDisplayMode(pushed ? .inline : (windowClass == .regular ? .large : .inlineLarge))
-                .toolbar {
-                    ToolbarItemGroup(placement: .topBarTrailing) { actions() }
-                }
+            if windowClass == .regular && !pushed {
+                // Sull'iPad largo, con la barra delle schede in alto, né il titolo grande nella riga
+                // dei pulsanti né quello piccolo al centro compaiono (al centro c'è la barra delle
+                // schede), e quello grande su una riga a parte restava compresso dopo aver acceso
+                // Liquid Glass dalle Impostazioni (verificato). Il titolo grande è quindi fermo sotto
+                // la barra, come quello della barra di Material sull'iPad largo.
+                content
+                    .navigationTitle(title)
+                    .toolbarTitleDisplayMode(.inline)
+                    .toolbar(removing: .title)
+                    .toolbar {
+                        ToolbarItemGroup(placement: .topBarTrailing) { actions() }
+                    }
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        GlassPageTitle(title: title, subtitle: subtitle)
+                    }
+            } else {
+                content
+                    .navigationTitle(title)
+                    .toolbarTitleDisplayMode(pushed ? .inline : .inlineLarge)
+                    .toolbar {
+                        ToolbarItemGroup(placement: .topBarTrailing) { actions() }
+                    }
+            }
         } else {
             let back = showsBack ?? !isRootPage
             // Le pagine principali delle schede hanno il titolo grande nella riga dei pulsanti, come
@@ -144,6 +159,38 @@ private struct PageChrome<Actions: View>: ViewModifier {
                               actions: actions)
                 }
         }
+    }
+}
+
+/// Titolo grande delle pagine principali con Liquid Glass sull'iPad largo: fermo sotto la barra di
+/// sistema (con la barra delle schede in alto), sullo sfondo della pagina fino in cima, così il
+/// contenuto che scorre non passa dietro il titolo.
+private struct GlassPageTitle: View {
+    let title: String
+    let subtitle: String?
+    @Environment(\.pageGutter) private var gutter
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(.m3(34, weight: 550, rounded: true))
+                .tracking(-0.3)
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.m3(12))
+                    .foregroundStyle(Theme.onSurfaceVariant)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, gutter)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .bottomLeading)
+        .background(Theme.background.ignoresSafeArea(edges: .top))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
