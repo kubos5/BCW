@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // Mattoni per le pagine dell'iPad con la finestra larga (`WindowClass.regular`): soglie di
 // larghezza con isteresi, pagine in due colonne (come `.split` della versione web), griglie
@@ -42,12 +43,93 @@ extension View {
         modifier(DismissWhenSplit())
     }
 
+    /// Sull'iPad lascia libero l'angolo dei controlli della finestra (i tre pallini in alto a
+    /// sinistra delle finestre di iPadOS 26): il contenuto si sposta dal lato iniziale quanto serve,
+    /// solo se la vista tocca quell'angolo. Per le barre in cima disegnate dall'app (Material), che a
+    /// differenza di quelle di sistema non lo fanno da sé. Sull'iPhone non cambia nulla.
+    func avoidsWindowControls() -> some View {
+        modifier(WindowControlsAvoidance())
+    }
+
     /// Margini del contenuto della colonna principale di una pagina affiancata composta a mano
     /// (Dashboard, Orario), come in `SplitPage`: 12 verso la colonna laterale, il margine della
     /// pagina a destra, largo al massimo `maxWidth` e allineato all'inizio.
     func splitMainPadding(maxWidth: CGFloat = SplitMetrics.mainMaxWidth, top: CGFloat = SplitMetrics.sideTop,
                           bottom: CGFloat = SplitMetrics.bottom) -> some View {
         modifier(SplitMainPadding(maxWidth: maxWidth, top: top, bottom: bottom))
+    }
+}
+
+private struct WindowControlsAvoidance: ViewModifier {
+    /// Margine che serve ora (0 se la barra non tocca l'angolo): cambia solo quando la finestra
+    /// entra o esce dall'angolo dei controlli, non a ogni passo del ridimensionamento.
+    @State private var inset: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        if WindowClass.isPad {
+            content
+                .padding(.leading, inset)
+                .background(WindowControlsInsetReader { inset = $0 })
+        } else {
+            content
+        }
+    }
+}
+
+/// Legge dalla finestra (UIKit) l'angolo dei controlli: la zona sicura con l'adattamento agli
+/// angoli in orizzontale dice quanto sono larghi, quella in verticale fin dove arrivano in basso.
+/// `containerCornerOffset` di SwiftUI non bastava: nelle finestre strette non spostava la barra
+/// (verificato), perché iPadOS dà l'angolo solo alle viste che partono dal bordo della zona sicura.
+private struct WindowControlsInsetReader: UIViewRepresentable {
+    let onChange: (CGFloat) -> Void
+
+    func makeUIView(context: Context) -> ReaderView {
+        let view = ReaderView()
+        view.isUserInteractionEnabled = false
+        view.onChange = onChange
+        return view
+    }
+
+    func updateUIView(_ view: ReaderView, context: Context) {
+        view.onChange = onChange
+    }
+
+    final class ReaderView: UIView {
+        var onChange: ((CGFloat) -> Void)?
+        private var last: CGFloat = 0
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            measure()
+        }
+
+        override func safeAreaInsetsDidChange() {
+            super.safeAreaInsetsDidChange()
+            measure()
+        }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            measure()
+        }
+
+        private func measure() {
+            guard let window else { return }
+            let frame = convert(bounds, to: window)
+            let corner = window.edgeInsets(for: .safeArea(cornerAdaptation: .horizontal))
+            let below = window.edgeInsets(for: .safeArea(cornerAdaptation: .vertical)).top
+            // Gli angoli arrotondati da soli valgono pochi punti: i controlli molti di più. A tutto
+            // schermo iPadOS riserva ancora l'angolo ma i controlli non si vedono (e le barre di
+            // sistema non si spostano): lì niente margine (verificato).
+            let fullScreen = window.bounds.size == window.screen.bounds.size
+            let hasControls = !fullScreen && corner.left - window.safeAreaInsets.left > 12
+            let inset = hasControls && frame.minY < below && frame.minX < corner.left
+                ? (corner.left - frame.minX).rounded(.up) : 0
+            guard abs(inset - last) > 0.5 else { return }
+            last = inset
+            // Fuori dall'impaginazione in corso.
+            DispatchQueue.main.async { [weak self] in self?.onChange?(inset) }
+        }
     }
 }
 

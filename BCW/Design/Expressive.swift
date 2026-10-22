@@ -76,6 +76,9 @@ struct SearchAppBar<Trailing: View>: View {
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 8)
+        // In una finestra piccola dell'iPad la barra sta nell'angolo dei controlli della finestra.
+        .avoidsWindowControls()
+        .frame(maxWidth: .infinity)
         .background(Theme.surface.ignoresSafeArea(edges: .top))
         .animation(Motion.spatial, value: query.isEmpty)
     }

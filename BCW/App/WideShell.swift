@@ -75,6 +75,9 @@ struct WideTopBar: View {
         .padding(.leading, 20)
         .padding(.trailing, 16)
         .padding(.top, 8)
+        // In una finestra non a schermo intero i controlli della finestra stanno in alto a sinistra.
+        .avoidsWindowControls()
+        .frame(maxWidth: .infinity)
         .frame(height: WideShellMetrics.topBarHeight)
         .background(Theme.surfaceContainer.ignoresSafeArea(edges: .top))
     }

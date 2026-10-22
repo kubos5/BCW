@@ -243,6 +243,11 @@ struct TopAppBar<Actions: View>: View {
         }
         .padding(.horizontal, 4)
         .frame(height: 64)
+        // In una finestra piccola dell'iPad la barra sta nell'angolo dei controlli della finestra.
+        // Sulla barra intera: iPadOS riconosce l'angolo solo per le viste che partono dal bordo
+        // dello spazio sicuro (la riga interna, centrata, inizia 10 punti più in basso: verificato).
+        .avoidsWindowControls()
+        .frame(maxWidth: .infinity)
         .background {
             (scrolled ? Theme.surfaceContainer : Theme.surface)
                 .ignoresSafeArea(edges: .top)
