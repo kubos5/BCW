@@ -54,14 +54,15 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Argomenti di avvio per le prove (solo DEBUG, con `simctl launch … <argomenti>`): `-BCWTab timetable|grades|you|search`
   apre una scheda, `-BCWLiquidGlass YES|NO` (resta salvato), `-BCWAccent #RRGGBB` (non salvato), `-BCWTimetableDemo YES` crea l'orario della demo
   dalle lezioni se è vuoto, `-BCWHideTests YES` aggiunge una regola e una verifica nascosta,
-  `-BCWTimetableSheet generator|hidden` apre il generatore (con `-BCWGeneratorBreaks N` intervalli) o le verifiche
-  nascoste, `-BCWTimetableDraft YES` mostra la bozza in anteprima, `-timetableMode list|day` sceglie la vista,
+  `-BCWTimetableSheet generator|hidden|date|editor|detail` apre il generatore (con `-BCWGeneratorBreaks N` intervalli), le verifiche
+  nascoste, il selettore della data, l'editor di un evento nuovo o il dettaglio del primo evento del giorno, `-BCWTimetableDraft YES` mostra la bozza in anteprima, `-timetableMode list|day` sceglie la vista,
   `-BCWTimetableEditing YES` apre la modifica, `-BCWTimetableDay N` apre l'orario N giorni dopo oggi (i valori negativi
   non passano come argomenti), `-BCWOpenSubject YES`, `-BCWDaysAgo N`, `-BCWKeychainService nome` (Portachiavi vuoto),
   `-BCWNowMinute N` (l'orario fa come se fosse il minuto N del giorno, per l'evento "In corso", `TimeOfDay.nowMinutes`),
   `-BCWOpenPage nome` apre una pagina di Tu (bacheca, note, scrutini, anni, assenze, materiale, lezioni, agenda,
   materie, libri, calendario, account, icona, impostazioni o `impostazioni-<pane>`, es. `impostazioni-appearance`;
-  `cambia-account` apre il popup degli account; serve anche `-BCWTab you`). Per l'iPad `-BCWWindowClass`, `-BCWFakeWindow`,
+  `cambia-account` apre il popup degli account; serve anche `-BCWTab you`), `-BCWSearchQuery testo` apre la ricerca con quel
+  testo (con `-BCWTab search`). Per l'iPad `-BCWWindowClass`, `-BCWFakeWindow`,
   `-BCWOrientation`, `-railCollapsed` e `-BCWScript` (vedi "iPad"). Le opzioni dell'icona si provano anche
   come argomenti (`-appIconShape cookie9 -appIconColor verde -appIconAppearance auto|light|dark
   -appIconDarkBackground material|ios`), letti da `ThemeStore` senza salvarli.
@@ -421,17 +422,60 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   1640 × 1140 px in alto dallo screenshot), `-BCWOrientation landscape|portrait` (funziona sull'iPhone),
   `-BCWScript "5:glass=YES;8:class=compact"` (comandi ai secondi indicati, scritti nella console come `BCW-SCRIPT`:
   `glass`, `tab`, `class=compact|regular|auto`, `orientation`, `sidebar=open|close`, `action=settings|rail|search`,
-  e per Dashboard e Orario `next`, `prev`, `scroll`, `top`, `nextweek`, `editing`, `mode`). Servono quando lo strumento
-  del simulatore non ha il permesso di toccare.
+  e per Dashboard e Orario `next`, `prev`, `scroll`, `top`, `nextweek`, `editing`, `mode`; `notice` apre la prima
+  comunicazione nella Bacheca affiancata, `loginmode` e `loginfocus` cambiano modulo e danno il fuoco nell'accesso,
+  `timepicker` e `timetyping` aprono il selettore dell'orario e passano ai numeri). Servono quando lo strumento del
+  simulatore non ha il permesso di toccare. Un'azione arriva solo alle viste già presenti: aspettare che il foglio sia
+  aperto prima della successiva (qualche secondo).
 - Controllo dell'iPhone: screenshot prima/dopo (Dashboard, Orario Lista, Giorno e modifica, Voti, Tu, Bacheca,
   Aspetto, con e senza Liquid Glass) identici al pixel tranne la barra di stato; autotest dell'orario e dei widget PASS.
 - Seconda finestra dell'iPad: `AppModel.bootstrap()` si fa una volta sola (`didBootstrap`).
 - Non verificati: ridimensionamento reale delle finestre e rotazione vera (lo strumento del simulatore non ha avuto il
   permesso; la finestra finta li approssima). Con `-BCWWindowClass compact` e Liquid Glass la barra delle schede resta
   in alto, perché la classe di dimensione vera è ancora regular.
-- Da fare (passo 2 del piano): Voti e materia affiancati, Tu a due colonne, Bacheca e Impostazioni con elenco e
-  dettaglio, sezioni più larghe, fogli centrati, login a due colonne, attività in diretta nascoste sull'iPad (in
-  Impostazioni › Orario e il pulsante della `TimetableNowCard`, che oggi compare anche sull'iPad).
+- Voti: affiancati = media (anello da 168) e andamento in una colonna da 380, schede, filtro e voti a destra (larghi al
+  massimo 760); in colonna da 640 punti di contenuto media e andamento uno accanto all'altro. Materia: colonna da 360
+  con media, periodi e obiettivo, a destra il grafico (alto 240) e i voti.
+- Tu: le voci delle sezioni vengono da `AppSection` (titoli, icone, colori, sottotitoli, conteggi) e in regular
+  scelgono la sezione nella barra di navigazione (`AppNavigation.select`), anche "Da vedere" e le statistiche delle
+  assenze. Affiancata: profilo (320) accanto a statistiche e "Da vedere", gruppi in `AdaptiveColumns(320)`; in colonna
+  regular gruppi in `AdaptiveColumns(300)`; sul telefono com'era.
+- Bacheca: affiancata come la posta del web: elenco da 380 (ricerca e chip in cima) e la comunicazione scelta in un
+  pannello `surfaceContainerLow` con angoli `radii.xl` (`NoticeDetailView(insets:)`, `.id` per comunicazione: si
+  segna come letta aprendola), altrimenti "Nessuna comunicazione aperta". Sottotitolo "N da leggere" in regular.
+- Impostazioni: affiancate = pannelli in una colonna da 320 (`ListRowButtonStyle(selected:)`, `NavigationRow` senza
+  freccia) e il pannello scelto a destra (largo al massimo 640). Il contenuto della pagina Account è `AccountContent`,
+  usato anche dal pannello Account. `AppNavigation.settingsPane` sceglie il pannello (`-BCWOpenPage impostazioni-x`
+  in regular). Liquid Glass acceso dal pannello Aspetto: la pagina resta (verificato).
+- Elenco e dettaglio che si richiudono (Bacheca, Impostazioni): tornando in colonna il dettaglio scelto passa nella pila;
+  tornando larghi si chiude da sé (`dismissesWhenSplit`) e ricompare accanto all'elenco. Lo fa il dettaglio, non la
+  pagina sotto: una pagina coperta da un'altra nella pila non si ridimensiona e non se ne accorge (verificato).
+- Sezioni: Scrutini (riepilogo a sinistra), Anni precedenti (archivio sul web a sinistra), Assenze (contatori, avviso e
+  filtri in `FlowLayout` in 340, mesi a destra) e Lezioni (scelta e mese di `CalendarBar(showsDots: false)` o le
+  materie in 320, a destra il giorno o le card) affiancate; mesi delle assenze, giorni dell'Agenda (ricerca sulla riga
+  del periodo), docenti del Materiale e risultati della ricerca in colonne; Note, Materie e Libri in `readableWidth()`;
+  Calendario con le due card affiancate da 640 punti. `CardGrid` è una griglia adattiva in regular.
+- Ricerca nelle pagine: in regular il campo è sempre nel contenuto (`PageSearchBar`), anche con Liquid Glass
+  (`GlassLocalSearch` mette `.searchable` solo in compact).
+- Fogli: `m3Sheet(size: .form | .page)` sull'iPad dà `presentationSizing` e toglie la maniglia; `m3Detents` mette i
+  rilevamenti solo sull'iPhone (sull'iPad un rilevamento medio accorciava il foglio lasciandolo in basso). `.page`:
+  generatore, verifiche nascoste, palette su una serie, Safari degli anni precedenti; il resto `.form`, anche il cambio
+  account (con `.form.fitted` uno `ScrollView` misura troppo poco: restava tagliato). Selettori della data e dell'orario
+  (`PickerPresentation`): sull'iPad `.fitted` largo 360; passando ai numeri il foglio non si rimpicciolisce, quindi i
+  pulsanti restano in fondo (`Spacer` solo sull'iPad). Il tastierino numerico dell'iPad è un riquadro sopra il campo.
+- Accesso: in regular da 760 punti una card `surfaceContainer` (angoli `radii.xli`, larga al massimo 1040) in due
+  colonne: logo, titolo e spiegazione del modulo (i due testi sovrapposti, così la card non cambia altezza) con
+  `LoginArt(wide:)`, a destra gruppo e modulo; sotto affiliazione e server. Niente disposizione compatta con la
+  tastiera. Nei fogli (aggiungere un account, account BCW) resta quella del telefono.
+- Attività in diretta solo sull'iPhone (`LiveActivityManager.isSupported`): sull'iPad niente impostazione né pulsante
+  nella card "Adesso" (`areActivitiesEnabled` è falso).
+- La Dashboard segue la larghezza (titolo abbreviato) solo in compact; in regular la misura resta in un
+  `UnobservedValue`.
+- Le conversioni delle schede per la finestra stretta (sezione in Tu, ricerca chiusa) valgono solo nel passaggio da
+  regular a compact, non all'avvio: all'avvio sull'iPhone toglievano la scheda Cerca di `-BCWTab search`.
+- Non verificati a mano (anche nel passo 2 senza permesso di toccare): trascinamenti, file e foto scelti dai fogli
+  centrati, QuickLook e l'evento nel Calendario da un foglio; iPad mini e 13 pollici. Il resto è provato con
+  `-BCWFakeWindow`, `-BCWWindowClass` e `-BCWScript`.
 
 ## Prestazioni
 - Eventi, assenze e giorni del calendario per giorno: usare `model.events(on:)`, `absences(on:)`, `calendarStatus(on:)`,

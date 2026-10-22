@@ -105,7 +105,13 @@ Sull'iPad con la finestra larga l'app prende la struttura della versione web sug
 - con Liquid Glass la barra delle schede in vetro in alto e la barra laterale di sistema con le stesse sezioni, l'account, Impostazioni e Aggiorna
 - la Dashboard affianca la settimana (o il mese) e "Nei prossimi giorni" al giorno scelto
 - l'Orario nella vista Lista affianca la settimana e il riepilogo dei giorni alle lezioni del giorno; la vista Giorno mostra la settimana intera, con il mese e il riepilogo a lato quando c'è spazio, e nella modifica gli eventi si spostano anche da un giorno all'altro
-- nelle finestre strette (Split View, Slide Over, finestre piccole) torna il layout dell'iPhone e la sezione aperta resta aperta dentro Tu
+- i Voti mettono la media e l'andamento accanto agli ultimi voti, e la materia mette media, periodi e obiettivo accanto al grafico e ai voti
+- Tu ha il profilo accanto alle statistiche e le sezioni in colonne; la Bacheca e le Impostazioni hanno l'elenco a sinistra e la comunicazione o il pannello scelto a destra, come la posta
+- scrutini, anni precedenti, assenze e registro delle lezioni sono in due colonne; agenda, assenze, materiale e risultati della ricerca in colonne; note, materie e libri in una larghezza comoda da leggere
+- l'accesso è una card a due colonne, con il logo e la spiegazione a sinistra e il modulo a destra
+- fogli e moduli sono finestre centrate; i selettori della data e dell'orario sono finestre di dialogo piccole
+- nelle finestre strette (Split View, Slide Over, finestre piccole) torna il layout dell'iPhone e la sezione aperta resta aperta dentro Tu; ruotando, la comunicazione o il pannello delle Impostazioni aperti restano aperti
+- le attività in diretta ci sono solo sull'iPhone, perché iPadOS non le mostra
 
 ### Design
 
