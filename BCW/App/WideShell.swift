@@ -354,12 +354,15 @@ struct SidebarAccountHeader: View {
 }
 
 /// In fondo alla barra laterale di sistema: Impostazioni e Aggiorna.
+/// Aggiorna non mostra la rotella (`refreshAll` ignora comunque i tocchi durante un aggiornamento):
+/// leggere `isRefreshing` qui dentro, che UIKit ospita a parte, faceva segnalare a SwiftUI un ciclo
+/// nel grafo degli attributi aprendo la barra laterale (verificato, anche con la rotella di sistema).
 struct SidebarBottomActions: View {
     let model: AppModel
     let openSettings: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack {
             Button(action: openSettings) {
                 Label { Text("Impostazioni") } icon: { Image.m("gear") }
             }
@@ -368,14 +371,9 @@ struct SidebarBottomActions: View {
             Button {
                 Task { await model.refreshAll() }
             } label: {
-                if model.isRefreshing {
-                    InlineProgress(size: 20)
-                } else {
-                    Label { Text("Aggiorna") } icon: { Image.m("refresh") }
-                        .labelStyle(.iconOnly)
-                }
+                Label { Text("Aggiorna") } icon: { Image.m("refresh") }
+                    .labelStyle(.iconOnly)
             }
-            .disabled(model.isRefreshing)
             .keyboardShortcut("r", modifiers: .command)
             .accessibilityLabel("Aggiorna")
         }
