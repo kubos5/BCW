@@ -156,8 +156,8 @@ struct MainTabView: View {
             }
         }
         // Senza Liquid Glass la scheda Cerca non è nella barra in basso: si torna alla Dashboard.
-        .onChange(of: glass, initial: true) { _, glass in
-            if !glass && !isRegular && selection == .search { selection = .dashboard }
+        .onChange(of: glass, initial: true) { old, glass in
+            if old != glass && !glass && !isRegular && selection == .search { selection = .dashboard }
             railOverlayOpen = false
             // La barra laterale di sistema aperta con Liquid Glass resterebbe sopra il pannello.
             if WindowClass.isPad { applySidebarMode(glass: glass) }
@@ -412,7 +412,8 @@ struct MainTabView: View {
     private func windowClassChanged(from old: WindowClass, to new: WindowClass) {
         navigation.sectionsAreDestinations = new == .regular && WindowClass.isPad
         railOverlayOpen = false
-        if new == .compact {
+        // Solo passando davvero dalla finestra larga a quella stretta (non all'avvio sull'iPhone).
+        if new == .compact && old != new {
             if case let .section(section) = selection {
                 selection = .you
                 navigation.pendingSection = section
