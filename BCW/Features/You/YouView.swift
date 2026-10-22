@@ -9,6 +9,8 @@ struct YouView: View {
     @State private var showingAccount = false
     /// Sezione aperta nella pila (finestra dell'iPad tornata stretta con la sezione aperta).
     @State private var openedSection: AppSection?
+    /// iPad largo con la pagina larga almeno 792 punti: profilo accanto alle statistiche.
+    @State private var isSplit = false
     #if DEBUG
     /// Per le prove: `-BCWOpenPage bacheca` apre una pagina di Tu all'avvio (vedi `debugPage`).
     @State private var debugPage: String?
@@ -17,56 +19,20 @@ struct YouView: View {
     var body: some View {
         PlatformNavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    ProfileHero {
-                        showingAccount = true
-                    } switchAccount: {
-                        switchingAccount = true
+                Group {
+                    if isSplit {
+                        wideLayout
+                    } else if windowClass == .regular {
+                        regularColumnLayout
+                    } else {
+                        phoneLayout
                     }
-                    stats
-                    attention
-
-                    ListGroup("Comunicazioni") {
-                        MenuRow(title: "Bacheca", subtitle: noticeSubtitle, icon: "megaphone",
-                                tint: Theme.primary, badge: model.unreadNoticesCount) { NoticeboardView() }
-                        MenuRow(title: "Note e annotazioni", subtitle: notesSubtitle,
-                                icon: "messageAlert", tint: Theme.poor,
-                                badge: model.notes.filter { !$0.isRead }.count) { NotesView() }
-                    }
-
-                    ListGroup("Valutazioni") {
-                        MenuRow(title: "Scrutini e pagelle", subtitle: "Documenti di valutazione",
-                                icon: "fileSearch", tint: Theme.neutral) { ReportsView() }
-                        MenuRow(title: "Anni precedenti", subtitle: "Pagelle e archivio degli anni passati",
-                                icon: "history", tint: Theme.secondaryInk) { PreviousYearView() }
-                    }
-
-                    ListGroup("Frequenza") {
-                        MenuRow(title: "Assenze e ritardi", subtitle: absenceSubtitle,
-                                icon: "userClock", tint: Theme.fair,
-                                badge: model.unjustifiedAbsences.count) { AbsencesView() }
-                    }
-
-                    ListGroup("Didattica") {
-                        MenuRow(title: "Materiale didattico", subtitle: "File condivisi dai docenti",
-                                icon: "folder", tint: Theme.subject(3)) { DidacticsView() }
-                        MenuRow(title: "Registro delle lezioni", subtitle: "Argomenti svolti in classe",
-                                icon: "bookText", tint: Theme.subject(1)) { LessonsView() }
-                        MenuRow(title: "Agenda completa", subtitle: "Tutti i compiti e le verifiche",
-                                icon: "checklist", tint: Theme.subject(5)) { AgendaListView() }
-                        MenuRow(title: "Materie e docenti", subtitle: "\(model.subjects.count) materie",
-                                icon: "users", tint: Theme.subject(2)) { SubjectsView() }
-                        MenuRow(title: "Libri di testo", subtitle: "Adozioni dell'anno in corso",
-                                icon: "library", tint: Theme.subject(4)) { SchoolbooksView() }
-                        MenuRow(title: "Calendario scolastico", subtitle: "Vacanze e giorni di lezione",
-                                icon: "calendarClock", tint: Theme.subject(7)) { SchoolCalendarView() }
-                    }
-
-                    YouFooter()
                 }
                 .pagePadding()
                 .padding(.bottom, Theme.bottomInset)
             }
+            // Sull'iPad largo, da 792 punti di pagina: profilo accanto alle statistiche.
+            .widthAtLeast(SplitMetrics.threshold, isOn: $isSplit)
             .tracksPageScroll()
             .scrollsToTopOnReselect()
             .themedBackground()
@@ -107,6 +73,66 @@ struct YouView: View {
         }
     }
 
+    private var profile: some View {
+        ProfileHero {
+            showingAccount = true
+        } switchAccount: {
+            switchingAccount = true
+        }
+    }
+
+    /// Le sezioni nei loro gruppi (Comunicazioni, Valutazioni, Frequenza, Didattica).
+    private var groups: some View {
+        ForEach(AppSection.Group.allCases) { group in
+            ListGroup(group.title) {
+                ForEach(group.sections) { section in
+                    MenuRow(section: section, subtitle: section.subtitle(model), badge: section.badge(model))
+                }
+            }
+        }
+    }
+
+    /// Telefono (e iPad stretto): tutto in una colonna.
+    private var phoneLayout: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            profile
+            stats
+            attention
+            groups
+            YouFooter()
+        }
+    }
+
+    /// iPad largo in colonna: come il telefono, con i gruppi in due colonne.
+    private var regularColumnLayout: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            profile
+            stats
+            attention
+            AdaptiveColumns(minimum: 300, spacing: 24) { groups }
+            YouFooter()
+        }
+    }
+
+    /// iPad largo (come la versione web): il profilo accanto a statistiche e "Da vedere", sotto i
+    /// gruppi in colonne.
+    private var wideLayout: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            HStack(alignment: .top, spacing: 28) {
+                profile
+                    .padding(.top, 24)
+                    .frame(width: 320)
+                VStack(alignment: .leading, spacing: 20) {
+                    stats
+                    attention
+                }
+                .frame(maxWidth: .infinity)
+            }
+            AdaptiveColumns(minimum: 320, spacing: 24) { groups }
+            YouFooter()
+        }
+    }
+
     /// Media e frequenza in una griglia collegata (angoli ampi solo all'esterno, come le liste
     /// segmentate). Assenze, ritardi e uscite aprono la pagina delle assenze.
     private var stats: some View {
@@ -132,12 +158,22 @@ struct YouView: View {
         }
     }
 
+    @ViewBuilder
     private func statLink(_ tile: StatTile) -> some View {
-        NavigationLink { AbsencesView() } label: {
-            tile.frame(height: 84)
+        // Sull'iPad largo le assenze sono una destinazione della barra di navigazione.
+        if let navigation, navigation.sectionsAreDestinations {
+            Button { navigation.select(.absences) } label: {
+                tile.frame(height: 84)
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+        } else {
+            NavigationLink { AbsencesView() } label: {
+                tile.frame(height: 84)
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.plain)
-        .frame(maxWidth: .infinity)
     }
 
     /// Ciò che aspetta l'utente (comunicazioni e note da leggere, assenze da giustificare), in
@@ -150,16 +186,15 @@ struct YouView: View {
         if notices + notes + absences > 0 {
             ListGroup("Da vedere", background: Theme.secondaryContainer) {
                 if notices > 0 {
-                    MenuRow(title: notices == 1 ? "1 comunicazione da leggere" : "\(notices) comunicazioni da leggere",
-                            icon: "megaphone", tint: Theme.primary) { NoticeboardView() }
+                    MenuRow(section: .noticeboard,
+                            title: notices == 1 ? "1 comunicazione da leggere" : "\(notices) comunicazioni da leggere")
                 }
                 if notes > 0 {
-                    MenuRow(title: notes == 1 ? "1 nota da leggere" : "\(notes) note da leggere",
-                            icon: "messageAlert", tint: Theme.poor) { NotesView() }
+                    MenuRow(section: .notes, title: notes == 1 ? "1 nota da leggere" : "\(notes) note da leggere")
                 }
                 if absences > 0 {
-                    MenuRow(title: absences == 1 ? "1 assenza da giustificare" : "\(absences) assenze da giustificare",
-                            icon: "userClock", tint: Theme.fair) { AbsencesView() }
+                    MenuRow(section: .absences,
+                            title: absences == 1 ? "1 assenza da giustificare" : "\(absences) assenze da giustificare")
                 }
             }
         }
@@ -190,20 +225,6 @@ struct YouView: View {
         }
     }
     #endif
-
-    private var noticeSubtitle: String {
-        let unread = model.unreadNoticesCount
-        return unread == 0 ? "Tutto letto" : (unread == 1 ? "1 comunicazione da leggere" : "\(unread) comunicazioni da leggere")
-    }
-
-    private var notesSubtitle: String {
-        model.notes.isEmpty ? "Nessuna nota" : "\(model.notes.count) in totale"
-    }
-
-    private var absenceSubtitle: String {
-        let pending = model.unjustifiedAbsences.count
-        return pending == 0 ? "Tutto giustificato" : "\(pending) da giustificare"
-    }
 }
 
 /// Profilo in cima a Tu, come la pagina dell'account Google: l'avatar grande in un biscotto che
@@ -280,20 +301,24 @@ struct YouFooter: View {
     }
 }
 
-private struct MenuRow<Destination: View>: View {
-    let title: String
+/// Voce di una sezione (titolo, icona e colore da `AppSection`): apre la pagina nella pila di Tu,
+/// oppure, sull'iPad largo, sceglie la sezione nella barra di navigazione.
+private struct MenuRow: View {
+    let section: AppSection
+    var title: String?
     var subtitle: String?
-    let icon: String
-    var tint: Color = Theme.accent
     var badge: Int = 0
-    @ViewBuilder let destination: () -> Destination
+    @Environment(\.appNavigation) private var navigation
 
     var body: some View {
-        NavigationLink {
-            destination()
-        } label: {
-            NavigationRow(title, subtitle: subtitle, icon: icon, tint: tint, badge: badge)
+        let row = NavigationRow(title ?? section.title, subtitle: subtitle, icon: section.icon, tint: section.tint,
+                                badge: badge)
+        if let navigation, navigation.sectionsAreDestinations {
+            Button { navigation.select(section) } label: { row }
+                .buttonStyle(.listRow)
+        } else {
+            NavigationLink { section.destination } label: { row }
+                .buttonStyle(.listRow)
         }
-        .buttonStyle(.listRow)
     }
 }
