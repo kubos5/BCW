@@ -120,7 +120,7 @@ L'app segue Material 3 Expressive, con colori, font e pagina Aspetto della [vers
 Anche l'esperienza d'uso è quella di un'app Material 3 Expressive: barra di ricerca in alto, liste segmentate, chip di stato, gruppi di pulsanti collegati, schede, menu del pulsante d'azione flottante e barra degli strumenti flottante, con le animazioni a molla e le transizioni di Material 3.
 Le forme usano angoli continui e su iPhone l'interfaccia ha il feedback aptico.
 In Impostazioni › Aspetto si può attivare Liquid Glass: barra di navigazione, barra delle schede e menu diventano quelli di sistema, in vetro.
-In Impostazioni › Aspetto › Icona dell'app si personalizza l'icona: la barra di BCW dentro una forma di Material 3 Expressive (cerchio, biscotti, quadrifoglio, fiore, sole, gemma) oppure l'icona classica, con il colore del tema dell'app (il più vicino tra i dieci proposti) o uno dei dieci colori. L'icona segue le icone chiare, scure, colorate e trasparenti di iOS, oppure resta sempre chiara o sempre scura, con lo sfondo scuro del tema o quello standard di iOS. Le scelte si sincronizzano con l'account BCW.
+In Impostazioni › Aspetto › Icona dell'app si sceglie il colore dell'icona: quello del tema dell'app (il più vicino al colore d'accento) oppure Mattone, Arancio, Verde, Blu, Viola o Grafite. Cerchio e barra sono due lastre di vetro, come nelle icone di iOS. L'icona segue le icone chiare, scure, colorate e trasparenti di iOS, oppure resta sempre scura. Le scelte si sincronizzano con l'account BCW.
 
 ### Requisiti
 

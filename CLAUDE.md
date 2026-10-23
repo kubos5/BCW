@@ -64,8 +64,7 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `cambia-account` apre il popup degli account; serve anche `-BCWTab you`), `-BCWSearchQuery testo` apre la ricerca con quel
   testo (con `-BCWTab search`). Per l'iPad `-BCWWindowClass`, `-BCWFakeWindow`,
   `-BCWOrientation`, `-railCollapsed` e `-BCWScript` (vedi "iPad"). Le opzioni dell'icona si provano anche
-  come argomenti (`-appIconShape cookie9 -appIconColor verde -appIconAppearance auto|light|dark
-  -appIconDarkBackground material|ios`), letti da `ThemeStore` senza salvarli.
+  come argomenti (`-appIconColor verde -appIconAppearance auto|dark`), letti da `ThemeStore` senza salvarli.
 - Autotest dell'orario (solo DEBUG): `-BCWTimetableSelfTest YES` prova backup (esportazione, importazione, file,
   rifiuto di file non validi, riapertura da disco), modifiche estese agli eventi con lo stesso nome, generazione e
   passaggio dall'allineamento libero all'automatico;
@@ -143,10 +142,11 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   cambia i dati senza animazioni mentre non si vede e la fa riapparire quando ci sono i dati (subito con la cache,
   altrimenti a fine aggiornamento, al massimo 3 s). Così niente si ridimensiona davanti all'utente.
 - `project.yml` è un'alternativa per XcodeGen.
-- Icona: `Resources/AppIcon.icon` (Icon Composer, a livelli di vetro: sfondo, forma e barra, con varianti
+- Icona: `Resources/AppIcon.icon` (Icon Composer, a livelli di vetro: sfondo, cerchio e barra, con varianti
   chiara/scura/colorata) è l'icona principale, il cui nome corrisponde a `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`;
-  le icone alternative stanno in `Resources/AppIcons.xcassets` (vedi "Icona dell'app"). Nel catalogo `Assets.xcassets`
-  non c'è più un `AppIcon.appiconset`: non aggiungerlo, andrebbe in conflitto.
+  le 11 alternative sono altre `.icon` in `Resources/AppIcons/`, elencate in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`
+  (vedi "Icona dell'app"). Nel catalogo `Assets.xcassets` non c'è più un `AppIcon.appiconset`: non aggiungerlo, andrebbe
+  in conflitto.
 - Build settings: `SWIFT_VERSION = 5.0`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, approachable concurrency.
 - `Networking/ClassevivaClient.swift`: client REST, `Transport` sostituibile (live/demo), rinnovo token,
   `DiskCache` per l'offline, `fetchFirst` per endpoint versionati.
@@ -597,63 +597,69 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 
 ## Icona dell'app
 - Richiesta dell'utente (ottobre 2026): Impostazioni › Aspetto › Icona dell'app (`AppIconSettingsView`, dalla voce
-  `AppIconSettingsLink`) sceglie forma, colore, aspetto e sfondo scuro. La barra del logo (pillola 64 × 8,73, come
-  `bcw-linea.svg`) sta al centro di una forma di Material larga l'86% della tela; la barra è larga il 77% della forma
-  (`AppIconGeometry`). Un solo disegno, `AppIconArtwork`, per anteprima, celle e generatore: sono identici.
-- iOS non disegna icone mentre l'app gira: ogni combinazione è un'icona alternativa piatta in
-  `Resources/AppIcons.xcassets` (scelta dell'utente: un'icona a livelli pesa circa 4 MB compilata, una piatta circa
-  100 KB). Un `.appiconset` per combinazione con tre PNG 1024: `chiara`, `scura` (luminosity dark), `colorata`
-  (luminosity tinted). `ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES` (pbxproj e `project.yml`) le mette
-  tutte nel pacchetto e nell'Info.plist.
-- Nomi: `AppIcon-<forma>-<colore>-<variante>` e `AppIcon-classica-<variante>` (`AppIconChoice.assetName`). Varianti
-  (`AppIconVariant`, da Aspetto e Sfondo scuro): `auto`, `autoios`, `chiaro`, `scuro`, `scuroios`. La combinazione
-  predefinita (cerchio, Mattone, auto, Material) non ha un `.appiconset`: è `AppIcon.icon`, a lastre di vetro vere,
-  e si applica con `setAlternateIconName(nil)`.
-- 8 forme (`AppIconShape`: circle, cookie4, cookie6, cookie9, clover4, clover8, sunny, gem; cookie4, cookie6 e
-  clover4 ruotate perché i lobi stiano ai lati della barra, e rimpicciolite se ruotando escono dal riquadro della
-  forma: il quadrifoglio arrivava al 94% della tela) più la classica (solo barra su crema, l'icona fino alla
-  3.1), 10 colori (`accentPresets`), 5 varianti: 404 icone. Scartate square, pentagon, arch, cookie12 e simili: con 12
-  forme il catalogo cresceva di circa 63 MB.
-- Colori (Tonal Spot, contrasto standard, `AppIconPalette`; Ardesia con Neutral, perché Tonal Spot dà a tutti i
-  primari lo stesso croma e Ardesia diventava uguale a Blu): chiara = sfondo surface, forma primary, barra on-primary
-  (la forma si stacca dallo sfondo anche in piccolo; surface-container-low + primary-container era troppo tenue);
-  scura = surface-dim, primary-container e primary del tema scuro; `autoios` = le stesse forma e barra su sfondo
-  trasparente, iOS ci mette il suo scuro; `scuroios` con le icone chiare = sfumatura #2E2E30 → #111112 come lo scuro
-  di iOS; colorata = sfondo trasparente, forma grigio 0,3, barra bianca (con 0,45 iOS schiariva la forma quasi al
-  bianco). Tema dell'app: `AppIconColor.nearest(to:)` sceglie il colore proposto più vicino per tonalità e croma HCT
-  (croma contato fino a 36: i colori quasi grigi vanno su Ardesia).
-- Rigenerare dopo aver cambiato forme, colori o disegno: compilare, installare e lanciare
+  `AppIconSettingsLink`) sceglie colore e aspetto. Seconda richiesta (ottobre 2026): ogni elemento come lastra di vetro,
+  come nelle app di iOS, colori più adatti a iOS, meno opzioni. Prima c'erano 8 forme più la classica, 10 colori (i
+  ruoli di Tonal Spot) e 5 varianti: 404 icone piatte, che iOS disegnava comunque con i suoi riflessi.
+- Disegno: la barra del logo (pillola 64 × 8,73, come `bcw-linea.svg`) al centro di un cerchio largo l'86% della tela;
+  la barra è larga il 77% del cerchio (`AppIconGeometry`). Ogni icona è una `.icon` di Icon Composer con lo sfondo e
+  due gruppi con `glass: true`, la barra (sopra) e il cerchio: iOS li disegna come due lastre, con ombra e riflessi per
+  gruppo (verificato sulla Home).
+- 6 colori (`AppIconColor`, tinte sRGB fisse in `AppIconPalette.tints`, scelte guardando le icone sulla Home): Mattone
+  #C4432B, Arancio #FF8A1F, Verde #22A55A, Blu #1F7AF0, Viola #9B4FE0, Grafite #5A6068; nella versione scura il cerchio
+  è più chiaro (#EC6F55, #FF9632, #34C46E, #3D8EFF, #AE73F7, #7F868F). Barra sempre bianca, sfondo chiaro #FBF7F4,
+  cerchio delle icone colorate grigio 0,3 (con 0,45 iOS lo schiariva quasi al bianco).
+- 2 aspetti (`AppIconAppearance`): Automatico (`auto`: sfondo chiaro, con le icone scure di iOS lo sfondo `automatic`,
+  cioè lo scuro di iOS) e Sempre scuro (`dark`: sfondo `system-dark` e cerchio della versione scura anche con le icone
+  chiare). Valori di `fill` accettati da actool: `automatic`, `system-dark` e i dizionari `solid`, `linear-gradient`,
+  `automatic-gradient`, `orientation`; un valore sconosciuto fa fallire la compilazione.
+- Nomi: `AppIcon-<colore>` e `AppIcon-<colore>-scura` (`AppIconChoice.assetName`). Mattone automatica è `AppIcon.icon`
+  e si applica con `setAlternateIconName(nil)`; le altre 11 stanno in `Resources/AppIcons/` (cartella sincronizzata,
+  Xcode passa le `.icon` ad actool da sole) e i loro nomi vanno in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`
+  (pbxproj del target BCW, Debug e Release, e `project.yml`): senza, actool non le mette nell'Info.plist.
+- Tema dell'app (di serie): `AppIconColor.nearest(to:)` dà Grafite ai colori quasi grigi (croma HCT sotto 16),
+  altrimenti il colore con la tonalità HCT più vicina. Solo la tonalità: con la distanza nel piano tonalità-croma un
+  azzurro (a metà tra Verde e Blu) finiva su Grafite. Il risultato resta in UserDefaults (`appIconNearestTint`):
+  calcolarlo carica JavaScriptCore, che all'avvio con un accento qualsiasi altrimenti non serve.
+- Valori delle versioni fino alla 3.2 (`AppIconColor(stored:)`, `AppIconAppearance(stored:)`, letti all'avvio e in
+  `applySynced`): oro → Arancio, petrolio → Verde, indaco → Blu, rosa → Mattone, ardesia → Grafite (i più vicini con
+  la regola sopra), `light` → automatico; all'avvio si riscrivono e si tolgono `appIconShape`, `appIconDarkBackground`
+  e `appIconNearest`.
+- Rigenerare dopo aver cambiato colori o disegno: compilare, installare e lanciare
   `xcrun simctl launch --console-pty <udid> com.bcw-classeviva.app -BCWGenerateAppIcons <percorso assoluto di BCW/Resources>`
-  (solo DEBUG, `AppIconGenerator`): riscrive da capo `AppIcons.xcassets` e `AppIcon.icon` (SVG della forma e della
-  barra, `icon.json`) e stampa `BCW-APPICONS OK 404`; poi ricompilare. I PNG sono a tavolozza (in media 13 KB). Il
-  generatore è deterministico: con un percorso di prova al posto di `BCW/Resources` i file escono identici a quelli
-  del repository, un modo rapido per controllare che il catalogo corrisponda al codice.
+  (solo DEBUG, `AppIconGenerator`): riscrive da capo `AppIcons/` e `AppIcon.icon` (SVG del cerchio e della barra,
+  `icon.json` con `JSONSerialization`, numeri come `NSDecimalNumber`: con i Double scriveva 0.29999999999999999) e
+  stampa `BCW-APPICONS OK 12`; poi ricompilare. Il generatore è deterministico: con un percorso di prova al posto di
+  `BCW/Resources` i file escono identici a quelli del repository. Per vedere le icone senza simulatore:
+  `"/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool" X.icon --export-image
+  --output-file X.png --platform iOS --rendition Default|Dark|TintedLight|TintedDark|ClearLight|ClearDark --width 256
+  --height 256 --scale 1`.
+- Anteprima (pagina, campioni, voce di Aspetto): `AppIconPreview`/`AppIconArtwork` disegnano in SwiftUI sfondo,
+  cerchio e barra con un riflesso in alto e un'ombra leggera, per somigliare al vetro; non sono identiche alla Home.
 - `AppIconController` (avviato in `RootView`) cambia l'icona solo se cambia il nome e con l'app attiva: le scelte
   della pagina dopo 1 s; i cambi del solo accento con "Tema dell'app" aspettano l'uscita da Impostazioni › Aspetto
   (`holdThemeChanges`), così provando i colori iOS mostra un solo avviso; tornando nell'app con Aspetto aperta il
   controllo si fa all'uscita. Errori in un toast (`AppIconFailureReporter`). Ogni richiesta a iOS (cioè ogni avviso)
   scrive `Cambio d'icona: <nome>` nel registro (sottosistema `com.bcw-classeviva.app`, categoria `AppIcon`).
-  `AppIconColor.nearest` ricorda l'ultimo risultato in UserDefaults (`appIconNearest`): calcolarlo carica
-  JavaScriptCore, che all'avvio con un accento qualsiasi altrimenti non serve.
-- Sincronizzazione: `appIconShape`, `appIconColor`, `appIconAppearance`, `appIconDarkBackground` in
-  `ThemeStore.syncedValues`/`applySynced` (valori sconosciuti ignorati). In `CloudSync.syncSettings` una chiave che
-  l'ultima sincronizzazione non conosceva conta come cambiata solo se il server non ce l'ha: così il valore
-  predefinito di un dispositivo appena aggiornato non cancella la scelta fatta su un altro.
-- Peso misurato: `Assets.car` da 5,05 MB (ramo claude) a 49,1 MB, +44 MB, metà iPhone e metà iPad; per un solo
-  iPhone (actool con `--filter-for-device-model iPhone18,3`, come lo sfoltimento dell'App Store) da 2,6 a 24,6 MB.
-  Ogni icona compilata tiene solo le tre immagini 1024 (circa 54 KB per dispositivo). `compression-type` nei
-  `Contents.json` non cambia nulla: actool salva sempre le icone in ARGB con lzfse.
-- Verificato sulla Home del simulatore (iOS 26.3, Default/Dark/Clear/Tinted): icona principale a vetro, alternative,
-  classica, Sempre chiaro e Sempre scuro, sfondo scuro Material e iOS; con "Tema dell'app" provando più accenti in
-  Aspetto (anche dopo aver cambiato Liquid Glass nella pagina) l'icona cambia una volta sola, uscendo dalla pagina;
-  tre forme toccate di seguito danno una sola richiesta.
-- Limiti verificati: iOS aggiunge i suoi riflessi di vetro anche alle icone piatte (sfumatura sulla forma, alone sulla
-  barra). Con le icone colorate e trasparenti iOS tinge sempre l'immagine colorata, anche con Sempre chiaro o Sempre
-  scuro: non si può forzare. Sul simulatore (iOS 26.3) l'avviso del cambio non si apre ("couldn't load upcall bundle
-  principal class"): l'icona cambia ma `setAlternateIconName` risponde con un errore di I/O (il controllore lo
-  riconosce da `alternateIconName`) e i cambi successivi falliscono ("couldn't make icon alert token", EAGAIN) finché
-  non si riavvia lsd: `xcrun simctl spawn <udid> launchctl stop com.apple.lsd`. Le modalità delle icone di iOS si
-  cambiano dalla Home: pressione lunga, Modifica, Personalizza.
+- Sincronizzazione: `appIconColor` e `appIconAppearance` in `ThemeStore.syncedValues`/`applySynced` (valori vecchi
+  convertiti, sconosciuti ignorati; `appIconShape` e `appIconDarkBackground` restano sul server ma non si leggono
+  più). In `CloudSync.syncSettings` una chiave che l'ultima sincronizzazione non conosceva conta come cambiata solo se
+  il server non ce l'ha: così il valore predefinito di un dispositivo appena aggiornato non cancella la scelta fatta su
+  un altro.
+- Peso misurato (actool per iphoneos, `Assets.car`): con le 404 icone piatte 48,7 MB (iPhone e iPad) e 24,4 MB per un
+  solo iPhone (`--filter-for-device-model iPhone18,3`, come lo sfoltimento dell'App Store); con le 12 `.icon` 56,4 MB e
+  28,3 MB. Ogni `.icon` compilata tiene, per dispositivo, tre immagini 1024 già disegnate con il vetro (chiara, scura,
+  colorata: circa 2,3 MB, poco comprimibili) più i livelli; senza traslucenza si risparmia solo l'11%.
+- Verificato sulla Home del simulatore (iOS 26.3): le 12 icone in Default, Dark, Clear e Tinted (cerchio e barra lastre
+  separate); con "Tema dell'app" provando quattro accenti in Aspetto l'icona cambia una volta sola; i valori vecchi
+  (`oro`, `light`) diventano `arancio` e `auto`.
+- Limiti verificati: con le icone colorate e trasparenti iOS tinge sempre l'icona, anche con Sempre scuro: non si può
+  forzare (le 12 icone lì sono uguali). Sul simulatore (iOS 26.3) l'avviso del cambio non si apre ("couldn't load
+  upcall bundle principal class"): l'icona cambia ma `setAlternateIconName` risponde con un errore di I/O (il
+  controllore lo riconosce da `alternateIconName`) e i cambi successivi falliscono ("couldn't make icon alert token",
+  EAGAIN) finché non si riavvia lsd: `xcrun simctl spawn <udid> launchctl stop com.apple.lsd`. Le modalità delle icone
+  di iOS si cambiano dalla Home: pressione lunga, Modifica, Personalizza. Le preferenze dell'app sul simulatore si
+  cambiano con `xcrun simctl spawn <udid> defaults write <container>/Library/Preferences/com.bcw-classeviva.app …`:
+  modificando il plist a mano cfprefsd tiene i valori vecchi.
 
 ## Convenzioni
 - Testi UI e commenti in italiano. Stile: liste segmentate, `StatusChip`, `FilterChip`, `StatTile` (anche in griglie
