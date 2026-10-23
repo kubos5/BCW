@@ -20,6 +20,12 @@ final class AppModel {
     let timetable = TimetableStore()
     /// Sincronizzazione di impostazioni e orario con l'account BCW.
     let cloudSync = CloudSync()
+    /// Istantanea dei dati per i widget (nel contenitore dell'App Group).
+    let widgets = WidgetExporter()
+    /// Attività in diretta "Orario di oggi" (segue le istantanee dei widget).
+    let liveActivities = LiveActivityManager()
+    /// Collegamento `bcw://` aperto da un widget, in attesa che la scheda giusta lo usi.
+    var openedLink: DeepLink?
 
     // Account BCW
     /// Sessione dell'account BCW. Con l'account BCW `accounts` sono gli account Classeviva
@@ -35,6 +41,8 @@ final class AppModel {
     var linkFailureMessage: String?
     @ObservationIgnored private var cloudRefreshedAt = Date.distantPast
     @ObservationIgnored private var cloudRefreshing = false
+    /// `bootstrap` già fatto (una seconda finestra dell'iPad lo richiamerebbe).
+    @ObservationIgnored private var didBootstrap = false
 
     // Account salvati
     private(set) var accounts: [SavedAccount] = []
@@ -128,8 +136,15 @@ final class AppModel {
     }
 
     func bootstrap() {
+        // Su iPad ogni finestra in più ripasserebbe di qui (`RootView.task`): l'avvio si fa una volta.
+        guard !didBootstrap else { return }
+        didBootstrap = true
         // L'aspetto è in `ThemeStore`: anche i suoi cambi vanno all'account BCW.
         ThemeStore.shared.onSyncedChange = { [weak self] in self?.cloudSync.settingsChanged() }
+        defer {
+            liveActivities.start(model: self)
+            widgets.start(model: self)
+        }
         cloud = Keychain.loadCloudSession()
         accounts = cloud == nil ? Keychain.loadAccounts() : Keychain.loadCloudAccounts()
         // Con l'account BCW gli account abbinati arrivano dal server: intanto si usano quelli salvati.
@@ -411,6 +426,16 @@ final class AppModel {
         }
         try? FileManager.default.removeItem(at: FileManager.default.temporaryDirectory
             .appendingPathComponent("BCWFiles", isDirectory: true))
+    }
+
+    // MARK: Collegamenti
+
+    /// Apre un collegamento `bcw://` (dai widget): `MainTabView` sceglie la scheda e la scheda il
+    /// giorno. All'avvio dell'app da un widget può arrivare prima della sessione: resta in attesa
+    /// finché le schede non compaiono. Senza account non fa nulla.
+    func open(_ url: URL) {
+        guard let link = DeepLink(url: url), phase != .signedOut else { return }
+        openedLink = link
     }
 
     // MARK: Account BCW

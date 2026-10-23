@@ -398,15 +398,20 @@ private struct TimelineSegment: View {
                 // Blocco pieno nella tinta, come gli eventi di un calendario Material.
                 shape.fill(tint.mix(Theme.surface, isDraft ? 0.16 : 0.36))
             }
-            HStack(alignment: .top, spacing: 0) {
-                label(start: start, end: end, height: height, tint: tint)
-                    .padding(.leading, entry.isBreak ? 8 : 10)
-                    .padding(.trailing, 4)
-                    .padding(.top, height >= 26 ? 4 : 1)
-                Spacer(minLength: 0)
+            // Nei blocchi troppo bassi per una riga (un intervallo di 10 minuti nella settimana
+            // dell'iPad) niente testo: la forma prendeva l'altezza della scritta e copriva il blocco dopo.
+            if height >= 15 {
+                HStack(alignment: .top, spacing: 0) {
+                    label(start: start, end: end, height: height, tint: tint)
+                        .padding(.leading, entry.isBreak ? 8 : 10)
+                        .padding(.trailing, 4)
+                        .padding(.top, height >= 26 ? 4 : 1)
+                    Spacer(minLength: 0)
+                }
+                .clipShape(shape)
             }
-            .clipShape(shape)
         }
+        .frame(height: height, alignment: .topLeading)
         .overlay {
             if isDraft {
                 shape.stroke(tint, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))

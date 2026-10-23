@@ -149,33 +149,11 @@ struct SchemeColors {
     }
 }
 
-/// Colori predefiniti di BCW (gli stessi di `css/bcw.css`): schema Tonal Spot dal rosso mattone.
+/// Colori predefiniti di BCW (gli stessi di `css/bcw.css`): schema Tonal Spot dal rosso mattone,
+/// in `ThemeDefaults` (cartella `Shared`, usata anche dai widget).
 private enum DefaultScheme {
-    static let light = SchemeValues(roles: [
-        "primary": "#8c4e43", "on-primary": "#fff7f6", "primary-container": "#faaa9d", "on-primary-container": "#602b22",
-        "secondary": "#785751", "on-secondary": "#fff7f6", "secondary-container": "#ffdad4", "on-secondary-container": "#694a45",
-        "tertiary": "#795927", "on-tertiary": "#fff8f2", "tertiary-container": "#f6cb8d", "on-tertiary-container": "#5f4211",
-        "error": "#a8364b", "on-error": "#fff7f7", "error-container": "#f97386", "on-error-container": "#6e0523",
-        "surface": "#fff8f6", "surface-dim": "#edd5d1", "surface-bright": "#fff8f6",
-        "surface-container-lowest": "#fffcfb", "surface-container-low": "#fff0ee", "surface-container": "#fee9e6",
-        "surface-container-high": "#fae3df", "surface-container-highest": "#f6ddd9",
-        "on-surface": "#3e2f2c", "on-surface-variant": "#6d5b58", "outline": "#8a7673", "outline-variant": "#e3cdc9",
-        "inverse-surface": "#392e2c", "inverse-on-surface": "#ffedea", "inverse-primary": "#faaa9d",
-        "brand": "#a23e2f", "shadow": "#1d110f",
-    ])
-
-    static let dark = SchemeValues(roles: [
-        "primary": "#f9b6ab", "on-primary": "#61342c", "primary-container": "#76453d", "on-primary-container": "#ffdbd5",
-        "secondary": "#e7bdb6", "on-secondary": "#563934", "secondary-container": "#51342f", "on-secondary-container": "#f2cbc4",
-        "tertiary": "#ffdaa8", "on-tertiary": "#694a19", "tertiary-container": "#6b4c1a", "on-tertiary-container": "#ffdeb0",
-        "error": "#f97386", "on-error": "#490013", "error-container": "#871c34", "on-error-container": "#ffb0bb",
-        "surface": "#130d0b", "surface-dim": "#130d0b", "surface-bright": "#372926",
-        "surface-container-lowest": "#0e0908", "surface-container-low": "#1a1110", "surface-container": "#221715",
-        "surface-container-high": "#291d1b", "surface-container-highest": "#302220",
-        "on-surface": "#f9e0dc", "on-surface-variant": "#bca6a2", "outline": "#84716e", "outline-variant": "#4a3a37",
-        "inverse-surface": "#f1dfdb", "inverse-on-surface": "#392e2c", "inverse-primary": "#8c4e43",
-        "brand": "#e3826a", "shadow": "#080403",
-    ])
+    static let light = SchemeValues(roles: ThemeDefaults.light)
+    static let dark = SchemeValues(roles: ThemeDefaults.dark)
 }
 
 // MARK: - Raggi degli angoli
@@ -211,6 +189,8 @@ final class ThemeStore {
     @ObservationIgnored private var applyingRemote = false
 
     private(set) var colors: SchemeColors
+    /// Valori esadecimali dei ruoli in uso (chiaro e scuro), per l'istantanea dei widget.
+    private(set) var values = (light: DefaultScheme.light, dark: DefaultScheme.dark)
     private(set) var radii: CornerRadii
 
     var accentColor: String {
@@ -236,6 +216,31 @@ final class ThemeStore {
         didSet { defaults.set(liquidGlass, forKey: "liquidGlass") }
     }
 
+    // Icona dell'app (Impostazioni › Aspetto › Icona dell'app), sincronizzata con l'account BCW.
+    // La applica `AppIconController`.
+    var appIconColor: AppIconColor {
+        didSet { defaults.set(appIconColor.rawValue, forKey: "appIconColor"); syncedChanged() }
+    }
+    var appIconAppearance: AppIconAppearance {
+        didSet { defaults.set(appIconAppearance.rawValue, forKey: "appIconAppearance"); syncedChanged() }
+    }
+
+    /// Icona scelta, con il colore del tema già risolto (il colore proposto più vicino all'accento).
+    var appIconChoice: AppIconChoice {
+        AppIconChoice(color: appIconColor == .theme ? AppIconColor.nearest(to: accentColor) : appIconColor,
+                      appearance: appIconAppearance)
+    }
+
+    var appIconIsDefault: Bool {
+        appIconColor == .theme && appIconAppearance == .automatic
+    }
+
+    /// Ripristina l'icona di BCW (colore del tema, automatica).
+    func resetAppIcon() {
+        appIconColor = .theme
+        appIconAppearance = .automatic
+    }
+
     /// Asse ROND dei titoli e del testo.
     var rond: CGFloat { roundedText == .none ? 0 : 100 }
     var rondBody: CGFloat {
@@ -255,17 +260,37 @@ final class ThemeStore {
         let corners = CornerStyle(rawValue: defaults.string(forKey: "corners") ?? "") ?? .standard
         colors = SchemeColors(light: DefaultScheme.light, dark: DefaultScheme.dark)
         radii = .of(corners)
+        #if DEBUG
+        // Per le prove: `-BCWAccent #2f6db5` usa un altro colore senza salvarlo. Va letto qui: una
+        // seconda assegnazione nell'init passa da `didSet`, che configura le barre e rilegge `shared`
+        // mentre si crea (crash all'avvio).
+        accentColor = defaults.string(forKey: "BCWAccent") ?? defaults.string(forKey: "accentColor") ?? defaultAccent
+        #else
         accentColor = defaults.string(forKey: "accentColor") ?? defaultAccent
+        #endif
         colorStyle = ColorStyle(rawValue: defaults.string(forKey: "colorStyle") ?? "") ?? .tonalSpot
         contrast = ContrastLevel(rawValue: defaults.string(forKey: "contrast") ?? "") ?? .standard
         self.corners = corners
         motion = MotionStyle(rawValue: defaults.string(forKey: "motion") ?? "") ?? .expressive
         roundedText = RoundedText(rawValue: defaults.string(forKey: "roundedText") ?? "") ?? .titles
         liquidGlass = defaults.object(forKey: "liquidGlass") as? Bool ?? false
+        // Valori delle versioni precedenti (fino alla 3.2: dieci colori, otto forme, "Sempre chiaro",
+        // sfondo scuro Material o iOS): i colori tolti diventano il più vicino, "Sempre chiaro"
+        // automatico; forma e sfondo scuro non ci sono più.
+        let storedIconColor = defaults.string(forKey: "appIconColor") ?? ""
+        let storedIconAppearance = defaults.string(forKey: "appIconAppearance") ?? ""
+        appIconColor = AppIconColor(stored: storedIconColor) ?? .theme
+        appIconAppearance = AppIconAppearance(stored: storedIconAppearance) ?? .automatic
+        if !storedIconColor.isEmpty, storedIconColor != appIconColor.rawValue {
+            defaults.set(appIconColor.rawValue, forKey: "appIconColor")
+        }
+        if !storedIconAppearance.isEmpty, storedIconAppearance != appIconAppearance.rawValue {
+            defaults.set(appIconAppearance.rawValue, forKey: "appIconAppearance")
+        }
+        for key in ["appIconShape", "appIconDarkBackground", "appIconNearest"] { defaults.removeObject(forKey: key) }
         #if DEBUG
-        // Per le prove: `-BCWLiquidGlass YES` attiva Liquid Glass, `-BCWAccent #2f6db5` un altro colore.
+        // Per le prove: `-BCWLiquidGlass YES` attiva Liquid Glass.
         if defaults.object(forKey: "BCWLiquidGlass") != nil { liquidGlass = defaults.bool(forKey: "BCWLiquidGlass") }
-        if let accent = defaults.string(forKey: "BCWAccent") { accentColor = accent }
         #endif
         // Le barre di sistema si configurano dopo (`BCWApp.init`): qui leggerebbero `shared`,
         // che non esiste ancora.
@@ -285,6 +310,8 @@ final class ThemeStore {
             "corners": .string(corners.rawValue),
             "motion": .string(motion.rawValue),
             "roundedText": .string(roundedText.rawValue),
+            "appIconColor": .string(appIconColor.rawValue),
+            "appIconAppearance": .string(appIconAppearance.rawValue),
         ]
     }
 
@@ -301,6 +328,16 @@ final class ThemeStore {
         if let value = values["motion"]?.string.flatMap(MotionStyle.init(rawValue:)), value != motion { motion = value }
         if let value = values["roundedText"]?.string.flatMap(RoundedText.init(rawValue:)), value != roundedText {
             roundedText = value
+        }
+        // Icona dell'app: i valori di un dispositivo con una versione precedente si convertono (colori
+        // tolti → il più vicino, "Sempre chiaro" → automatico), quelli sconosciuti si saltano.
+        // `appIconShape` e `appIconDarkBackground`, ancora sul server, non servono più.
+        if let value = values["appIconColor"]?.string.flatMap(AppIconColor.init(stored:)), value != appIconColor {
+            appIconColor = value
+        }
+        if let value = values["appIconAppearance"]?.string.flatMap(AppIconAppearance.init(stored:)),
+           value != appIconAppearance {
+            appIconAppearance = value
         }
     }
 
@@ -330,17 +367,22 @@ final class ThemeStore {
     private func regenerate(configuringBars: Bool = true) {
         let signature = signature
         if signature == Self.defaultSignature {
-            colors = SchemeColors(light: DefaultScheme.light, dark: DefaultScheme.dark)
+            setScheme(light: DefaultScheme.light, dark: DefaultScheme.dark)
             defaults.removeObject(forKey: "themeCache")
         } else if let cached = cachedScheme(signature) {
-            colors = SchemeColors(light: cached.light, dark: cached.dark)
+            setScheme(light: cached.light, dark: cached.dark)
         } else if let built = ColorEngine.shared.build(signature: signature) {
-            colors = SchemeColors(light: built.light, dark: built.dark)
+            setScheme(light: built.light, dark: built.dark)
             if let data = try? JSONEncoder().encode(CachedScheme(signature: signature, light: built.light, dark: built.dark)) {
                 defaults.set(data, forKey: "themeCache")
             }
         }
         if configuringBars { configureSystemBars() }
+    }
+
+    private func setScheme(light: SchemeValues, dark: SchemeValues) {
+        colors = SchemeColors(light: light, dark: dark)
+        values = (light, dark)
     }
 
     private struct CachedScheme: Codable {
@@ -408,6 +450,21 @@ final class ColorEngine {
               let json = try? JSONDecoder().decode([String: [String: String]].self, from: data),
               let light = json["light"], let dark = json["dark"] else { return nil }
         return (SchemeValues(roles: light), SchemeValues(roles: dark))
+    }
+
+    private var hueChromas: [String: (hue: Double, chroma: Double)] = [:]
+
+    /// Tonalità e croma (HCT di Material) di un colore `#rrggbb`.
+    func hueChroma(_ hex: String) -> (hue: Double, chroma: Double)? {
+        if let cached = hueChromas[hex] { return cached }
+        guard hex.count == 7, hex.dropFirst().allSatisfy(\.isHexDigit),
+              let result = context?.evaluateScript(
+                "(function(){var h=MCU.Hct.fromInt(MCU.argbFromHex('\(hex)'));return h.hue+','+h.chroma})()")?.toString()
+        else { return nil }
+        let parts = result.split(separator: ",").compactMap { Double($0) }
+        guard parts.count == 2 else { return nil }
+        hueChromas[hex] = (parts[0], parts[1])
+        return (parts[0], parts[1])
     }
 
     func swatch(accent: String, style: String, dark: Bool) -> [String] {

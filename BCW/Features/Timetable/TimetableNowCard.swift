@@ -3,10 +3,13 @@ import SwiftUI
 /// In cima all'orario di oggi: la lezione in corso (quanto manca, con l'avanzamento ondulato) e
 /// quella dopo, oppure la prossima lezione con il tempo che manca. Nel contenitore primario,
 /// con l'icona in una forma di M3 Expressive. Toccandola si apre la lezione. Sparisce finite le
-/// lezioni.
+/// lezioni. In basso a destra un pulsante a icona avvia o ferma l'attività in diretta (pieno
+/// quando è in corso).
 struct TimetableNowCard: View {
     let content: TimetableDayContent
     let actions: TimetableActions
+    @Environment(AppModel.self) private var model
+    @Environment(OverlayHost.self) private var host: OverlayHost?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
@@ -21,7 +24,8 @@ struct TimetableNowCard: View {
     }
 
     private func card(shown: TimetableEntry, isCurrent: Bool, next: TimetableEntry?, minute: Int) -> some View {
-        Button {
+        let showsLiveToggle = model.liveActivities.areActivitiesEnabled
+        return Button {
             actions.open(shown, content.day)
         } label: {
             VStack(alignment: .leading, spacing: 14) {
@@ -46,6 +50,8 @@ struct TimetableNowCard: View {
                 }
                 if isCurrent {
                     WavyProgress(value: Double(minute - shown.start), total: Double(shown.duration))
+                        // Senza la lezione dopo, il pulsante dell'attività in diretta sta accanto.
+                        .padding(.trailing, showsLiveToggle && next == nil ? 48 : 0)
                 }
                 if let next {
                     HStack(spacing: 8) {
@@ -57,6 +63,10 @@ struct TimetableNowCard: View {
                     .padding(.horizontal, 12)
                     .frame(height: 36)
                     .background(Theme.onPrimaryContainer.opacity(0.08), in: .capsule)
+                    // Lo spazio del pulsante dell'attività in diretta, sovrapposto.
+                    .padding(.trailing, showsLiveToggle ? 44 : 0)
+                } else if showsLiveToggle && !isCurrent {
+                    Color.clear.frame(height: 36)
                 }
             }
             .foregroundStyle(Theme.onPrimaryContainer)
@@ -66,6 +76,33 @@ struct TimetableNowCard: View {
         }
         .buttonStyle(.pressable(radius: Theme.radii.xl, pressed: Theme.radii.l))
         .accessibilityElement(children: .combine)
+        .overlay(alignment: .bottomTrailing) {
+            if showsLiveToggle {
+                liveToggle
+                    .padding(20)
+            }
+        }
+    }
+
+    /// Avvia o ferma l'attività in diretta di oggi: pulsante a icona tonale, pieno quando è in corso.
+    private var liveToggle: some View {
+        let isRunning = model.liveActivities.isRunningToday
+        return Button {
+            Haptics.selection()
+            model.liveActivities.toggleToday()
+            host?.showToast(isRunning ? "Attività in diretta fermata per oggi"
+                                      : "Attività in diretta avviata: la trovi nella schermata di blocco",
+                            icon: isRunning ? "lock" : "lockClock")
+        } label: {
+            Icon("lockClock", size: 20)
+                .foregroundStyle(isRunning ? Theme.primaryContainer : Theme.onPrimaryContainer)
+                .frame(width: 36, height: 36)
+                .background(isRunning ? Theme.onPrimaryContainer : Theme.onPrimaryContainer.opacity(0.08), in: .circle)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.pressable(radius: 18, pressed: 10))
+        .accessibilityLabel(isRunning ? "Ferma l'attività in diretta" : "Avvia l'attività in diretta")
+        .animation(Motion.spatialFast, value: isRunning)
     }
 
     private func detail(_ entry: TimetableEntry, isCurrent: Bool, minute: Int) -> String {

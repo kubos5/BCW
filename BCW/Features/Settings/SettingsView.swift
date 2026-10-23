@@ -59,37 +59,105 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     }
 }
 
-/// Impostazioni: un elenco di sottopagine.
+/// Impostazioni: un elenco di sottopagine. Sull'iPad largo elenco e pannello scelto sono affiancati
+/// (elenco e dettaglio di Material 3, come la versione web).
 struct SettingsView: View {
+    @Environment(\.appNavigation) private var navigation
+    /// iPad largo con la pagina larga almeno 792 punti: elenco a sinistra, pannello a destra.
+    @State private var isSplit = false
+    /// Pannello mostrato accanto all'elenco (pagina affiancata).
+    @State private var pane: SettingsPane = .general
+    /// Il pannello è stato scelto (non è quello di serie): tornando in colonna resta aperto.
+    @State private var paneChosen = false
+    /// Pannello aperto nella pila quando la pagina torna in colonna (es. ruotando l'iPad), come
+    /// l'elenco e dettaglio di sistema che si richiude.
+    @State private var collapsedPane: SettingsPane?
+
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                ListGroup {
-                    link(.general)
-                    link(.appearance)
-                }
-                ListGroup {
-                    link(.grades)
-                    link(.dashboard)
-                    link(.timetable)
-                    link(.notifications)
-                }
-                ListGroup {
-                    NavigationLink {
-                        AccountView()
-                    } label: {
-                        NavigationRow(SettingsPane.accounts.title, icon: SettingsPane.accounts.icon,
-                                      tint: SettingsPane.accounts.tint)
+        ZStack {
+            if isSplit {
+                SplitPage(sideWidth: 320, mainMaxWidth: 640) {
+                    VStack(spacing: 24) {
+                        ListGroup {
+                            selectable(.general)
+                            selectable(.appearance)
+                        }
+                        ListGroup {
+                            selectable(.grades)
+                            selectable(.dashboard)
+                            selectable(.timetable)
+                            selectable(.notifications)
+                        }
+                        ListGroup {
+                            selectable(.accounts)
+                        }
                     }
-                    .buttonStyle(.listRow)
+                } main: {
+                    VStack(spacing: 24) {
+                        if pane == .accounts {
+                            AccountContent()
+                        } else {
+                            pane.content
+                        }
+                    }
+                    .id(pane)
                 }
+            } else {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        ListGroup {
+                            link(.general)
+                            link(.appearance)
+                        }
+                        ListGroup {
+                            link(.grades)
+                            link(.dashboard)
+                            link(.timetable)
+                            link(.notifications)
+                        }
+                        ListGroup {
+                            NavigationLink {
+                                AccountView()
+                            } label: {
+                                NavigationRow(SettingsPane.accounts.title, icon: SettingsPane.accounts.icon,
+                                              tint: SettingsPane.accounts.tint)
+                            }
+                            .buttonStyle(.listRow)
+                        }
+                    }
+                    .pagePadding()
+                    .padding(.bottom, Theme.bottomInset)
+                }
+                .tracksPageScroll()
             }
-            .pagePadding()
-            .padding(.bottom, Theme.bottomInset)
         }
-        .tracksPageScroll()
+        // Sull'iPad largo, da 792 punti di pagina, elenco e pannello affiancati.
+        .widthAtLeast(SplitMetrics.threshold, isOn: $isSplit)
         .themedBackground()
         .pageChrome("Impostazioni", style: .inline)
+        .navigationDestination(item: $collapsedPane) { pane in
+            Group {
+                if pane == .accounts { AccountView() } else { SettingsPaneView(pane: pane) }
+            }
+            .dismissesWhenSplit()
+        }
+        // Sull'iPhone la pagina non si affianca mai, quindi questo non scatta.
+        .onChange(of: isSplit) { _, split in
+            // Di nuovo affiancata il pannello aperto nella pila si chiude da sé (`dismissesWhenSplit`)
+            // e `pane` è ancora quello: ricompare accanto all'elenco.
+            if !split && paneChosen {
+                collapsedPane = pane
+            }
+        }
+        // Pannello richiesto da chi apre le Impostazioni (es. `-BCWOpenPage impostazioni-appearance`).
+        .onChange(of: navigation?.settingsPane, initial: true) { _, requested in
+            guard let requested else { return }
+            pane = requested
+            paneChosen = true
+            navigation?.settingsPane = nil
+            // In colonna (pagina stretta) il pannello si apre nella pila.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { if !isSplit { collapsedPane = requested } }
+        }
     }
 
     private func link(_ pane: SettingsPane) -> some View {
@@ -99,6 +167,20 @@ struct SettingsView: View {
             NavigationRow(pane.title, icon: pane.icon, tint: pane.tint)
         }
         .buttonStyle(.listRow)
+    }
+
+    /// Voce dell'elenco affiancato: sceglie il pannello a destra.
+    private func selectable(_ pane: SettingsPane) -> some View {
+        Button {
+            guard self.pane != pane else { return }
+            Haptics.selection()
+            self.pane = pane
+            paneChosen = true
+        } label: {
+            NavigationRow(pane.title, icon: pane.icon, tint: pane.tint, showsChevron: false)
+        }
+        .buttonStyle(ListRowButtonStyle(selected: self.pane == pane))
+        .accessibilityAddTraits(self.pane == pane ? .isSelected : [])
     }
 }
 
@@ -300,6 +382,13 @@ struct AppearanceSettingsSection: View {
                       options: ColorStyle.allCases.map { ($0, $0.title, nil) })
             SelectRow("Contrasto", icon: "contrast", selection: $theme.contrast,
                       options: ContrastLevel.allCases.map { ($0, $0.title, nil) })
+        }
+        // Con "Tema dell'app" l'icona segue l'accento: cambia (con l'avviso di iOS) uscendo dalla pagina.
+        .onAppear { AppIconController.shared.holdThemeChanges(true) }
+        .onDisappear { AppIconController.shared.holdThemeChanges(false) }
+
+        ListGroup {
+            AppIconSettingsLink()
         }
 
         ListGroup("Forme e movimento", footer: "Espressive: animazioni a molla con un piccolo rimbalzo, come in Material 3 Expressive. Standard: senza rimbalzo. Ridotte: brevi e senza movimenti ampi. I caratteri arrotondati usano l'asse ROND di Google Sans Flex.") {
@@ -540,6 +629,23 @@ struct AccountsSettingsPane: View {
 }
 
 struct AccountView: View {
+    var body: some View {
+        ScrollView {
+            AccountContent()
+                .pagePadding()
+                .padding(.bottom, Theme.bottomInset)
+                .frame(maxWidth: 680)
+                .frame(maxWidth: .infinity)
+        }
+        .tracksPageScroll()
+        .themedBackground()
+        .pageChrome("Account", style: .inline)
+    }
+}
+
+/// Contenuto della pagina Account (profilo, account salvati, collegamenti, uscita e scollegamento),
+/// anche nel pannello Account delle Impostazioni affiancate sull'iPad.
+struct AccountContent: View {
     @Environment(AppModel.self) private var model
     @State private var confirmSignOut = false
     @State private var addingAccount = false
@@ -547,79 +653,70 @@ struct AccountView: View {
     @State private var unlinkError: String?
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                VStack(spacing: 8) {
-                    Avatar(initials: model.card?.initials ?? String(model.displayName.prefix(1)), size: 96, shape: .cookie12Sided)
-                    Text(model.displayName)
-                        .font(.m3(28, weight: 500, rounded: true))
-                        .foregroundStyle(Theme.ink)
-                    if let classDescription = model.classDescription {
-                        Text(classDescription.sentenceCased)
-                            .font(.m3(16))
-                            .foregroundStyle(Theme.secondaryInk)
-                    }
+        VStack(spacing: 24) {
+            VStack(spacing: 8) {
+                Avatar(initials: model.card?.initials ?? String(model.displayName.prefix(1)), size: 96, shape: .cookie12Sided)
+                Text(model.displayName)
+                    .font(.m3(28, weight: 500, rounded: true))
+                    .foregroundStyle(Theme.ink)
+                if let classDescription = model.classDescription {
+                    Text(classDescription.sentenceCased)
+                        .font(.m3(16))
+                        .foregroundStyle(Theme.secondaryInk)
                 }
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 8)
-                .padding(.bottom, 4)
+            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
 
-                AccountsSection { addingAccount = true }
+            AccountsSection { addingAccount = true }
 
-                if let card = model.card {
-                    ListGroup("Profilo") {
-                        ValueRow("Codice utente", value: card.ident)
-                        ValueRow("Tipo di account", value: card.userTypeDescription)
-                        if let birth = card.birthDate {
-                            ValueRow("Data di nascita", value: birth.shortDayWithYear)
-                        }
-                        if let fiscal = card.fiscalCode?.nilIfEmpty {
-                            ValueRow("Codice fiscale", value: fiscal)
-                                .textSelection(.enabled)
-                        }
+            if let card = model.card {
+                ListGroup("Profilo") {
+                    ValueRow("Codice utente", value: card.ident)
+                    ValueRow("Tipo di account", value: card.userTypeDescription)
+                    if let birth = card.birthDate {
+                        ValueRow("Data di nascita", value: birth.shortDayWithYear)
                     }
-
-                    ListGroup("Scuola") {
-                        if let school = card.schoolDescription {
-                            ValueRow("Istituto", value: school)
-                        }
-                        if let city = card.schoolCity?.nilIfEmpty {
-                            ValueRow("Città", value: "\(city.nameCased)\(card.schoolProvince.map { " (\($0))" } ?? "")")
-                        }
-                        if let code = card.miurSchoolCode?.nilIfEmpty {
-                            ValueRow("Codice meccanografico", value: code)
-                        }
+                    if let fiscal = card.fiscalCode?.nilIfEmpty {
+                        ValueRow("Codice fiscale", value: fiscal)
+                            .textSelection(.enabled)
                     }
                 }
 
-                ClassevivaLinksSection()
-                CloudAccountSection()
-
-                if model.isCloud && !model.isDemo {
-                    if let account = model.activeAccount {
-                        ListGroup(footer: "\(account.name) non sarà più disponibile con l'account BCW \(model.cloud?.user.username ?? "") e il suo orario verrà eliminato dal server.") {
-                            ButtonRow("Scollega da BCW", icon: "minusCircle", destructive: true) {
-                                unlinking = account
-                            }
-                        }
+                ListGroup("Scuola") {
+                    if let school = card.schoolDescription {
+                        ValueRow("Istituto", value: school)
                     }
-                } else {
-                    ListGroup(footer: signOutFooter) {
-                        ButtonRow(model.isDemo ? "Esci dalla demo" : "Esci da questo account", icon: "logout", destructive: true) {
-                            confirmSignOut = true
-                        }
+                    if let city = card.schoolCity?.nilIfEmpty {
+                        ValueRow("Città", value: "\(city.nameCased)\(card.schoolProvince.map { " (\($0))" } ?? "")")
+                    }
+                    if let code = card.miurSchoolCode?.nilIfEmpty {
+                        ValueRow("Codice meccanografico", value: code)
                     }
                 }
             }
-            .pagePadding()
-            .padding(.bottom, Theme.bottomInset)
-            .frame(maxWidth: 680)
-            .frame(maxWidth: .infinity)
+
+            ClassevivaLinksSection()
+            CloudAccountSection()
+
+            if model.isCloud && !model.isDemo {
+                if let account = model.activeAccount {
+                    ListGroup(footer: "\(account.name) non sarà più disponibile con l'account BCW \(model.cloud?.user.username ?? "") e il suo orario verrà eliminato dal server.") {
+                        ButtonRow("Scollega da BCW", icon: "minusCircle", destructive: true) {
+                            unlinking = account
+                        }
+                    }
+                }
+            } else {
+                ListGroup(footer: signOutFooter) {
+                    ButtonRow(model.isDemo ? "Esci dalla demo" : "Esci da questo account", icon: "logout", destructive: true) {
+                        confirmSignOut = true
+                    }
+                }
+            }
         }
-        .tracksPageScroll()
-        .themedBackground()
-        .pageChrome("Account", style: .inline)
         .m3Dialog(signOutTitle, isPresented: $confirmSignOut,
                   message: model.isDemo ? model.demoExitMessage : "Le credenziali di questo account verranno rimosse da questo dispositivo.") {
             [.cancel(), DialogAction(title: "Esci", style: .destructive) { model.signOut() }]

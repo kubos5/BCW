@@ -13,6 +13,7 @@ struct SearchView: View {
 
     private var trimmed: String { query.trimmingCharacters(in: .whitespaces) }
     @FocusState private var fieldFocused: Bool
+    @Environment(\.windowClass) private var windowClass
 
     /// Risultati della ricerca, calcolati una volta per aggiornamento (a ogni lettera digitata):
     /// prima ogni elenco veniva rifiltrato e riordinato più volte, anche una per ogni riga.
@@ -57,7 +58,8 @@ struct SearchView: View {
     private var page: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                if !ThemeStore.shared.liquidGlass && !embedded {
+                // Sull'iPad largo il campo è nella barra superiore della finestra.
+                if !ThemeStore.shared.liquidGlass && !embedded && windowClass == .compact {
                     PageLargeTitle()
                         .padding(.bottom, -4)
                     M3SearchBar(text: $query, prompt: Self.prompt, focus: $fieldFocused)
@@ -70,6 +72,9 @@ struct SearchView: View {
                     if results.isEmpty {
                         EmptyState("Nessun risultato per \"\(trimmed)\"", icon: "search",
                                    description: "Controlla l'ortografia o prova con un'altra ricerca.")
+                    } else if windowClass == .regular {
+                        // Sull'iPad largo i gruppi di risultati stanno in colonne (come la versione web).
+                        AdaptiveColumns(minimum: 360, spacing: 20) { resultGroups(results) }
                     } else {
                         resultGroups(results)
                     }
@@ -78,6 +83,9 @@ struct SearchView: View {
             .pagePadding()
             .padding(.top, embedded ? 4 : 0)
             .padding(.bottom, 32)
+            // Sull'iPad largo i suggerimenti sono più stretti della pagina: senza, l'intera pagina si
+            // stringeva attorno a loro e ai lati restava lo sfondo bianco di sistema (verificato).
+            .frame(maxWidth: windowClass == .regular ? .infinity : nil, alignment: .leading)
             .animation(Motion.spatial, value: trimmed.isEmpty)
         }
         .tracksPageScroll()

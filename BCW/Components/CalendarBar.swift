@@ -10,7 +10,12 @@ struct CalendarBar: View {
     @Binding var selectedDay: Date
     /// Il mese intero; altrimenti la settimana del giorno scelto.
     var showsMonth = false
+    /// Margine laterale: di serie quello della pagina; 0 nelle colonne laterali dell'iPad.
+    var horizontalPadding: CGFloat?
+    /// Pallini di verifiche, compiti, eventi e assenze sotto i giorni (non nel Registro delle lezioni).
+    var showsDots = true
     let pickDate: () -> Void
+    @Environment(\.pageGutter) private var gutter
 
     private static let weekdaySymbols = ["L", "M", "M", "G", "V", "S", "D"]
 
@@ -45,7 +50,7 @@ struct CalendarBar: View {
                     }
             )
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, horizontalPadding ?? gutter)
         .padding(.bottom, 12)
     }
 
@@ -81,12 +86,14 @@ struct CalendarBar: View {
         let compact = month != nil
         return WeightedRow(weights: days.indices.map { !compact && $0 == selectedIndex ? 1.45 : 1 }, spacing: 4) {
             ForEach(days, id: \.self) { day in
-                CalendarDayButton(day: day, isSelected: day.isSameDay(as: selectedDay), compact: compact,
-                                  outside: month.map { !CVDate.calendar.isDate(day, equalTo: $0, toGranularity: .month) } ?? false) {
+                CalendarDayButton(day: day, isSelected: day.isSameDay(as: selectedDay), isToday: day.isToday, compact: compact,
+                                  outside: month.map { !CVDate.calendar.isDate(day, equalTo: $0, toGranularity: .month) } ?? false,
+                                  showsDots: showsDots) {
                     guard !day.isSameDay(as: selectedDay) else { return }
                     Haptics.selection()
                     selectedDay = day
                 }
+                .equatable()
             }
         }
         .frame(height: compact ? 44 : 68)
@@ -130,9 +137,11 @@ private struct CalendarDayButton: View {
     @Environment(AppModel.self) private var model
     let day: Date
     let isSelected: Bool
+    let isToday: Bool
     let compact: Bool
     /// Giorno di un mese accanto (nel mese): attenuato.
     let outside: Bool
+    var showsDots = true
     let action: () -> Void
 
     var body: some View {
@@ -147,16 +156,16 @@ private struct CalendarDayButton: View {
                         .transition(.opacity)
                 }
                 Text(day.it("d"))
-                    .font(.numeral(compact ? 16 : 20, weight: isSelected || day.isToday ? 700 : 550))
-                dots
+                    .font(.numeral(compact ? 16 : 20, weight: isSelected || isToday ? 700 : 550))
+                if showsDots { dots }
             }
             .foregroundStyle(isSelected ? Theme.onPrimary
-                             : (day.isToday ? Theme.primary : (quiet ? Theme.onSurfaceVariant : Theme.ink)))
+                             : (isToday ? Theme.primary : (quiet ? Theme.onSurfaceVariant : Theme.ink)))
             .opacity(outside && !isSelected ? 0.45 : 1)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(.rect)
         }
-        .buttonStyle(CalendarDayStyle(selected: isSelected, today: day.isToday, compact: compact, outside: outside))
+        .buttonStyle(CalendarDayStyle(selected: isSelected, today: isToday, compact: compact, outside: outside))
         .accessibilityLabel(day.longDay)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -178,6 +187,18 @@ private struct CalendarDayButton: View {
     }
 }
 
+/// Si ricalcola solo se cambiano il giorno o il suo stato (`.equatable()`): la chiusura cambia a
+/// ogni aggiornamento della barra ma fa sempre la stessa cosa, e confrontandola si ricalcolavano
+/// tutti i giorni (42 nel mese) a ogni cambio di giorno. I dati letti dal modello li aggiornano comunque.
+extension CalendarDayButton: Equatable {
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.day == rhs.day && lhs.isSelected == rhs.isSelected && lhs.isToday == rhs.isToday
+            && lhs.compact == rhs.compact && lhs.outside == rhs.outside && lhs.showsDots == rhs.showsDots
+    }
+}
+
+/// Alla pressione il giorno si rimpicciolisce con il velo; gli altri giorni stringono anche gli
+/// angoli, quello scelto resta una pillola (come `.cb-day.selected` sul web, che vince su `:active`).
 private struct CalendarDayStyle: ButtonStyle {
     let selected: Bool
     let today: Bool
@@ -186,7 +207,7 @@ private struct CalendarDayStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         let full: CGFloat = compact ? 22 : 34
-        let radius = configuration.isPressed ? Theme.radii.s : (selected ? full : (compact ? Theme.radii.m : Theme.radii.l))
+        let radius = selected ? full : (configuration.isPressed ? Theme.radii.s : (compact ? Theme.radii.m : Theme.radii.l))
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         configuration.label
             .background {

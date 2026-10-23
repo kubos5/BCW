@@ -131,56 +131,7 @@ struct AverageRing: View {
     }
 }
 
-/// Arco dell'anello della media: la parte piena (ondulata) o la traccia dopo lo spazio.
-private struct RingShape: Shape {
-    var progress: Double
-    let lineWidth: CGFloat
-    let track: Bool
-    let wavy: Bool
-
-    var animatableData: Double {
-        get { progress }
-        set { progress = newValue }
-    }
-
-    func path(in rect: CGRect) -> Path {
-        let size = min(rect.width, rect.height)
-        let r = (size - lineWidth) / 2 - (size >= 60 ? 3 : 0)
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        let start = -Double.pi / 2
-        let gap = Double(lineWidth * 1.1 + 4) / Double(r)
-        let end = start + progress * 2 * .pi
-        var path = Path()
-        if track {
-            guard progress < 0.999 else { return path }
-            let from = progress > 0 ? end + gap : start
-            let to = start + 2 * .pi - (progress > 0 ? gap : 0)
-            guard to > from else { return path }
-            path.addArc(center: center, radius: r, startAngle: .radians(from), endAngle: .radians(to), clockwise: false)
-            return path
-        }
-        guard progress > 0 else { return path }
-        let to = progress >= 0.999 ? start + 2 * .pi : end
-        if !wavy {
-            path.addArc(center: center, radius: r, startAngle: .radians(start), endAngle: .radians(to), clockwise: false)
-            return path
-        }
-        // L'onda si appiattisce agli estremi, così l'arco comincia e finisce sul cerchio.
-        let amplitude = min(3, Double(size) / 40)
-        let wavelength = max(16, Double(size) / 4)
-        let length = (to - start) * Double(r)
-        let steps = max(8, Int(ceil(length / 2)))
-        for i in 0...steps {
-            let t = start + (to - start) * Double(i) / Double(steps)
-            let s = (t - start) * Double(r)
-            let fade = min(1, s / wavelength, (length - s) / wavelength)
-            let rr = Double(r) + amplitude * fade * sin(s / wavelength * 2 * .pi)
-            let point = CGPoint(x: center.x + rr * cos(t), y: center.y + rr * sin(t))
-            if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
-        }
-        return path
-    }
-}
+// L'arco dell'anello (`RingShape`) è in `Shared/RingShape.swift`: lo usano anche i widget.
 
 /// Barra di avanzamento lineare e ondulata, con lo spazio e il punto finale di M3.
 struct WavyProgress: View {
@@ -195,12 +146,8 @@ struct WavyProgress: View {
             let active = proxy.size.width * p
             HStack(spacing: 6) {
                 if p > 0 {
-                    TimelineView(.animation(paused: reduceMotion || ThemeStore.shared.motion == .reduced)) { timeline in
-                        let phase = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.6) / 1.6
-                        WaveShape(phase: phase, amplitude: 2.75, wavelength: 20)
-                            .stroke(Theme.primary, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                    }
-                    .frame(width: max(0, active - 3), height: 12)
+                    MovingWave(color: Theme.primary, paused: reduceMotion || ThemeStore.shared.motion == .reduced)
+                        .frame(width: max(0, active - 3), height: 12)
                 }
                 if p < 1 {
                     Capsule()
@@ -216,6 +163,91 @@ struct WavyProgress: View {
         .frame(height: 12)
         .accessibilityElement()
         .accessibilityValue("\(Int(p * 100))%")
+    }
+}
+
+/// Onda di `WavyProgress` (spessore 4, estremi arrotondati), che scorre di una lunghezza d'onda
+/// ogni 1,6 secondi. La disegna un `CAShapeLayer` e la anima Core Animation, fuori dal thread
+/// principale: con una `TimelineView(.animation)` SwiftUI aggiornava la vista a ogni fotogramma
+/// finché l'onda era visibile (compiti della Dashboard, lezione in corso dell'Orario).
+private struct MovingWave: UIViewRepresentable {
+    let color: Color
+    let paused: Bool
+    /// Per ricolorarla cambiando tema chiaro/scuro.
+    @Environment(\.colorScheme) private var colorScheme
+
+    func makeUIView(context: Context) -> MovingWaveView { MovingWaveView() }
+
+    func updateUIView(_ view: MovingWaveView, context: Context) {
+        view.update(color: UIColor(cgColor: color.resolve(in: context.environment).cgColor), paused: paused)
+    }
+}
+
+final class MovingWaveView: UIView {
+    static let amplitude: CGFloat = 2.75
+    static let wavelength: CGFloat = 20
+    static let period: Double = 1.6
+    /// Fotogrammi chiave per periodo: tra uno e l'altro Core Animation interpola i punti (scarto
+    /// sotto il trentesimo di punto rispetto alla sinusoide).
+    private static let steps = 24
+
+    override class var layerClass: AnyClass { CAShapeLayer.self }
+    private var shape: CAShapeLayer { layer as! CAShapeLayer }
+    private var paused = false
+    private var builtSize: CGSize?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        isAccessibilityElement = false
+        shape.fillColor = nil
+        shape.lineWidth = 4
+        shape.lineCap = .round
+        shape.lineJoin = .round
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) non usato") }
+
+    func update(color: UIColor, paused: Bool) {
+        shape.strokeColor = color.cgColor
+        if paused != self.paused {
+            self.paused = paused
+            builtSize = nil
+            setNeedsLayout()
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if builtSize != bounds.size || (!paused && shape.animation(forKey: "wave") == nil) { rebuild() }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // Animazioni tolte da UIKit (es. fuori dalla finestra): si rimettono.
+        if window != nil, !paused, shape.animation(forKey: "wave") == nil { setNeedsLayout() }
+    }
+
+    /// La fase segue l'orologio, come la `TimelineView` di prima: più onde restano allineate.
+    private func rebuild() {
+        let rect = bounds
+        builtSize = rect.size
+        shape.removeAnimation(forKey: "wave")
+        let now = Date().timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: Self.period)
+        shape.path = Self.path(in: rect, phase: now / Self.period)
+        guard !paused, rect.width > 4 else { return }
+        let animation = CAKeyframeAnimation(keyPath: "path")
+        animation.values = (0...Self.steps).map { Self.path(in: rect, phase: Double($0) / Double(Self.steps)) }
+        animation.calculationMode = .linear
+        animation.duration = Self.period
+        animation.repeatCount = .infinity
+        animation.isRemovedOnCompletion = false
+        animation.beginTime = shape.convertTime(CACurrentMediaTime(), from: nil) - now
+        shape.add(animation, forKey: "wave")
+    }
+
+    private static func path(in rect: CGRect, phase: Double) -> CGPath {
+        WaveShape(phase: phase, amplitude: amplitude, wavelength: wavelength).path(in: rect).cgPath
     }
 }
 

@@ -170,6 +170,8 @@ enum NewsNotifications {
         // `bootstrap` può aver già avviato un aggiornamento: si aspetta che finisca.
         for _ in 0..<50 where model.isRefreshing { try? await Task.sleep(for: .milliseconds(200)) }
         await model.refreshAll()
+        // L'app può essere sospesa subito dopo: i widget si aggiornano ora, senza attesa.
+        model.widgets.export()
     }
 }
 

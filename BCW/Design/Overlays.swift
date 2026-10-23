@@ -102,6 +102,7 @@ private struct OverlayHostModifier: ViewModifier {
 
 private struct OverlayLayer: View {
     @Bindable var host: OverlayHost
+    @Environment(\.windowClass) private var windowClass
 
     var body: some View {
         GeometryReader { proxy in
@@ -127,7 +128,8 @@ private struct OverlayLayer: View {
                 if let toast = host.toast {
                     ToastView(toast: toast)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        .padding(.bottom, 96)
+                        // Sopra la barra in basso; sull'iPad largo (senza barra in basso) vicino al fondo.
+                        .padding(.bottom, windowClass == .regular ? 24 : 96)
                         .padding(.horizontal, 12)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .allowsHitTesting(false)
@@ -248,6 +250,7 @@ struct MenuItem: View {
             }
             .buttonStyle(MenuRowStyle(checked: checked, destructive: role == .destructive))
             .opacity(isEnabled || checked ? 1 : 0.38)
+            .modifier(CheckedMenuItemAnchor(checked: checked))
         }
     }
 
@@ -257,6 +260,21 @@ struct MenuItem: View {
             Text(subtitle)
         } else {
             Text(title)
+        }
+    }
+}
+
+/// La voce scelta di un menu che scorre: il menu si apre con lei in vista (es. 13:00 tra gli orari
+/// a mezz'ora dell'editor dell'evento, invece di 00:00).
+private struct CheckedMenuItemAnchor: ViewModifier {
+    static let id = "BCW.menu.checked"
+    let checked: Bool
+
+    func body(content: Content) -> some View {
+        if checked {
+            content.id(Self.id)
+        } else {
+            content
         }
     }
 }
@@ -406,9 +424,15 @@ private struct MenuPanel: View {
     var body: some View {
         let anchor = menu.anchor.offsetBy(dx: -origin.x, dy: -origin.y)
         let width = min(max(ideal.width, 200), min(320, container.width - 16))
-        let maxHeight = container.height - 16
+        // Spazio sotto e sopra il pulsante. Se il menu non entra da nessuna parte (elenchi lunghi,
+        // fogli bassi come i moduli dell'iPad) sta dal lato più ampio, alto quanto quello spazio, e
+        // scorre: prima partiva sotto il pulsante alto quanto tutto il contenitore e usciva dal fondo.
+        let spaceBelow = container.height - 8 - (anchor.maxY + 4)
+        let spaceAbove = anchor.minY - 4 - 8
+        let fitsBelow = ideal.height <= spaceBelow
+        let below = fitsBelow || (ideal.height > spaceAbove && spaceBelow >= spaceAbove)
+        let maxHeight = max(below ? spaceBelow : spaceAbove, min(ideal.height, 120))
         let height = min(ideal.height, maxHeight)
-        let below = anchor.maxY + 4 + height <= container.height - 8 || anchor.minY - 4 - height < 8
         let x = menu.alignment == .leading ? anchor.minX : anchor.maxX - width
         let y = below ? anchor.maxY + 4 : anchor.minY - 4 - height
         ZStack(alignment: .topLeading) {
@@ -422,11 +446,14 @@ private struct MenuPanel: View {
                 Group {
                     // Lo scorrimento solo se serve: dentro uno scorrimento i tocchi brevi arrivano in ritardo.
                     if ideal.height > maxHeight {
-                        ScrollView {
-                            items
-                                .frame(width: width, alignment: .leading)
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                items
+                                    .frame(width: width, alignment: .leading)
+                            }
+                            .scrollBounceBehavior(.basedOnSize)
+                            .onAppear { proxy.scrollTo(CheckedMenuItemAnchor.id, anchor: .center) }
                         }
-                        .scrollBounceBehavior(.basedOnSize)
                     } else {
                         items
                             .frame(width: width, alignment: .leading)

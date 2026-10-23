@@ -78,7 +78,7 @@ struct M3DatePickerSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.surfaceContainerHigh.ignoresSafeArea())
         .presentationBackground(Theme.surfaceContainerHigh)
-        .presentationDetents([.height(540)])
+        .modifier(PickerPresentation(height: 540))
         .presentationDragIndicator(.hidden)
         .sensoryFeedback(.selection, trigger: selection)
     }
@@ -288,6 +288,11 @@ struct M3TimePickerSheet: View {
                     .frame(maxWidth: .infinity)
                     .transition(.opacity)
             }
+            if WindowClass.isPad {
+                // Sull'iPad la finestra resta alta come con il quadrante anche inserendo i numeri:
+                // i pulsanti restano in fondo.
+                Spacer(minLength: 0)
+            }
             HStack(spacing: 4) {
                 IconButton(typing ? "schedule" : "keyboard",
                            label: typing ? "Scegli dal quadrante" : "Inserisci con la tastiera") {
@@ -311,7 +316,11 @@ struct M3TimePickerSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.surfaceContainerHigh.ignoresSafeArea())
         .presentationBackground(Theme.surfaceContainerHigh)
-        .presentationDetents([.height(typing ? 260 : 540)])
+        .modifier(PickerPresentation(height: typing ? 260 : 540))
+        #if DEBUG
+        // Script di prova (`-BCWScript`): passa ai campi da tastiera.
+        .debugAction("timetyping") { withAnimation(Motion.spatial) { setTyping(true) } }
+        #endif
         .presentationDragIndicator(.hidden)
         .sensoryFeedback(.selection, trigger: hour * 60 + minute)
     }
@@ -509,6 +518,23 @@ struct M3TimePickerSheet: View {
             let index = Int((fraction * 12).rounded()) % 12
             let distance = hypot(dx, dy)
             hour = distance < (inner + outer) / 2 ? index + 12 : index
+        }
+    }
+}
+
+/// Selettori di data e orario: sull'iPhone un foglio basso che sale dal fondo; sull'iPad una finestra
+/// di dialogo centrata, larga 360 punti e alta quanto il contenuto (come il selettore modale di
+/// Material 3).
+private struct PickerPresentation: ViewModifier {
+    let height: CGFloat
+
+    func body(content: Content) -> some View {
+        if WindowClass.isPad {
+            content
+                .frame(width: 360)
+                .presentationSizing(.fitted)
+        } else {
+            content.presentationDetents([.height(height)])
         }
     }
 }

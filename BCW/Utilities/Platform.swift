@@ -8,7 +8,7 @@ enum Platform {
         UIPasteboard.general.string = text
     }
 
-    /// Apre le impostazioni di sistema delle notifiche per BCW.
+    /// Apre le impostazioni di sistema di BCW (notifiche, attività in diretta).
     static func openNotificationSettings() {
         if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
     }
@@ -33,6 +33,36 @@ final class UnobservedValue<Value> {
     init(_ value: Value) { self.value = value }
 }
 
+/// Riga con una colonna fissa a sinistra (data, casella) e il resto a destra, allineati in alto:
+/// come `HStack(alignment: .top, spacing:)`, ma la colonna di destra riceve subito la larghezza che
+/// resta. L'`HStack` misura prima i figli con larghezze di prova (zero, infinita) per capire chi si
+/// allarga: con testi su più righe e righe annidate (i giorni di "Nei prossimi giorni") quasi tutto
+/// il tempo del cambio di giorno andava in queste misure.
+struct LeadingColumnLayout: Layout {
+    var spacing: CGFloat = 12
+
+    private func leadingSize(_ subviews: Subviews, height: CGFloat?) -> CGSize {
+        subviews.first?.sizeThatFits(ProposedViewSize(width: nil, height: height)) ?? .zero
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let lead = leadingSize(subviews, height: proposal.height)
+        guard subviews.count > 1 else { return lead }
+        let width = proposal.width.map { max(0, $0 - lead.width - spacing) }
+        let rest = subviews[1].sizeThatFits(ProposedViewSize(width: width, height: proposal.height))
+        return CGSize(width: lead.width + spacing + rest.width, height: max(lead.height, rest.height))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let lead = leadingSize(subviews, height: proposal.height)
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(lead))
+        guard subviews.count > 1 else { return }
+        let x = bounds.minX + lead.width + spacing
+        subviews[1].place(at: CGPoint(x: x, y: bounds.minY),
+                          proposal: ProposedViewSize(width: max(0, bounds.maxX - x), height: proposal.height))
+    }
+}
+
 extension View {
     /// Titolo della pagina nella barra di navigazione.
     func screenTitle(_ title: String, subtitle: String? = nil) -> some View {
@@ -44,21 +74,35 @@ extension View {
         navigationBarTitleDisplayMode(.inline)
     }
 
-    /// Margini laterali delle pagine.
+    /// Margini laterali delle pagine: 16 punti (24 sull'iPad con la finestra larga).
     func pagePadding() -> some View {
-        padding(.horizontal)
+        modifier(PagePadding())
     }
 
 }
 
-/// Elenco di card in una colonna.
+private struct PagePadding: ViewModifier {
+    @Environment(\.pageGutter) private var gutter
+
+    func body(content: Content) -> some View {
+        content.padding(.horizontal, gutter)
+    }
+}
+
+/// Elenco di card in una colonna; sull'iPad largo in colonne larghe almeno `minWidth`.
 struct CardGrid<Content: View>: View {
     var minWidth: CGFloat = 340
     var spacing: CGFloat = 10
     @ViewBuilder let content: () -> Content
+    @Environment(\.windowClass) private var windowClass
 
     var body: some View {
-        LazyVStack(spacing: spacing, content: content)
+        if windowClass == .regular {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: minWidth), spacing: spacing, alignment: .top)],
+                      spacing: spacing, content: content)
+        } else {
+            LazyVStack(spacing: spacing, content: content)
+        }
     }
 }
 
@@ -70,17 +114,19 @@ extension View {
 }
 
 /// Riga di filtri che scorre in orizzontale.
+/// Arriva fino ai bordi della pagina (oltre il margine laterale), allineata al contenuto.
 struct ChipRow<Content: View>: View {
     @ViewBuilder let content: () -> Content
+    @Environment(\.pageGutter) private var gutter
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) { content() }
                 .padding(.vertical, 2)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, gutter)
         }
         .scrollClipDisabled()
-        .padding(.horizontal, -16)
+        .padding(.horizontal, -gutter)
     }
 }
 

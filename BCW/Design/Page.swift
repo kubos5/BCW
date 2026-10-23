@@ -107,6 +107,7 @@ private struct PageChrome<Actions: View>: ViewModifier {
     @Environment(\.isRootPage) private var isRootPage
     @Environment(\.dismiss) private var dismiss
     @Environment(\.bottomBarInset) private var bottomBarInset
+    @Environment(\.windowClass) private var windowClass
 
     func body(content: Content) -> some View {
         if ThemeStore.shared.liquidGlass {
@@ -114,12 +115,30 @@ private struct PageChrome<Actions: View>: ViewModifier {
             // (`.inlineLarge`): solo così toccando di nuovo la scheda il sistema torna in cima con il
             // titolo per intero. Le pagine aperte da un'altra hanno il titolo piccolo al centro.
             let pushed = showsBack ?? !isRootPage
-            content
-                .navigationTitle(title)
-                .toolbarTitleDisplayMode(pushed ? .inline : .inlineLarge)
-                .toolbar {
-                    ToolbarItemGroup(placement: .topBarTrailing) { actions() }
-                }
+            if windowClass == .regular && !pushed {
+                // Sull'iPad largo, con la barra delle schede in alto, né il titolo grande nella riga
+                // dei pulsanti né quello piccolo al centro compaiono (al centro c'è la barra delle
+                // schede), e quello grande su una riga a parte restava compresso dopo aver acceso
+                // Liquid Glass dalle Impostazioni (verificato). Il titolo grande è quindi fermo sotto
+                // la barra, come quello della barra di Material sull'iPad largo.
+                content
+                    .navigationTitle(title)
+                    .toolbarTitleDisplayMode(.inline)
+                    .toolbar(removing: .title)
+                    .toolbar {
+                        ToolbarItemGroup(placement: .topBarTrailing) { actions() }
+                    }
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        GlassPageTitle(title: title, subtitle: subtitle)
+                    }
+            } else {
+                content
+                    .navigationTitle(title)
+                    .toolbarTitleDisplayMode(pushed ? .inline : .inlineLarge)
+                    .toolbar {
+                        ToolbarItemGroup(placement: .topBarTrailing) { actions() }
+                    }
+            }
         } else {
             let back = showsBack ?? !isRootPage
             // Le pagine principali delle schede hanno il titolo grande nella riga dei pulsanti, come
@@ -143,6 +162,38 @@ private struct PageChrome<Actions: View>: ViewModifier {
     }
 }
 
+/// Titolo grande delle pagine principali con Liquid Glass sull'iPad largo: fermo sotto la barra di
+/// sistema (con la barra delle schede in alto), sullo sfondo della pagina fino in cima, così il
+/// contenuto che scorre non passa dietro il titolo.
+private struct GlassPageTitle: View {
+    let title: String
+    let subtitle: String?
+    @Environment(\.pageGutter) private var gutter
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(.m3(34, weight: 550, rounded: true))
+                .tracking(-0.3)
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.m3(12))
+                    .foregroundStyle(Theme.onSurfaceVariant)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, gutter)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .bottomLeading)
+        .background(Theme.background.ignoresSafeArea(edges: .top))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
 /// Barra superiore di Material 3: pulsante indietro, titolo e pulsanti a icona.
 struct TopAppBar<Actions: View>: View {
     let title: String
@@ -153,6 +204,7 @@ struct TopAppBar<Actions: View>: View {
     var large = false
     var back: (() -> Void)?
     @ViewBuilder let actions: () -> Actions
+    @Environment(\.pageGutter) private var gutter
 
     var body: some View {
         HStack(spacing: 4) {
@@ -175,7 +227,8 @@ struct TopAppBar<Actions: View>: View {
                         .lineLimit(1)
                 }
             }
-            .padding(.leading, back == nil ? 12 : 4)
+            // Il titolo si allinea al contenuto (margine della pagina meno i 4 punti della barra).
+            .padding(.leading, back == nil ? gutter - 4 : 4)
             .opacity(titleShown ? 1 : 0)
             .offset(y: titleShown ? 0 : 6)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -190,6 +243,11 @@ struct TopAppBar<Actions: View>: View {
         }
         .padding(.horizontal, 4)
         .frame(height: 64)
+        // In una finestra piccola dell'iPad la barra sta nell'angolo dei controlli della finestra.
+        // Sulla barra intera: iPadOS riconosce l'angolo solo per le viste che partono dal bordo
+        // dello spazio sicuro (la riga interna, centrata, inizia 10 punti più in basso: verificato).
+        .avoidsWindowControls()
+        .frame(maxWidth: .infinity)
         .background {
             (scrolled ? Theme.surfaceContainer : Theme.surface)
                 .ignoresSafeArea(edges: .top)
@@ -214,6 +272,7 @@ struct BarButton: View {
             Label { Text(label) } icon: { Icon(icon) }
         }
         .help(label)
+        .accessibilityLabel(label)
     }
 }
 
@@ -260,6 +319,8 @@ struct BarMenu<Content: View>: View {
             Label { Text(label) } icon: { ThemeStore.shared.liquidGlass ? AnyView(Image.m(icon)) : AnyView(Icon(icon)) }
         }
         .help(label)
+        // Il pulsante mostra solo l'icona: senza, VoiceOver non lo nominava.
+        .accessibilityLabel(label)
     }
 }
 
@@ -295,9 +356,55 @@ extension View {
     }
 
     /// Aspetto dei fogli di Material 3: sfondo `surface-container-low`, angoli del sistema (in basso
-    /// seguono quelli dello schermo).
-    func m3Sheet() -> some View {
-        modifier(M3SheetPresentation())
+    /// seguono quelli dello schermo). Sull'iPad il foglio è centrato, della misura indicata.
+    func m3Sheet(size: M3SheetSize = .form) -> some View {
+        modifier(M3SheetPresentation(size: size))
+    }
+
+    /// Misura di un foglio sull'iPad (sull'iPhone non cambia nulla: il foglio sale dal basso).
+    func m3SheetSizing(_ size: M3SheetSize) -> some View {
+        modifier(M3SheetSizing(size: size))
+    }
+
+    /// Rilevamenti di un foglio, solo sull'iPhone: sull'iPad il foglio è centrato con la sua misura
+    /// (`m3Sheet(size:)`) e un rilevamento medio lo accorciava lasciandolo in basso.
+    func m3Detents(_ detents: Set<PresentationDetent>) -> some View {
+        modifier(M3Detents(detents: detents))
+    }
+}
+
+/// Misura dei fogli sull'iPad.
+enum M3SheetSize {
+    /// Modulo centrato (editor, accesso, account).
+    case form
+    /// Quasi tutta la finestra (generatore dell'orario, verifiche nascoste, palette, pagine web).
+    case page
+}
+
+private struct M3SheetSizing: ViewModifier {
+    let size: M3SheetSize
+
+    func body(content: Content) -> some View {
+        if WindowClass.isPad {
+            switch size {
+            case .form: content.presentationSizing(.form)
+            case .page: content.presentationSizing(.page)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+private struct M3Detents: ViewModifier {
+    let detents: Set<PresentationDetent>
+
+    func body(content: Content) -> some View {
+        if WindowClass.isPad {
+            content
+        } else {
+            content.presentationDetents(detents)
+        }
     }
 }
 
@@ -425,15 +532,22 @@ struct SheetBar: View {
 }
 
 private struct M3SheetPresentation: ViewModifier {
+    let size: M3SheetSize
+
     func body(content: Content) -> some View {
         content
             .background(Theme.surfaceContainerLow.ignoresSafeArea())
             .environment(\.bottomBarInset, 0)
+            // Dentro un foglio si usa il layout del telefono, anche sull'iPad.
+            .environment(\.windowClass, .compact)
+            .environment(\.pageGutter, 16)
             .overlayHost()
             .presentationBackground(Theme.surfaceContainerLow)
             // Angoli del sistema: un raggio fisso varrebbe anche per quelli in basso, che così non
             // seguirebbero più la curva dello schermo.
-            .presentationDragIndicator(.visible)
+            // Sull'iPad il foglio è centrato e non si trascina: niente maniglia.
+            .presentationDragIndicator(WindowClass.isPad ? .hidden : .visible)
+            .m3SheetSizing(size)
     }
 }
 
@@ -547,12 +661,14 @@ private struct ScrollToTopOnReselect: ViewModifier {
 
 /// Ricerca dentro una singola pagina (Bacheca, Agenda, Materiale): con Liquid Glass è il campo di
 /// sistema nella barra; altrimenti la pagina mostra la barra di ricerca di Material 3 nel contenuto.
+/// Sull'iPad largo il campo sta sempre nel contenuto (in cima all'elenco, come la versione web).
 struct GlassLocalSearch: ViewModifier {
     @Binding var text: String
     let prompt: String
+    @Environment(\.windowClass) private var windowClass
 
     func body(content: Content) -> some View {
-        if ThemeStore.shared.liquidGlass {
+        if ThemeStore.shared.liquidGlass && windowClass == .compact {
             content.searchable(text: $text, prompt: prompt)
         } else {
             content
@@ -560,13 +676,15 @@ struct GlassLocalSearch: ViewModifier {
     }
 }
 
-/// Barra di ricerca della pagina su iPhone senza Liquid Glass (con Liquid Glass è nella barra).
+/// Barra di ricerca della pagina su iPhone senza Liquid Glass (con Liquid Glass è nella barra) e
+/// sempre sull'iPad largo.
 struct PageSearchBar: View {
     @Binding var text: String
     let prompt: String
+    @Environment(\.windowClass) private var windowClass
 
     var body: some View {
-        if !ThemeStore.shared.liquidGlass {
+        if !ThemeStore.shared.liquidGlass || windowClass == .regular {
             M3SearchBar(text: $text, prompt: prompt)
         }
     }

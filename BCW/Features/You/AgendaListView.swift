@@ -7,6 +7,7 @@ struct AgendaListView: View {
     @State private var showPast = false
     @State private var onlyPending = false
     @State private var search = ""
+    @Environment(\.windowClass) private var windowClass
 
     private var grouped: [(Date, [AgendaEvent])] {
         let today = Date().startOfDay
@@ -27,10 +28,21 @@ struct AgendaListView: View {
         let grouped = grouped
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                PageSearchBar(text: $search, prompt: Self.searchPrompt)
-                HStack(spacing: 12) {
-                    SegmentedButtons(selection: $showPast, options: [(false, "In arrivo", nil), (true, "Passati", nil)],
-                                     compact: false)
+                if windowClass == .regular {
+                    // Sull'iPad largo la ricerca sta sulla stessa riga del periodo (come la versione web).
+                    HStack(spacing: 12) {
+                        SegmentedButtons(selection: $showPast, options: [(false, "In arrivo", nil), (true, "Passati", nil)],
+                                         compact: true)
+                        Spacer(minLength: 12)
+                        PageSearchBar(text: $search, prompt: Self.searchPrompt)
+                            .frame(maxWidth: 400)
+                    }
+                } else {
+                    PageSearchBar(text: $search, prompt: Self.searchPrompt)
+                    HStack(spacing: 12) {
+                        SegmentedButtons(selection: $showPast, options: [(false, "In arrivo", nil), (true, "Passati", nil)],
+                                         compact: false)
+                    }
                 }
 
                 ChipRow {
@@ -47,13 +59,15 @@ struct AgendaListView: View {
                     EmptyState("Niente da mostrare", icon: "checklist", description: "Nessun elemento corrisponde ai filtri.")
                 }
 
-                LazyVStack(alignment: .leading, spacing: 20) {
-                    ForEach(grouped, id: \.0) { day, events in
-                        ListGroup(day.relativeDayName) {
-                            ForEach(events) { event in
-                                SegmentCell { AgendaEventRow(event: event) }
-                            }
-                        }
+                if windowClass == .regular {
+                    // Sull'iPad largo i giorni stanno in colonne.
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), spacing: 20, alignment: .top)],
+                              alignment: .leading, spacing: 20) {
+                        days(grouped)
+                    }
+                } else {
+                    LazyVStack(alignment: .leading, spacing: 20) {
+                        days(grouped)
                     }
                 }
             }
@@ -73,6 +87,16 @@ struct AgendaListView: View {
                 Label { Text("Esporta nel calendario") } icon: { ThemeStore.shared.liquidGlass ? AnyView(Image.m("calendarPlus")) : AnyView(Icon("calendarPlus")) }
             }
             .help("Esporta nel calendario")
+        }
+    }
+
+    private func days(_ grouped: [(Date, [AgendaEvent])]) -> some View {
+        ForEach(grouped, id: \.0) { day, events in
+            ListGroup(day.relativeDayName) {
+                ForEach(events) { event in
+                    SegmentCell { AgendaEventRow(event: event) }
+                }
+            }
         }
     }
 }

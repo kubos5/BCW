@@ -18,8 +18,9 @@ struct TimetableDayList: View {
     @Environment(AppModel.self) private var model
     let content: TimetableDayContent
     let actions: TimetableActions
-    /// "Oggi" accanto al giorno in grande, se il giorno è un altro (senza Liquid Glass).
+    /// "Oggi" accanto al giorno in grande, se il giorno è un altro (senza Liquid Glass, o sull'iPad largo).
     var jump: (() -> Void)?
+    @Environment(\.windowClass) private var windowClass
 
     /// Righe dell'elenco: le lezioni di seguito (senza pause tra loro) formano una lista segmentata.
     private enum Row: Identifiable {
@@ -109,7 +110,7 @@ struct TimetableDayList: View {
                         .foregroundStyle(Theme.secondaryInk)
                 }
                 Spacer(minLength: 0)
-                if let jump, !ThemeStore.shared.liquidGlass {
+                if let jump, !ThemeStore.shared.liquidGlass || windowClass == .regular {
                     Button(action: jump) {
                         Label { Text("Oggi") } icon: { Icon("today") }
                     }
@@ -416,27 +417,7 @@ struct BreakRow: View {
     }
 }
 
-/// Linea ondulata orizzontale (separatore degli intervalli).
-struct WavyLine: Shape {
-    var amplitude: CGFloat = 2
-    var wavelength: CGFloat = 11
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        guard rect.width > 0 else { return path }
-        // Comincia e finisce a metà altezza, con onde intere centrate nello spazio disponibile.
-        let waves = max(1, (rect.width / wavelength).rounded(.down))
-        let length = waves * wavelength
-        let start = rect.minX + (rect.width - length) / 2
-        path.move(to: CGPoint(x: start, y: rect.midY))
-        var x: CGFloat = 0
-        while x < length {
-            x = min(x + 1, length)
-            path.addLine(to: CGPoint(x: start + x, y: rect.midY - sin(x / wavelength * 2 * .pi) * amplitude))
-        }
-        return path
-    }
-}
+// La linea ondulata degli intervalli (`WavyLine`) è in `Shared/WavyLine.swift`: la usano anche i widget.
 
 struct EntryContextMenu: View {
     let entry: TimetableEntry
