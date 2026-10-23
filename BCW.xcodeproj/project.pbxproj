@@ -281,7 +281,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-arancio AppIcon-verde AppIcon-blu AppIcon-viola AppIcon-grafite AppIcon-mattone-scura AppIcon-arancio-scura AppIcon-verde-scura AppIcon-blu-scura AppIcon-viola-scura AppIcon-grafite-scura";
 				CODE_SIGN_ENTITLEMENTS = Config/BCW.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -331,7 +331,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-arancio AppIcon-verde AppIcon-blu AppIcon-viola AppIcon-grafite AppIcon-mattone-scura AppIcon-arancio-scura AppIcon-verde-scura AppIcon-blu-scura AppIcon-viola-scura AppIcon-grafite-scura";
 				CODE_SIGN_ENTITLEMENTS = Config/BCW.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;

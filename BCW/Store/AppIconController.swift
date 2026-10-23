@@ -69,8 +69,7 @@ final class AppIconController {
 
     private var options: String {
         let theme = ThemeStore.shared
-        return [theme.appIconShape.rawValue, theme.appIconColor.rawValue, theme.appIconAppearance.rawValue,
-                theme.appIconDarkBackground.rawValue].joined(separator: "|")
+        return [theme.appIconColor.rawValue, theme.appIconAppearance.rawValue].joined(separator: "|")
     }
 
     private func observe() {

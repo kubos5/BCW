@@ -218,36 +218,27 @@ final class ThemeStore {
 
     // Icona dell'app (Impostazioni › Aspetto › Icona dell'app), sincronizzata con l'account BCW.
     // La applica `AppIconController`.
-    var appIconShape: AppIconShape {
-        didSet { defaults.set(appIconShape.rawValue, forKey: "appIconShape"); syncedChanged() }
-    }
     var appIconColor: AppIconColor {
         didSet { defaults.set(appIconColor.rawValue, forKey: "appIconColor"); syncedChanged() }
     }
     var appIconAppearance: AppIconAppearance {
         didSet { defaults.set(appIconAppearance.rawValue, forKey: "appIconAppearance"); syncedChanged() }
     }
-    var appIconDarkBackground: AppIconDarkBackground {
-        didSet { defaults.set(appIconDarkBackground.rawValue, forKey: "appIconDarkBackground"); syncedChanged() }
-    }
 
     /// Icona scelta, con il colore del tema già risolto (il colore proposto più vicino all'accento).
     var appIconChoice: AppIconChoice {
-        AppIconChoice(shape: appIconShape,
-                      color: appIconColor == .theme ? AppIconColor.nearest(to: accentColor) : appIconColor,
-                      variant: AppIconVariant(appearance: appIconAppearance, darkBackground: appIconDarkBackground))
+        AppIconChoice(color: appIconColor == .theme ? AppIconColor.nearest(to: accentColor) : appIconColor,
+                      appearance: appIconAppearance)
     }
 
     var appIconIsDefault: Bool {
-        appIconShape == .circle && appIconColor == .theme && appIconAppearance == .automatic && appIconDarkBackground == .material
+        appIconColor == .theme && appIconAppearance == .automatic
     }
 
-    /// Ripristina l'icona di BCW (cerchio, colore del tema, automatica, sfondo scuro Material).
+    /// Ripristina l'icona di BCW (colore del tema, automatica).
     func resetAppIcon() {
-        appIconShape = .circle
         appIconColor = .theme
         appIconAppearance = .automatic
-        appIconDarkBackground = .material
     }
 
     /// Asse ROND dei titoli e del testo.
@@ -283,10 +274,20 @@ final class ThemeStore {
         motion = MotionStyle(rawValue: defaults.string(forKey: "motion") ?? "") ?? .expressive
         roundedText = RoundedText(rawValue: defaults.string(forKey: "roundedText") ?? "") ?? .titles
         liquidGlass = defaults.object(forKey: "liquidGlass") as? Bool ?? false
-        appIconShape = AppIconShape(rawValue: defaults.string(forKey: "appIconShape") ?? "") ?? .circle
-        appIconColor = AppIconColor(rawValue: defaults.string(forKey: "appIconColor") ?? "") ?? .theme
-        appIconAppearance = AppIconAppearance(rawValue: defaults.string(forKey: "appIconAppearance") ?? "") ?? .automatic
-        appIconDarkBackground = AppIconDarkBackground(rawValue: defaults.string(forKey: "appIconDarkBackground") ?? "") ?? .material
+        // Valori delle versioni precedenti (fino alla 3.2: dieci colori, otto forme, "Sempre chiaro",
+        // sfondo scuro Material o iOS): i colori tolti diventano il più vicino, "Sempre chiaro"
+        // automatico; forma e sfondo scuro non ci sono più.
+        let storedIconColor = defaults.string(forKey: "appIconColor") ?? ""
+        let storedIconAppearance = defaults.string(forKey: "appIconAppearance") ?? ""
+        appIconColor = AppIconColor(stored: storedIconColor) ?? .theme
+        appIconAppearance = AppIconAppearance(stored: storedIconAppearance) ?? .automatic
+        if !storedIconColor.isEmpty, storedIconColor != appIconColor.rawValue {
+            defaults.set(appIconColor.rawValue, forKey: "appIconColor")
+        }
+        if !storedIconAppearance.isEmpty, storedIconAppearance != appIconAppearance.rawValue {
+            defaults.set(appIconAppearance.rawValue, forKey: "appIconAppearance")
+        }
+        for key in ["appIconShape", "appIconDarkBackground", "appIconNearest"] { defaults.removeObject(forKey: key) }
         #if DEBUG
         // Per le prove: `-BCWLiquidGlass YES` attiva Liquid Glass.
         if defaults.object(forKey: "BCWLiquidGlass") != nil { liquidGlass = defaults.bool(forKey: "BCWLiquidGlass") }
@@ -309,10 +310,8 @@ final class ThemeStore {
             "corners": .string(corners.rawValue),
             "motion": .string(motion.rawValue),
             "roundedText": .string(roundedText.rawValue),
-            "appIconShape": .string(appIconShape.rawValue),
             "appIconColor": .string(appIconColor.rawValue),
             "appIconAppearance": .string(appIconAppearance.rawValue),
-            "appIconDarkBackground": .string(appIconDarkBackground.rawValue),
         ]
     }
 
@@ -330,20 +329,15 @@ final class ThemeStore {
         if let value = values["roundedText"]?.string.flatMap(RoundedText.init(rawValue:)), value != roundedText {
             roundedText = value
         }
-        // Icona dell'app: i valori sconosciuti (es. una forma di una versione più recente) si saltano.
-        if let value = values["appIconShape"]?.string.flatMap(AppIconShape.init(rawValue:)), value != appIconShape {
-            appIconShape = value
-        }
-        if let value = values["appIconColor"]?.string.flatMap(AppIconColor.init(rawValue:)), value != appIconColor {
+        // Icona dell'app: i valori di un dispositivo con una versione precedente si convertono (colori
+        // tolti → il più vicino, "Sempre chiaro" → automatico), quelli sconosciuti si saltano.
+        // `appIconShape` e `appIconDarkBackground`, ancora sul server, non servono più.
+        if let value = values["appIconColor"]?.string.flatMap(AppIconColor.init(stored:)), value != appIconColor {
             appIconColor = value
         }
-        if let value = values["appIconAppearance"]?.string.flatMap(AppIconAppearance.init(rawValue:)),
+        if let value = values["appIconAppearance"]?.string.flatMap(AppIconAppearance.init(stored:)),
            value != appIconAppearance {
             appIconAppearance = value
-        }
-        if let value = values["appIconDarkBackground"]?.string.flatMap(AppIconDarkBackground.init(rawValue:)),
-           value != appIconDarkBackground {
-            appIconDarkBackground = value
         }
     }
 

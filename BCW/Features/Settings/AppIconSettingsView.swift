@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Icona dell'app (Impostazioni › Aspetto › Icona dell'app)
 
-/// Pagina dell'icona: anteprima nelle tre modalità delle icone di iOS, forma, colore e aspetto.
+/// Pagina dell'icona: anteprima nelle tre modalità delle icone di iOS, colore e aspetto.
 /// Le scelte si sincronizzano con l'account BCW (`ThemeStore`) e le applica `AppIconController`.
 struct AppIconSettingsView: View {
     var body: some View {
@@ -30,33 +30,14 @@ private struct AppIconSettingsSection: View {
             AppIconHero(choice: choice)
         }
 
-        ListGroup("Forma", footer: "La forma di Material 3 Expressive che contiene la barra di BCW. Classica è l'icona di prima, con la sola barra su sfondo crema.") {
-            AppIconShapeGrid(choice: choice, selection: $theme.appIconShape)
-        }
-
         ListGroup("Colore", footer: colorFooter(theme: theme, choice: choice)) {
             AppIconColorGrid(choice: choice, selection: $theme.appIconColor)
         }
-        .disabled(theme.appIconShape == .classic)
-        .opacity(theme.appIconShape == .classic ? 0.38 : 1)
 
-        ListGroup("Aspetto", footer: "Con le icone colorate e trasparenti di iOS l'icona è sempre tinta da iOS, qualunque sia l'aspetto scelto: forma e barra restano due livelli distinti.") {
-            ForEach(AppIconAppearance.allCases) { appearance in
-                AppIconAppearanceRow(appearance: appearance, selected: theme.appIconAppearance == appearance) {
-                    withAnimation(Motion.spatialFast) { theme.appIconAppearance = appearance }
-                }
-            }
-        }
-
-        let darkDisabled = theme.appIconAppearance == .light
-        ListGroup("Sfondo scuro", footer: darkDisabled
-                  ? "Con Sempre chiaro l'icona non è mai scura."
-                  : "Material: lo sfondo scuro del tema, come nell'app. iOS: lo sfondo scuro standard delle icone di iOS. A ogni cambio d'icona iOS mostra un avviso.") {
-            SegmentedButtons(selection: $theme.appIconDarkBackground,
-                             options: AppIconDarkBackground.allCases.map { ($0, $0.title, nil) })
+        ListGroup("Aspetto", footer: appearanceFooter(theme.appIconAppearance)) {
+            SegmentedButtons(selection: $theme.appIconAppearance,
+                             options: AppIconAppearance.allCases.map { ($0, $0.title, nil) })
                 .padding(16)
-                .disabled(darkDisabled)
-                .opacity(darkDisabled ? 0.38 : 1)
         }
 
         if !theme.appIconIsDefault {
@@ -69,12 +50,18 @@ private struct AppIconSettingsSection: View {
     }
 
     private func colorFooter(theme: ThemeStore, choice: AppIconChoice) -> String {
-        if theme.appIconShape == .classic { return "L'icona classica ha sempre i colori di BCW." }
         let current = "Ora: \(choice.color.title)."
         if theme.appIconColor == .theme {
-            return "Tema dell'app: l'icona prende il colore proposto più vicino al colore d'accento, e cambia con lui. \(current)"
+            return "Tema dell'app: l'icona prende il colore più vicino al colore d'accento, e cambia con lui. \(current)"
         }
-        return "Con Tema dell'app l'icona prende il colore proposto più vicino al colore d'accento. \(current)"
+        return "Con Tema dell'app l'icona prende il colore più vicino al colore d'accento. \(current)"
+    }
+
+    private func appearanceFooter(_ appearance: AppIconAppearance) -> String {
+        let mode = appearance == .automatic
+            ? "Automatico: chiara o scura come le icone di iOS."
+            : "Sempre scuro: scura anche con le icone chiare di iOS."
+        return "\(mode) Con le icone colorate e trasparenti l'icona è tinta da iOS. A ogni cambio d'icona iOS mostra un avviso."
     }
 }
 
@@ -93,7 +80,7 @@ private struct AppIconHero: View {
         .padding(.bottom, 16)
         .animation(Motion.spatial, value: choice)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Anteprima dell'icona: \(choice.shape.title), \(choice.color.title)")
+        .accessibilityLabel("Anteprima dell'icona: \(choice.color.title), \(choice.appearance.title.lowercased())")
     }
 
     private func column(_ mode: AppIconPreview.Mode, _ label: String) -> some View {
@@ -111,51 +98,7 @@ private struct AppIconHero: View {
     static let tint = Color(platformColor: PlatformColor(hex: 0xF6D58A))
 }
 
-/// Celle delle forme: ogni forma con la barra, nei colori scelti e nel tema in uso.
-private struct AppIconShapeGrid: View {
-    let choice: AppIconChoice
-    @Binding var selection: AppIconShape
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 58, maximum: 76), spacing: 10)], spacing: 14) {
-                ForEach(AppIconShape.allCases) { shape in
-                    let selected = shape == selection
-                    Button {
-                        guard !selected else { return }
-                        Haptics.selection()
-                        withAnimation(Motion.spatial) { selection = shape }
-                    } label: {
-                        AppIconPreview(choice: AppIconChoice(shape: shape, color: choice.color, variant: choice.variant),
-                                       mode: colorScheme == .dark ? .dark : .light, size: 54)
-                            .padding(4)
-                            .overlay {
-                                if selected {
-                                    RoundedRectangle(cornerRadius: 54 * AppIconGeometry.mask + 4, style: .continuous)
-                                        .strokeBorder(Theme.primary, lineWidth: 2.5)
-                                        .transition(.scale(scale: 0.9).combined(with: .opacity))
-                                }
-                            }
-                            .frame(maxWidth: .infinity)
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(AppIconCellButtonStyle())
-                    .accessibilityLabel(shape.title)
-                    .accessibilityAddTraits(selected ? .isSelected : [])
-                }
-            }
-            Text(selection.title)
-                .font(.m3(14, weight: 550))
-                .foregroundStyle(Theme.onSurfaceVariant)
-                .contentTransition(.opacity)
-                .padding(.leading, 4)
-        }
-        .padding(16)
-    }
-}
-
-/// Colori: "Tema dell'app" e i dieci colori proposti, ognuno con la forma e la barra nei suoi colori.
+/// Colori: "Tema dell'app" e i sei colori dell'icona, ognuno con il cerchio e la barra.
 private struct AppIconColorGrid: View {
     let choice: AppIconChoice
     @Binding var selection: AppIconColor
@@ -172,7 +115,8 @@ private struct AppIconColorGrid: View {
                     Haptics.selection()
                     withAnimation(Motion.spatial) { selection = color }
                 } label: {
-                    AppIconColorSwatch(color: shown, dark: colorScheme == .dark, selected: selected,
+                    AppIconColorSwatch(color: shown, appearance: choice.appearance, dark: colorScheme == .dark,
+                                       selected: selected,
                                        icon: color == .theme ? "palette" : (selected ? "check" : nil))
                 }
                 .buttonStyle(AppIconCellButtonStyle())
@@ -184,16 +128,17 @@ private struct AppIconColorGrid: View {
     }
 }
 
-/// Campione di un colore dell'icona: la forma e la barra nei colori dell'icona chiara o scura.
+/// Campione di un colore dell'icona: il cerchio e la barra come nell'icona chiara o scura.
 private struct AppIconColorSwatch: View {
     let color: AppIconColor
+    let appearance: AppIconAppearance
     let dark: Bool
     let selected: Bool
     let icon: String?
 
     var body: some View {
-        let colors = AppIconPalette.colors(for: AppIconChoice(shape: .circle, color: color, variant: .auto),
-                                           rendition: dark ? .dark : .light)
+        let colors = AppIconPalette.colors(for: AppIconChoice(color: color, appearance: appearance),
+                                           mode: dark ? .dark : .light)
         let shape = RoundedRectangle(cornerRadius: selected ? Theme.radii.l : 22, style: .continuous)
         ZStack {
             colors.shape
@@ -220,31 +165,6 @@ private struct AppIconColorSwatch: View {
         }
         .padding(-3)
         .animation(Motion.spatial, value: selected)
-    }
-}
-
-/// Voce di un aspetto dell'icona: selezionata, ha lo sfondo del contenitore secondario e la spunta.
-private struct AppIconAppearanceRow: View {
-    let appearance: AppIconAppearance
-    let selected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button {
-            guard !selected else { return }
-            Haptics.selection()
-            action()
-        } label: {
-            ListRow(appearance.title, subtitle: appearance.subtitle) {
-                if selected {
-                    Icon("check", size: 22)
-                        .foregroundStyle(Theme.onSecondaryContainer)
-                        .transition(.scale.combined(with: .opacity))
-                }
-            }
-        }
-        .buttonStyle(ListRowButtonStyle(selected: selected))
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -277,8 +197,7 @@ struct AppIconSettingsLink: View {
     }
 
     private func subtitle(theme: ThemeStore, choice: AppIconChoice) -> String {
-        if choice.shape == .classic { return "Classica" }
         let color = theme.appIconColor == .theme ? "Tema dell'app" : choice.color.title
-        return "\(choice.shape.title) · \(color)"
+        return choice.appearance == .dark ? "\(color) · Sempre scura" : color
     }
 }
