@@ -86,6 +86,55 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// Cosa si sincronizza con l'account BCW (Impostazioni › Account › Da sincronizzare). La scelta
+/// vale solo per questo dispositivo.
+enum SyncCategory: String, CaseIterable, Identifiable {
+    case settings, appearance, appIcon, homework, timetable
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .settings: "Impostazioni"
+        case .appearance: "Aspetto"
+        case .appIcon: "Icona dell'app"
+        case .homework: "Compiti fatti"
+        case .timetable: "Orario"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .settings: "Voti, Dashboard e Orario"
+        case .appearance: "Colori, tema chiaro o scuro, angoli, animazioni e testo"
+        case .appIcon: "Colore dell'icona"
+        case .homework: "Compiti segnati come fatti"
+        case .timetable: "Eventi, colori, note e file di ogni account abbinato"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .settings: "tune"
+        case .appearance: "palette"
+        case .appIcon: "sparkles"
+        case .homework: "checkCircle"
+        case .timetable: "timetable"
+        }
+    }
+
+    /// La voce di un'impostazione sincronizzata (`Preferences.syncedValues`,
+    /// `ThemeStore.syncedValues`); quelle nuove o sconosciute stanno in Impostazioni.
+    static func of(key: String) -> SyncCategory {
+        switch key {
+        case "appearance", "accentColor", "colorStyle", "contrast", "corners", "motion", "roundedText": .appearance
+        case "appIconColor", "appIconAppearance", "appIconShape", "appIconDarkBackground": .appIcon
+        case "completedHomework": .homework
+        default: .settings
+        }
+    }
+}
+
 /// Impostazioni dell'app, salvate in `UserDefaults`.
 @Observable
 final class Preferences {
@@ -124,6 +173,20 @@ final class Preferences {
     var newsNotifications: Set<NewsKind> {
         didSet { defaults.set(newsNotifications.map(\.rawValue), forKey: "newsNotifications") }
     }
+    /// Barra di avanzamento della giornata accanto al giorno in grande dell'Orario e nei widget
+    /// "Orario" (Impostazioni › Orario; spenta di serie).
+    var showsDayProgress: Bool {
+        didSet { defaults.set(showsDayProgress, forKey: "showsDayProgress"); syncedChanged() }
+    }
+    /// La scheda Orario nella barra delle schede (Impostazioni › Orario). Nascosta, l'orario resta
+    /// per widget e attività in diretta.
+    var showsTimetableTab: Bool {
+        didSet { defaults.set(showsTimetableTab, forKey: "showsTimetableTab"); syncedChanged() }
+    }
+    /// Voci che non si sincronizzano con l'account BCW (solo su questo dispositivo).
+    private(set) var unsyncedCategories: Set<SyncCategory> {
+        didSet { defaults.set(unsyncedCategories.map(\.rawValue).sorted(), forKey: "unsyncedCategories") }
+    }
 
     init() {
         let defaults = UserDefaults.standard
@@ -147,6 +210,16 @@ final class Preferences {
         newsNotifications = Set((defaults.stringArray(forKey: "newsNotifications") ?? []).compactMap(NewsKind.init(rawValue:)))
         // `bool(forKey:)` legge anche i valori passati come argomenti di avvio (`-liveActivities NO`).
         liveActivities = defaults.object(forKey: "liveActivities") == nil || defaults.bool(forKey: "liveActivities")
+        showsTimetableTab = defaults.object(forKey: "showsTimetableTab") == nil || defaults.bool(forKey: "showsTimetableTab")
+        showsDayProgress = defaults.bool(forKey: "showsDayProgress")
+        unsyncedCategories = Set((defaults.stringArray(forKey: "unsyncedCategories") ?? []).compactMap(SyncCategory.init(rawValue:)))
+    }
+
+    /// La voce si sincronizza con l'account BCW.
+    func syncs(_ category: SyncCategory) -> Bool { !unsyncedCategories.contains(category) }
+
+    func setSyncs(_ category: SyncCategory, _ enabled: Bool) {
+        if enabled { unsyncedCategories.remove(category) } else { unsyncedCategories.insert(category) }
     }
 
     private func syncedChanged() {
@@ -157,7 +230,7 @@ final class Preferences {
 
     /// Impostazioni che valgono su tutti i dispositivi, con gli stessi nomi della versione web.
     /// Restano sul dispositivo blocco, promemoria, notifiche e attività in diretta (vogliono un
-    /// permesso ciascuno).
+    /// permesso ciascuno) e le voci da sincronizzare. Le voci spente le toglie `CloudSync`.
     var syncedValues: [String: JSONValue] {
         [
             "averageMode": .string(averageMode.rawValue),
@@ -172,6 +245,8 @@ final class Preferences {
             "timetableShowsTests": .bool(timetableShowsTests),
             "titleAbbreviation": .string(titleAbbreviation.rawValue),
             "appearance": .string(appearance.rawValue),
+            "showsTimetableTab": .bool(showsTimetableTab),
+            "showsDayProgress": .bool(showsDayProgress),
         ]
     }
 
@@ -210,6 +285,8 @@ final class Preferences {
         if let value = values["appearance"]?.string.flatMap(AppearanceMode.init(rawValue:)), value != appearance {
             appearance = value
         }
+        if let value = values["showsTimetableTab"]?.bool, value != showsTimetableTab { showsTimetableTab = value }
+        if let value = values["showsDayProgress"]?.bool, value != showsDayProgress { showsDayProgress = value }
     }
 
     func isCollapsed(_ section: DashboardSection) -> Bool { collapsedSections.contains(section.rawValue) }

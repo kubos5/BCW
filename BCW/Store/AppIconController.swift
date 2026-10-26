@@ -10,13 +10,16 @@ import os
 /// Mentre è aperta Impostazioni › Aspetto i cambi dovuti al solo colore d'accento aspettano l'uscita
 /// dalla pagina (`holdThemeChanges`), così provando i colori compare al massimo un avviso.
 /// Si applica solo con l'app attiva; tornando nell'app si ricontrolla (es. dopo una
-/// sincronizzazione arrivata in secondo piano).
+/// sincronizzazione arrivata in secondo piano). iOS impiega qualche secondo prima del suo avviso:
+/// nel frattempo un avviso in basso dice che il cambio è in corso (`isChanging`).
 @Observable
 final class AppIconController {
     static let shared = AppIconController()
 
-    /// Messaggio dell'ultimo errore, mostrato in un avviso da `AppIconFailureReporter`.
+    /// Messaggio dell'ultimo errore, mostrato in un avviso da `AppIconStatusReporter`.
     var failure: String?
+    /// Un cambio d'icona sta per partire o aspetta iOS ("Cambio dell'icona in corso…").
+    private(set) var isChanging = false
 
     @ObservationIgnored private var started = false
     @ObservationIgnored private var pending: Task<Void, Never>?
@@ -67,10 +70,7 @@ final class AppIconController {
         schedule(after: .milliseconds(500))
     }
 
-    private var options: String {
-        let theme = ThemeStore.shared
-        return [theme.appIconColor.rawValue, theme.appIconAppearance.rawValue].joined(separator: "|")
-    }
+    private var options: String { ThemeStore.shared.appIconColor.rawValue }
 
     private func observe() {
         withObservationTracking {
@@ -97,7 +97,15 @@ final class AppIconController {
             heldChange = true
             return
         }
-        schedule(after: manual ? .seconds(1) : .seconds(2))
+        // Scelta a mano: l'avviso compare subito e iOS viene chiamato dopo poco.
+        if manual, willChange { isChanging = true }
+        schedule(after: manual ? .milliseconds(400) : .seconds(2))
+    }
+
+    /// L'icona scelta non è quella attuale.
+    private var willChange: Bool {
+        let app = UIApplication.shared
+        return app.supportsAlternateIcons && ThemeStore.shared.appIconChoice.assetName != app.alternateIconName
     }
 
     private func schedule(after delay: Duration) {
@@ -111,11 +119,22 @@ final class AppIconController {
 
     private func apply() async {
         let app = UIApplication.shared
-        guard app.supportsAlternateIcons, app.applicationState == .active, !applying else { return }
+        guard !applying else { return }
+        guard app.supportsAlternateIcons, app.applicationState == .active else {
+            isChanging = false
+            return
+        }
         let name = ThemeStore.shared.appIconChoice.assetName
-        guard name != app.alternateIconName, refusedName != .some(name) || failures < 2 else { return }
+        guard name != app.alternateIconName, refusedName != .some(name) || failures < 2 else {
+            isChanging = false
+            return
+        }
         applying = true
-        defer { applying = false }
+        isChanging = true
+        defer {
+            applying = false
+            isChanging = false
+        }
         // Una riga per ogni richiesta a iOS (quindi per ogni avviso): sul dispositivo si controlla in Console.
         log.info("Cambio d'icona: \(name ?? "principale", privacy: .public)")
         do {
@@ -143,12 +162,22 @@ final class AppIconController {
     }
 }
 
-/// Mostra in un avviso gli errori del cambio d'icona (va messo dentro `overlayHost()`).
-struct AppIconFailureReporter: ViewModifier {
+/// Mostra in un avviso il cambio d'icona in corso e gli errori (va messo dentro `overlayHost()`).
+struct AppIconStatusReporter: ViewModifier {
     @Environment(OverlayHost.self) private var host: OverlayHost?
+    @State private var progressToast: UUID?
 
     func body(content: Content) -> some View {
         content
+            .onChange(of: AppIconController.shared.isChanging) { _, changing in
+                if changing {
+                    progressToast = host?.showToast("Cambio dell'icona in corso…", inProgress: true,
+                                                    duration: .seconds(20))
+                } else if let id = progressToast {
+                    host?.dismissToast(id)
+                    progressToast = nil
+                }
+            }
             .onChange(of: AppIconController.shared.failure) { _, message in
                 guard let message else { return }
                 host?.showToast(message, icon: "alertCircle")

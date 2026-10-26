@@ -37,9 +37,10 @@ struct CloudAccountSection: View {
         }
     }
 
+    @ViewBuilder
     private func signedIn(_ session: BCWSession) -> some View {
         let sync = model.cloudSync
-        return ListGroup("Account BCW", footer: "Si sincronizzano le impostazioni (tranne blocco, promemoria e notifiche, che valgono solo su questo dispositivo), l'aspetto e l'orario di ogni account abbinato, con i file allegati.") {
+        ListGroup("Account BCW", footer: "Si sincronizzano le impostazioni (tranne blocco, promemoria e notifiche, che valgono solo su questo dispositivo), l'aspetto e l'orario di ogni account abbinato, con i file allegati. Sotto scegli cosa sincronizzare.") {
             ListRow(session.user.username, subtitle: "Account BCW") {
                 Avatar(initials: String(session.user.username.prefix(1)).uppercased(), size: 40, shape: .cookie9Sided)
             } trailing: {
@@ -67,6 +68,7 @@ struct CloudAccountSection: View {
             ButtonRow("Esci da BCW", icon: "logout", destructive: true) { confirmingSignOut = true }
             ButtonRow("Elimina l'account BCW…", icon: "trash", destructive: true) { deleting = true }
         }
+        CloudSyncChoicesSection()
     }
 
     private var serverRow: some View {
@@ -92,6 +94,30 @@ struct CloudAccountSection: View {
         switch sync.status {
         case .offline, .failed: sync.message
         default: sync.fileWarning
+        }
+    }
+}
+
+/// "Da sincronizzare": le voci che si sincronizzano con l'account BCW, scelte per questo
+/// dispositivo (`SyncCategory`).
+private struct CloudSyncChoicesSection: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        ListGroup("Da sincronizzare", footer: "Vale solo per questo dispositivo. Una voce spenta resta com'è qui e non cambia sugli altri dispositivi. Riaccendendo impostazioni, aspetto, icona o compiti, questo dispositivo prende quelli dell'account BCW; riaccendendo l'orario vince il lato cambiato nel frattempo (se sono cambiati entrambi, questo dispositivo).") {
+            ForEach(SyncCategory.allCases) { category in
+                ToggleRow(category.title, subtitle: category.subtitle, icon: category.icon, isOn: binding(category))
+            }
+        }
+    }
+
+    private func binding(_ category: SyncCategory) -> Binding<Bool> {
+        Binding {
+            model.preferences.syncs(category)
+        } set: { enabled in
+            guard enabled != model.preferences.syncs(category) else { return }
+            model.preferences.setSyncs(category, enabled)
+            model.cloudSync.categoryChanged(category, enabled: enabled)
         }
     }
 }

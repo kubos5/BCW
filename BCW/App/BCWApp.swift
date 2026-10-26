@@ -84,7 +84,8 @@ struct RootView: View {
             [.cancel("OK")]
         }
         .appTheme()
-        .modifier(AppIconFailureReporter())
+        .modifier(AppIconStatusReporter())
+        .modifier(LiveActivityFailureReporter())
         .overlayHost()
         // Classe della finestra (iPad largo o layout dell'iPhone), anche per menu e dialoghi.
         .modifier(WindowLayoutReader())
@@ -120,7 +121,11 @@ struct RootView: View {
                 NewsNotifications.scheduleBackgroundRefresh(model: model)
                 model.widgets.flush()
             }
-            if phase == .active { AppIconController.shared.sceneBecameActive() }
+            if phase == .active {
+                AppIconController.shared.sceneBecameActive()
+                // Un'attività in diretta che iOS non disegna più si riprende solo rifacendola.
+                model.liveActivities.sceneBecameActive()
+            }
             if model.isCloud {
                 // Tornando nell'app arrivano le modifiche degli altri dispositivi; uscendo partono
                 // subito quelle in attesa.

@@ -256,14 +256,20 @@ struct TimetableSettingsSection: View {
     private var store: TimetableStore { model.timetable }
 
     var body: some View {
+        ListGroup("Scheda", footer: "Nascosta, la scheda Orario sparisce dalla barra delle schede (e dalla barra di navigazione dell'iPad). L'orario resta: widget e attività in diretta continuano a usarlo, e toccandoli si apre la Dashboard su quel giorno. Per riaverla torna qui (Impostazioni dall'ingranaggio in Tu).") {
+            ToggleRow("Mostra la scheda Orario", icon: "timetable", isOn: Bindable(model.preferences).showsTimetableTab)
+        }
+
         ListGroup("Vista e allineamento", footer: "Con \"Mostra le verifiche\" la vista Lista segna le verifiche di Classeviva e quelle segnate a mano; si vedono sempre nel dettaglio dell'evento e nella vista Giorno. Quelle nascoste, e le regole per nasconderle in automatico, sono in Verifiche nascoste (menu ⋯ dell'orario). L'allineamento vale per tutto l'orario e per la modalità di modifica (pulsante + dell'orario › Modifica orario). Automatico: gli eventi iniziano all'ora o alla mezz'ora e durano 30 minuti o un'ora; passando all'automatico gli eventi non allineati vengono allineati, dopo una conferma. Libero: qualsiasi orario e durata. Gli intervalli si posizionano sempre liberamente.") {
             TimetableAlignmentPicker()
             ToggleRow("Mostra le verifiche nella lista", icon: "test", isOn: Bindable(model.preferences).timetableShowsTests)
+            ToggleRow("Barra di avanzamento della giornata", subtitle: "Accanto al giorno e nei widget Orario",
+                      icon: "timeline", isOn: Bindable(model.preferences).showsDayProgress)
         }
 
         LiveActivitySettingsGroup()
 
-        ListGroup("Backup dell'orario", footer: "\(model.isCloud ? "L'orario di ogni account abbinato si sincronizza con il tuo account BCW." : "L'orario è salvato solo su questo dispositivo, separato per ogni account.") Il backup contiene eventi, colori, palette, note, verifiche segnate e file allegati; importandolo sostituisce l'orario attuale. È compatibile con la versione web di BCW.") {
+        ListGroup("Backup dell'orario", footer: "\(model.isCloud && model.preferences.syncs(.timetable) ? "L'orario di ogni account abbinato si sincronizza con il tuo account BCW." : "L'orario è salvato solo su questo dispositivo, separato per ogni account.") Il backup contiene eventi, colori, palette, note, verifiche segnate e file allegati; importandolo sostituisce l'orario attuale. È compatibile con la versione web di BCW.") {
             ButtonRow("Esporta un backup dell'orario", icon: "upload") { export() }
                 .disabled(store.owner == nil)
             ButtonRow("Importa un backup…", icon: "download") { importing = true }

@@ -29,6 +29,9 @@ nonisolated struct WidgetSnapshot: Codable, Equatable, Sendable {
     var agenda: [AgendaItem] = []
     var grades: Grades?
     var theme = ThemeSnapshot()
+    /// Barra di avanzamento della giornata nei widget "Orario" (Impostazioni › Orario, spenta di
+    /// serie; facoltativa perché le istantanee scritte prima non ce l'hanno).
+    var showsDayProgress: Bool?
 
     // MARK: Tipi
 

@@ -45,6 +45,11 @@ struct ActivityPalette {
     func numeral(_ size: CGFloat, weight: CGFloat = 600) -> Font {
         font(size, weight: weight, rounded: true).monospacedDigit()
     }
+
+    /// Per il conto alla rovescia: il carattere di sistema arrotondato (`WidgetFonts.timer`).
+    func timer(_ size: CGFloat, weight: CGFloat = 650) -> Font {
+        WidgetFonts.timer(size: size, weight: weight)
+    }
 }
 
 /// Testi di una fase, comuni alla schermata di blocco e alla Dynamic Island espansa.
@@ -203,26 +208,39 @@ struct ActivityPhaseShape: View {
     }
 }
 
-/// Conto alla rovescia alla fine della fase, largo quanto serve (`Text(timerInterval:)` prende
-/// tutto lo spazio che gli si dà).
+/// Conto alla rovescia alla fine della fase, largo quanto serve.
+///
+/// `Text(timerInterval:)` non ha una larghezza sua: prende tutto lo spazio che gli si dà, e con
+/// `fixedSize()` diventa larga NaN (su iOS 27 l'attività resta vuota). Prima la larghezza veniva da
+/// un `frame(width:)` sul testo, che secondo altre segnalazioni fa smettere a iOS di disegnare
+/// l'attività (rotella sopra il contenuto sbiadito). Ora la dà un segnaposto invisibile con le cifre
+/// più larghe ("00:00" o "0:00:00", cifre tutte uguali con `monospacedDigit`) e il conto alla
+/// rovescia sta sopra di lui (a destra, o a sinistra accanto alla fotocamera nella Dynamic Island).
+/// Sotto i 10 minuti il segnaposto è "0:00": con "00:00" la compatta restava più larga del tempo.
+/// Il carattere è quello di sistema arrotondato (`ActivityPalette.timer`): con Google Sans Flex
+/// l'estensione andava in crash su iOS 27.0.1.
 struct ActivityTimer: View {
     let phase: TimetableActivityPhase
     let font: Font
     let color: Color
-    /// Larghezza di una cifra, per riservare lo spazio di "00:00" o "0:00:00".
-    let digitWidth: CGFloat
+    var alignment: Alignment = .trailing
 
     var body: some View {
         let now = Date()
         // Prima dell'inizio della fase (avvio a mano molto presto) conta comunque fino alla fine.
         let interval = min(now, phase.start)...max(now, phase.end)
-        let hours = phase.end.timeIntervalSince(now) >= 3600
-        Text(timerInterval: interval, countsDown: true)
+        let remaining = phase.end.timeIntervalSince(now)
+        Text(remaining >= 3600 ? "0:00:00" : remaining >= 600 ? "00:00" : "0:00")
             .font(font)
-            .foregroundStyle(color)
-            .multilineTextAlignment(.trailing)
             .lineLimit(1)
-            .frame(width: digitWidth * (hours ? 7.6 : 5.6), alignment: .trailing)
+            .hidden()
+            .overlay(alignment: alignment) {
+                Text(timerInterval: interval, countsDown: true)
+                    .font(font)
+                    .foregroundStyle(color)
+                    .multilineTextAlignment(alignment == .leading ? .leading : .trailing)
+                    .lineLimit(1)
+            }
     }
 }
 
@@ -246,8 +264,7 @@ struct ActivityTimerColumn: View {
                         .font(palette.numeral(size, weight: 650))
                         .foregroundStyle(color)
                 } else {
-                    ActivityTimer(phase: text.phase, font: palette.numeral(size, weight: 650), color: color,
-                                  digitWidth: size * 0.585)
+                    ActivityTimer(phase: text.phase, font: palette.timer(size), color: color)
                 }
             }
         }
@@ -391,9 +408,28 @@ struct TimetableActivityLockView: View {
 // MARK: - Dynamic Island
 
 /// Le viste della Dynamic Island, sul fondo nero: ruoli del tema scuro.
+///
+/// Compatta come chiedono le linee guida di Apple (Live Activities, "Compact presentation"): il
+/// contenuto sta attaccato alla fotocamera, senza spazio in mezzo, e la forma vicino al bordo è
+/// concentrica con l'isola, con margini uguali. I margini sono fissati in `TimetableLiveActivity`
+/// (`contentMargins`): con quelli di sistema la forma stava a 9 punti dal bordo e a 6,3 sopra e
+/// sotto, con 6,7 punti di vuoto prima della fotocamera (misurato sul simulatore). L'espansa usa i
+/// margini di sistema.
 struct TimetableActivityIsland {
     let state: TimetableActivityState
     let isStale: Bool
+
+    /// Altezza della compatta su tutti gli iPhone con l'isola (tabella "iOS dimensions" delle
+    /// linee guida).
+    static let compactHeight: CGFloat = 36.67
+    /// La forma a sinistra nella compatta.
+    static let compactShape: CGFloat = 26
+    /// Margine della forma dal bordo, uguale sopra, sotto e a sinistra: così la forma ha lo stesso
+    /// centro della semicirconferenza dell'isola.
+    static var compactMargin: CGFloat { (compactHeight - compactShape) / 2 }
+    /// Margine del tempo dal bordo destro: con lo stesso margine della forma le cifre sembravano
+    /// attaccate al bordo (il testo non segue la curva come la forma).
+    static let compactTextMargin: CGFloat = 8
 
     var palette: ActivityPalette { ActivityPalette(theme: state.theme, dark: true) }
     var phase: TimetableActivityPhase? { state.phase(isStale: isStale) }
@@ -402,20 +438,18 @@ struct TimetableActivityIsland {
     /// Compatta, a sinistra: la forma con la sigla della materia (o la tazza nelle pause).
     @ViewBuilder var compactLeading: some View {
         if let phase {
-            ActivityPhaseShape(phase: phase, palette: palette, size: 24, letters: 1)
-                .padding(.leading, 2)
+            ActivityPhaseShape(phase: phase, palette: palette, size: Self.compactShape, letters: 1)
         }
     }
 
-    /// Compatta, a destra: il tempo che manca.
+    /// Compatta, a destra: il tempo che manca, attaccato alla fotocamera.
     @ViewBuilder var compactTrailing: some View {
         if let phase {
             if phase.kind == .finished {
                 WidgetIcon("checkCircleFill", size: 18)
                     .foregroundStyle(accent)
             } else {
-                ActivityTimer(phase: phase, font: palette.numeral(15, weight: 650), color: accent, digitWidth: 9)
-                    .padding(.trailing, 2)
+                ActivityTimer(phase: phase, font: palette.timer(15), color: accent, alignment: .leading)
             }
         }
     }

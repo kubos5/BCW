@@ -54,6 +54,10 @@ nonisolated enum BCWWidgetKind: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// Sfondo del widget nella schermata Home (con le icone colorate o trasparenti lo toglie iOS).
+    /// Minuti tra una voce e l'altra durante le lezioni (widget "Orario"): per 5 ore di lezione la
+    /// percentuale cresce di meno di 2 punti per voce.
+    static let progressStep = 5
+
     @MainActor
     func background(_ palette: WidgetPalette) -> Color {
         switch self {
@@ -66,8 +70,9 @@ nonisolated enum BCWWidgetKind: String, CaseIterable, Identifiable, Sendable {
     // MARK: Linea temporale
 
     /// Istanti in cui il widget cambia: adesso, l'inizio e la fine di ogni evento dell'orario
-    /// (così la lezione in corso e il cambio di giorno arrivano all'ora giusta) e le mezzanotti.
-    /// Dopo l'ultimo WidgetKit chiede una nuova linea temporale.
+    /// (così la lezione in corso e il cambio di giorno arrivano all'ora giusta) e le mezzanotti;
+    /// per l'Orario, con la barra di avanzamento accesa, anche ogni 5 minuti durante le lezioni di
+    /// oggi e di domani. Dopo l'ultimo WidgetKit chiede una nuova linea temporale.
     func timelineDates(snapshot: WidgetSnapshot, now: Date) -> [Date] {
         let calendar = BCWShared.calendar
         let today = calendar.startOfDay(for: now)
@@ -84,7 +89,19 @@ nonisolated enum BCWWidgetKind: String, CaseIterable, Identifiable, Sendable {
                 }
             }
         }
-        let future = dates.filter { $0 > now }.sorted().prefix(120)
+        if self == .timetable, snapshot.signedIn, snapshot.showsDayProgress == true {
+            for offset in 0...1 {
+                guard let day = calendar.date(byAdding: .day, value: offset, to: today) else { continue }
+                let spans = snapshot.events(on: day).filter { !$0.isBreak }
+                    .map { TimetableDefaultDay.Span(start: $0.start, end: $0.end) }
+                for block in DayProgress(spans: spans, minute: 0)?.blocks ?? [] {
+                    for minute in stride(from: block.start + Self.progressStep, to: block.end, by: Self.progressStep) {
+                        dates.insert(BCWShared.date(day, minute: minute))
+                    }
+                }
+            }
+        }
+        let future = dates.filter { $0 > now }.sorted().prefix(self == .timetable ? 240 : 120)
         return [now] + future
     }
 }

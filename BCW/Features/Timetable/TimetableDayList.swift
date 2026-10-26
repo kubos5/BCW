@@ -18,8 +18,10 @@ struct TimetableDayList: View {
     @Environment(AppModel.self) private var model
     let content: TimetableDayContent
     let actions: TimetableActions
-    /// "Oggi" accanto al giorno in grande, se il giorno è un altro (senza Liquid Glass, o sull'iPad largo).
-    var jump: (() -> Void)?
+    /// Nome del giorno predefinito ("Oggi", "Domani"…) sul pulsante accanto al giorno in grande, se
+    /// il giorno mostrato è un altro (senza Liquid Glass, o sull'iPad largo); `nil` senza pulsante.
+    var jumpTitle: String?
+    var jump: () -> Void = {}
     @Environment(\.windowClass) private var windowClass
 
     /// Righe dell'elenco: le lezioni di seguito (senza pause tra loro) formano una lista segmentata.
@@ -98,23 +100,33 @@ struct TimetableDayList: View {
             // Come il giorno in grande della Dashboard.
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(relative ? day.relativeDayName : day.it("EEEE").capitalizedFirst)
-                        .font(.m3(40, weight: 500, rounded: true))
-                        .tracking(-0.5)
-                        .foregroundStyle(Theme.ink)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .accessibilityAddTraits(.isHeader)
+                    // A destra del nome del giorno, a che punto è la giornata.
+                    HStack(alignment: .center, spacing: 16) {
+                        Text(relative ? day.relativeDayName : day.it("EEEE").capitalizedFirst)
+                            .font(.m3(40, weight: 500, rounded: true))
+                            .tracking(-0.5)
+                            .foregroundStyle(Theme.ink)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .accessibilityAddTraits(.isHeader)
+                            .layoutPriority(1)
+                        if model.preferences.showsDayProgress, !content.isDraft, !progressSpans.isEmpty {
+                            TimetableDayProgress(day: day, spans: progressSpans)
+                                .frame(maxWidth: 240, alignment: .leading)
+                        }
+                    }
                     Text(relative ? day.longDay : day.it("dMMMMyyyy"))
                         .font(.m3(16, weight: 500))
                         .foregroundStyle(Theme.secondaryInk)
                 }
-                Spacer(minLength: 0)
-                if let jump, !ThemeStore.shared.liquidGlass || windowClass == .regular {
+                // Tutto lo spazio fino al pulsante: la barra di avanzamento si allunga fin lì.
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if let jumpTitle, !ThemeStore.shared.liquidGlass || windowClass == .regular {
                     Button(action: jump) {
-                        Label { Text("Oggi") } icon: { Icon("today") }
+                        Label { Text(jumpTitle) } icon: { Icon("today") }
                     }
                     .buttonStyle(.m3(.tonal, size: .s))
+                    .accessibilityLabel("Vai a \(jumpTitle.lowercased())")
                 }
             }
             let chips = statusChips
@@ -127,6 +139,11 @@ struct TimetableDayList: View {
         .padding(.horizontal, 4)
         .padding(.top, 4)
         .padding(.bottom, 8)
+    }
+
+    /// Gli eventi del giorno per la barra di avanzamento (senza intervalli).
+    private var progressSpans: [TimetableDefaultDay.Span] {
+        content.entries.filter { !$0.isBreak }.map { TimetableDefaultDay.Span(start: $0.start, end: $0.end) }
     }
 
     private var statusChips: [StatusChip] {
@@ -219,7 +236,9 @@ struct TimetableDayList: View {
 /// fanno sempre la stessa cosa. Confrontandole, ogni cambiamento della pagina (es. il giorno
 /// accanto scorrendo di lato) ricalcolava tutte le righe di tutti i giorni mostrati.
 extension TimetableDayList: Equatable {
-    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.content == rhs.content }
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.content == rhs.content && lhs.jumpTitle == rhs.jumpTitle
+    }
 }
 
 /// Uno o più eventi uguali accostati: una card unica, divisa in righe.
