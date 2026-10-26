@@ -104,7 +104,7 @@ private struct NowSmallView: View {
                     Text("ancora")
                         .font(palette.font(11.5, weight: 500))
                     Text(timerInterval: interval, countsDown: true)
-                        .font(palette.numeral(15, weight: 700))
+                        .font(palette.timer(15, weight: 700))
                         .contentTransition(.numericText(countsDown: true))
                 }
                 .foregroundStyle(ink)
@@ -123,7 +123,7 @@ private struct NowSmallView: View {
                     Text("tra")
                         .font(palette.font(11.5, weight: 500))
                     Text(timerInterval: day.now...max(day.now, interval.lowerBound), countsDown: true)
-                        .font(palette.numeral(15, weight: 700))
+                        .font(palette.timer(15, weight: 700))
                 }
                 .foregroundStyle(ink)
                 .lineLimit(1)

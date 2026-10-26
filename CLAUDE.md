@@ -17,7 +17,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   modifiche estese agli eventi con lo stesso nome, gruppi di eventi uguali accostati, eventi contemporanei
   affiancati, intervalli in primo piano, colori e
   palette (anche su una serie di eventi di una giornata), bozza generata dalle lezioni con anteprima tratteggiata,
-  backup esportabile/importabile (due conferme) e sincronizzazione con l'account BCW.
+  backup esportabile/importabile (due conferme) e sincronizzazione con l'account BCW. Accanto al giorno in grande la
+  barra di avanzamento della giornata (anche nei widget); la scheda si può nascondere (Impostazioni › Orario).
   "Modifica orario" (menu del pulsante d'azione flottante) apre la modifica grafica, sempre nella vista Giorno: spostare e
   ridimensionare gli eventi, doppio tocco per crearli, tocco per l'editor. Lì si sceglie l'allineamento, che vale
   per tutto l'orario (non solo per il trascinamento): automatico = eventi da 30/60 minuti alla mezz'ora (anche gli
@@ -55,7 +56,7 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   apre una scheda, `-BCWLiquidGlass YES|NO` (resta salvato), `-BCWAccent #RRGGBB` (non salvato), `-BCWTimetableDemo YES` crea l'orario della demo
   dalle lezioni se è vuoto, `-BCWHideTests YES` aggiunge una regola e una verifica nascosta,
   `-BCWTimetableSheet generator|hidden|date|editor|detail` apre il generatore (con `-BCWGeneratorBreaks N` intervalli), le verifiche
-  nascoste, il selettore della data, l'editor di un evento nuovo o il dettaglio del primo evento del giorno, `-BCWTimetableDraft YES` mostra la bozza in anteprima, `-timetableMode list|day` sceglie la vista,
+  nascoste, il selettore della data, l'editor di un evento nuovo o il dettaglio del primo evento del giorno, `-BCWTimetableDraft YES` mostra la bozza in anteprima, `-BCWTimetableToday YES` (demo) dà a oggi gli eventi del lunedì se non ne ha (fine settimana: giornata in corso, barra di avanzamento, card "Adesso"), `-showsTimetableTab NO` nasconde la scheda Orario e `-showsDayProgress YES` accende la barra di avanzamento (non salvati), `-timetableMode list|day` sceglie la vista,
   `-BCWTimetableEditing YES` apre la modifica, `-BCWTimetableDay N` apre l'orario N giorni dopo oggi (i valori negativi
   non passano come argomenti), `-BCWOpenSubject YES`, `-BCWDaysAgo N`, `-BCWKeychainService nome` (Portachiavi vuoto),
   `-BCWNowMinute N` (l'orario fa come se fosse il minuto N del giorno, per l'evento "In corso", `TimeOfDay.nowMinutes`),
@@ -70,7 +71,7 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   passaggio dall'allineamento libero all'automatico;
   stampa `BCW-SELFTEST PASS/FAIL` ed esce. Sul simulatore: `simctl launch --console-pty booted com.bcw-classeviva.app
   -demoMode YES -BCWTimetableSelfTest YES`.
-- Autotest dei widget (solo DEBUG): `-BCWWidgetSelfTest YES` prova la regola del giorno predefinito dell'orario, le voci
+- Autotest dei widget (solo DEBUG): `-BCWWidgetSelfTest YES` prova la regola del giorno predefinito dell'orario, l'avanzamento della giornata (`DayProgress`), le voci
   della linea temporale, lezione in corso e prossima, i collegamenti `bcw://`, la codifica dell'istantanea, l'App Group
   e le fasi dell'attività in diretta (ore unite, pause, contenuto scaduto, stato sotto i 4 KB); stampa
   `BCW-WIDGET-SELFTEST PASS/FAIL` ed esce.
@@ -100,6 +101,19 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   avvisa, `applyRemote` sostituisce senza avvisare; vince il lato cambiato (entrambi = questo dispositivo, la prima
   volta il server); i file si caricano prima dell'orario e si scaricano dopo (`downloadFile`, anche aprendo un allegato).
   In secondo piano le modifiche in attesa partono subito (`flushCloudChanges` in `RootView`).
+- Da sincronizzare (richiesta dell'utente, 3.2.1): Impostazioni › Account › Da sincronizzare (`CloudSyncChoicesSection`,
+  solo con l'account BCW) sceglie per questo dispositivo le voci `SyncCategory`: Impostazioni, Aspetto (anche chiaro o
+  scuro), Icona dell'app, Compiti fatti, Orario (`Preferences.unsyncedCategories`, locale; `SyncCategory.of(key:)` dà la
+  voce di ogni chiave, quelle nuove vanno in Impostazioni). `CloudSync` toglie le chiavi spente da ciò che invia e da
+  ciò che applica (sul server restano i valori degli altri dispositivi) e non carica né scarica l'orario.
+  Spegnendo una voce di impostazioni le sue chiavi escono dall'ultima sincronizzazione (`categoryChanged`):
+  riaccendendola vince l'account BCW; riaccendendo l'orario si allinea come sempre. Non provato con un account vero
+  (serve un account BCW): solo compilato.
+- Scheda Orario nascosta (`Preferences.showsTimetableTab`, sincronizzata come impostazione): `Tab(...).hidden`, barra
+  di Material e barra di navigazione dell'iPad con `AppTab.mainTabs(timetable:)`; con Liquid Glass le schede nascoste
+  non sono nella `UITabBar`, quindi la pressione su Tu usa l'indice di `barTabs(timetable:)` (verificato: con l'Orario
+  nascosto Tu è la terza, icone piene giuste). I collegamenti all'orario aprono la Dashboard su quel giorno; se la
+  scheda viene nascosta mentre è aperta si passa alla Dashboard.
 - Lato Classeviva: `ClassevivaLinksSection` (Impostazioni › Account) con `model.classevivaLinks()` e
   `removeClassevivaLink(_:)`, che inviano a BCW-api ident e token di Classeviva (`ClassevivaClient.currentSession()`);
   senza account BCW l'elenco si carica solo toccando "Mostra gli account BCW abbinati".
@@ -205,7 +219,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 
 ## Layout e comportamenti
 - Orario: solo viste Lista e Giorno (`TimetableMode.available`; il mese c'è nella Dashboard). Nella Lista: giorno in
-  grande con chip e "Oggi" accanto (come la Dashboard), `TimetableNowCard` per oggi (lezione in corso con avanzamento e la
+  grande con la barra di avanzamento a destra del nome, chip e il pulsante del giorno predefinito accanto (come
+  "Domani" nella Dashboard), `TimetableNowCard` per oggi (lezione in corso con avanzamento e la
   successiva, oppure la prossima), lezioni di seguito in una lista segmentata (`Row.run`), intervalli in una pillola.
   Vista Giorno: blocchi pieni nella tinta, ore di un gruppo separate da 2 punti con angoli piccoli; i blocchi più
   bassi di una riga (intervalli di 10 minuti) restano senza testo, con la forma alta quanto il blocco; lo scorrimento
@@ -285,13 +300,33 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   nell'app, andando in secondo piano (`flush`) e dopo l'aggiornamento in background.
 - Giorno predefinito dell'orario (`TimetableDefaultDay`, una sola implementazione per app e widget, stessa regola del
   web): oggi se c'è un evento dell'orario non ancora finito, altrimenti il primo giorno con eventi entro 7 giorni,
-  altrimenti oggi; contano gli eventi dell'utente, non intervalli né verifiche di Classeviva. L'Orario lo applica solo
-  all'apertura (`adjustInitialDay`): se l'ultimo evento finisce mentre lo si guarda resta su oggi. La Dashboard non ha
-  un meccanismo per il ritorno nell'app dopo un po', quindi nemmeno l'Orario. "Oggi" porta sempre a oggi.
+  altrimenti oggi; contano gli eventi dell'utente, non intervalli né verifiche di Classeviva. Richiesta dell'utente
+  (3.2.1): è il giorno predefinito dell'Orario ovunque, non solo all'apertura (`adjustInitialDay`): il pulsante accanto
+  al giorno in grande (o nella barra, con Liquid Glass e nella settimana dell'iPad) porta lì e si chiama come quel
+  giorno ("Oggi", "Domani", "Lunedì", `jumpTitle`), e un nuovo tocco sulla scheda Orario (`reselection`) ci torna. Il
+  giorno mostrato non cambia da solo quando finisce l'ultimo evento, ma il pulsante sì (`defaultDayTick`, una `task`
+  che aspetta la fine dell'ultimo evento di oggi). Il selettore della data ha ancora "Oggi" (è un calendario).
+- Avanzamento della giornata (`DayProgress` in `Shared/BCWShared.swift`, richiesta dell'utente 3.2.1; si vede solo con
+  Impostazioni › Orario › "Barra di avanzamento della giornata", `Preferences.showsDayProgress`, spenta di serie e
+  sincronizzata, passata ai widget con `WidgetSnapshot.showsDayProgress`, facoltativo): la parte passata
+  della durata complessiva degli eventi (senza intervalli, sovrapposizioni unite; fermo negli spazi tra un evento e
+  l'altro), percentuale per difetto (100% solo a giornata finita). Giorni passati 100%, futuri 0%. Nell'Orario
+  `TimetableDayProgress` a destra del nome del giorno (percentuale e `WavyProgress`, piatta a 0% e a 100%, aggiornata
+  ogni minuto con `TimelineView(.everyMinute)`; senza spazio resta la percentuale).
 - Widget: Orario (piccolo, medio, grande), Lezione in corso (piccolo e accessori rettangolare, circolare, in linea),
   Compiti e verifiche (medio, grande), Prossima verifica (piccolo, rettangolare, in linea), Media (piccolo, circolare, in
   linea). Linea temporale: adesso, ogni inizio e fine degli eventi da oggi a dopodomani e le due mezzanotti
-  (`.atEnd`); tempo che manca e avanzamento con `Text(timerInterval:)` e `ProgressView(timerInterval:)`.
+  (`.atEnd`); per l'Orario, con la barra di avanzamento accesa, anche ogni 5 minuti durante le lezioni di oggi e
+  domani (`progressStep`, al massimo 240 voci); tempo che manca e avanzamento della lezione con `Text(timerInterval:)` e `ProgressView(timerInterval:)`.
+- Widget Orario (layout dal disegno dell'utente, 3.2.1): in alto il giorno con percentuale e barra della giornata
+  (`TimetableWidgetHeader`, `WidgetLinearProgress`: indicatore lineare di M3 disegnato a mano, parte passata ondulata e
+  ferma, spazio, traccia con il punto finale), sotto le lezioni in una lista segmentata: ora, tinta, materia e aula su
+  una riga; quella in corso più alta nel contenitore primario, con fine, aula e docente e il chip pieno "In corso".
+  Niente righe per gli intervalli (richiesta dell'utente): dove c'era un intervallo, o più di 5 minuti liberi, la
+  lista si divide in gruppi con 5 punti di stacco; angoli esterni dei gruppi piccoli (`radii.s`, quelli ampi
+  sembravano pillole), 2 punti e `radii.xs` tra le righe. Le varianti (`TimetableRowList`) tolgono prima lo spazio in
+  più e la seconda riga della lezione in corso, poi le ultime lezioni. Medio: dalla lezione in corso, senza "+N altre lezioni" (una riga in più vale di più).
+  Piccolo: giorno e percentuale, barra a tutta larghezza, la lezione in corso o la prossima e quelle dopo.
 - Colori: `WidgetPalette` legge i ruoli dell'istantanea secondo `colorScheme`; con le icone colorate o trasparenti
   (`accented`) e nella schermata di blocco (`vibrant`) tutto è bianco con opacità diverse e le parti in evidenza
   (tinte, icone, anelli) sono `widgetAccentable`, senza grandi riempimenti. Verificati sulla Home (anche "Tinted") e
@@ -322,6 +357,30 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   orario cambiato, mezzanotte), che allinea le attività a quelle volute (`reconcile`: aggiorna, chiude, richiede) e,
   con l'app in esecuzione, si risveglia a ogni passaggio di fase. In secondo piano un `BGAppRefreshTask` programmato al
   passaggio successivo (sul simulatore `submit` dà sempre l'errore 1, non disponibile: non verificabile).
+- Attività che non partiva sull'iPhone dell'utente e rotella sopra il contenuto (3.2.1, iPhone 15 con iOS 27.0.1):
+  causa trovata sul telefono, non riproducibile sui simulatori (iOS 26.3 e 27.0). Ogni testo del tempo che iOS
+  aggiorna da solo (`Text(timerInterval:)`, anche il formato `.timer` di iOS 18) scritto con un carattere
+  personalizzato (`Font(CTFont)` con le variazioni, ma anche `Font.custom` con le istanze con nome
+  `GoogleSansFlex-SemiBold`…) manda in crash `BCWWidgets` mentre archivia la vista
+  (`KEY_TYPE_OF_DICTIONARY_VIOLATES_HASHABLE_REQUIREMENTS` in `CodableAttributedString.Range.encode`): iOS chiude
+  subito l'attività (stato `.dismissed`), oppure, a un ridisegno, lascia la rotella. Correzione: `WidgetFonts.timer`
+  (carattere di sistema arrotondato con le cifre allineate) per tutti i `Text(timerInterval:)` di attività e widget;
+  Google Sans Flex resta per il resto (provato sul telefono: con il timer di sistema l'attività parte e supera i
+  passaggi di fase). Inoltre: un'attività chiusa entro 15 s dalla richiesta conta come chiusa da iOS, non dall'utente
+  (prima diventava "fermata per oggi" e non ripartiva più), con un avviso (`LiveActivityManager.failure`,
+  `LiveActivityFailureReporter`) e un nuovo tentativo solo dopo 10 minuti (`retryAfter`); `toggleToday()` aspetta
+  l'esito e l'avviso della card "Adesso" dice se è partita davvero (prima diceva "avviata" comunque). Il conto alla
+  rovescia ha un segnaposto invisibile "00:00"/"0:00:00" con il timer in `overlay` (`ActivityTimer`), al posto di
+  `frame(width:)`. Tornando nell'app (`sceneBecameActive`, al massimo ogni 10 minuti) l'attività in corso viene
+  rifatta da capo, ma non quella appena richiesta (`requestedAt`).
+- Diagnosi sul telefono (collegato in rete e abbinato, `xcrun devicectl list devices`): compilare per il dispositivo
+  (`-destination 'id=<udid>' -allowProvisioningUpdates`), installare con `devicectl device install app`, avviare con
+  `devicectl device process launch --console --terminate-existing --device <udid> com.bcw-classeviva.app -- <argomenti>`
+  (gli argomenti dell'app dopo `--`: i messaggi `BCW-LIVE` arrivano nella console), screenshot con
+  `devicectl device capture screenshot`. I crash dell'estensione sono in
+  `devicectl device info files --domain-type systemCrashLogs` (`BCWWidgets-….ips`, da copiare con
+  `devicectl device copy from`); i "Widgets-….ips" sono di altre app. `-BCWLiveActivityDemoPlan '()'` ora cancella
+  anche la prova salvata (prima ripartiva riaprendo l'app).
 - Lo stato porta fino a 4 fasi con `staleDate` alla fine della prima: scaduto, la vista mostra la fase in corso al
   momento del disegno (`TimetableActivityState.phase(isStale:)`). Verificato con l'app chiusa: il passaggio arriva
   puntuale, ma iOS ridisegna una volta sola, quindi senza un altro aggiornamento alla fine della seconda fase il conto
@@ -342,9 +401,19 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (forma con la sigla, etichetta, titolo, aula e docente, tempo, barra con gli orari, pillola della successiva);
   Dynamic Island sempre con i ruoli scuri: compatta = forma con l'iniziale e tempo, minima = anello di avanzamento con
   l'iniziale, espansa = etichetta e posizione ai lati della fotocamera, sotto la scheda più compatta. Niente
-  `minimumScaleFactor` nell'isola (tagliava invece di rimpicciolire). Sul simulatore la schermata di blocco passa
-  sempre `colorScheme` scuro (testo bianco su questo sfondo), anche in tema chiaro: la scheda chiara si vede solo
-  nella galleria. `simctl io screenshot` non disegna la Dynamic Island: usare lo screenshot dello strumento del
+  `minimumScaleFactor` nell'isola (tagliava invece di rimpicciolire).
+- Compatta secondo le linee guida di Apple (richiesta dell'utente, 3.2.1: il contenuto attaccato alla fotocamera, la
+  forma concentrica con l'isola): `contentMargins` in `TimetableLiveActivity`, una sola chiamata per regione (una
+  seconda chiamata per la stessa regione sostituisce la prima e azzera gli altri lati, verificato). Forma da 26 a
+  `compactMargin` (5,33 = (36,67 − 26) / 2) da sinistra, sopra e sotto; tempo allineato verso la fotocamera, a
+  `compactTextMargin` (8, cifre a 9,7 punti dal bordo: con 5,33 erano troppo vicine, scelta dell'utente); 0 punti tra
+  contenuto e fotocamera (fotocamera ~126 punti). Prima: forma a 9 punti da sinistra e 6,3 sopra, 6,7 e 10 punti di
+  vuoto accanto alla fotocamera. L'espansa resta com'era (scelta dell'utente: provata una versione attorno alla
+  fotocamera, con forma e tempo negli angoli e i testi sotto la fotocamera, e scartata). Nell'espansa le regioni ai
+  lati sono larghe quanto il contenuto e ritagliate con angoli di ~12 punti, quella al centro sta sotto la fotocamera
+  con lo stesso spazio dai due lati; margini di sistema di 18 punti. Misure con lo screenshot dello strumento del
+  simulatore (3 px per punto). Sul simulatore la schermata di blocco passa sempre `colorScheme` scuro (testo bianco
+  su questo sfondo), anche in tema chiaro: la scheda chiara si vede solo nella galleria. `simctl io screenshot` non disegna la Dynamic Island: usare lo screenshot dello strumento del
   simulatore. Dopo due LOCK il simulatore può restare nello schermo sempre acceso (cifre "1:--", i tocchi non lo
   svegliano): un terzo LOCK lo sveglia.
 - Altre attività: nessuna. Le verifiche del giorno sono già nella stessa attività; un conto alla rovescia verso una
@@ -352,7 +421,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Prove (solo DEBUG): `-BCWWidgetGallery YES` apre nell'app la galleria dei widget (stesse viste, dimensioni reali) con
   `-BCWWidgetGalleryScheme light|dark`, `-BCWWidgetGalleryLook fullColor|accented|vibrant`,
   `-BCWWidgetGalleryKind timetable|now|agenda|average|nextTest`, `-BCWWidgetGallerySource app|sample|signedOut|empty`
-  (stati vuoti) e `-BCWNowMinute N` (i timer seguono comunque l'ora vera). `-BCWWidgetNowLesson YES` sposta gli orari
+  (stati vuoti; nell'esempio il sabato e la domenica hanno le lezioni del lunedì, per vedere la giornata in corso) e
+  `-BCWNowMinute N` (i timer seguono comunque l'ora vera). `-BCWWidgetNowLesson YES` sposta gli orari
   dell'istantanea perché la prima lezione di oggi sia cominciata da 20 minuti: così i widget veri mostrano la lezione
   in corso a qualsiasi ora (rilanciare l'app senza l'argomento per tornare ai dati veri).
   `-BCWWidgetGalleryKind live` mostra solo l'attività in diretta (schermata di blocco e isola, tutte le fasi).
@@ -597,69 +667,76 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 
 ## Icona dell'app
 - Richiesta dell'utente (ottobre 2026): Impostazioni › Aspetto › Icona dell'app (`AppIconSettingsView`, dalla voce
-  `AppIconSettingsLink`) sceglie colore e aspetto. Seconda richiesta (ottobre 2026): ogni elemento come lastra di vetro,
-  come nelle app di iOS, colori più adatti a iOS, meno opzioni. Prima c'erano 8 forme più la classica, 10 colori (i
-  ruoli di Tonal Spot) e 5 varianti: 404 icone piatte, che iOS disegnava comunque con i suoi riflessi.
+  `AppIconSettingsLink`) sceglie il colore. Seconda richiesta (ottobre 2026): ogni elemento come lastra di vetro,
+  come nelle app di iOS, colori più adatti a iOS, meno opzioni (prima: 8 forme, 10 colori dei ruoli di Tonal Spot, 5
+  varianti, 404 icone piatte). Terza richiesta (3.2.1, ottobre 2026): niente più "Sempre scuro" (lo sfondo segue
+  sempre le icone di iOS) e un colore per ogni tema proposto in Aspetto, predefinito per quel tema, tenendo i sei di
+  prima.
 - Disegno: la barra del logo (pillola 64 × 8,73, come `bcw-linea.svg`) al centro di un cerchio largo l'86% della tela;
   la barra è larga il 77% del cerchio (`AppIconGeometry`). Ogni icona è una `.icon` di Icon Composer con lo sfondo e
   due gruppi con `glass: true`, la barra (sopra) e il cerchio: iOS li disegna come due lastre, con ombra e riflessi per
   gruppo (verificato sulla Home).
-- 6 colori (`AppIconColor`, tinte sRGB fisse in `AppIconPalette.tints`, scelte guardando le icone sulla Home): Mattone
-  #C4432B, Arancio #FF8A1F, Verde #22A55A, Blu #1F7AF0, Viola #9B4FE0, Grafite #5A6068; nella versione scura il cerchio
-  è più chiaro (#EC6F55, #FF9632, #34C46E, #3D8EFF, #AE73F7, #7F868F). Barra sempre bianca, sfondo chiaro #FBF7F4,
-  cerchio delle icone colorate grigio 0,3 (con 0,45 iOS lo schiariva quasi al bianco).
-- 2 aspetti (`AppIconAppearance`): Automatico (`auto`: sfondo chiaro, con le icone scure di iOS lo sfondo `automatic`,
-  cioè lo scuro di iOS) e Sempre scuro (`dark`: sfondo `system-dark` e cerchio della versione scura anche con le icone
-  chiare). Valori di `fill` accettati da actool: `automatic`, `system-dark` e i dizionari `solid`, `linear-gradient`,
-  `automatic-gradient`, `orientation`; un valore sconosciuto fa fallire la compilazione.
-- Nomi: `AppIcon-<colore>` e `AppIcon-<colore>-scura` (`AppIconChoice.assetName`). Mattone automatica è `AppIcon.icon`
-  e si applica con `setAlternateIconName(nil)`; le altre 11 stanno in `Resources/AppIcons/` (cartella sincronizzata,
-  Xcode passa le `.icon` ad actool da sole) e i loro nomi vanno in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`
-  (pbxproj del target BCW, Debug e Release, e `project.yml`): senza, actool non le mette nell'Info.plist.
-- Tema dell'app (di serie): `AppIconColor.nearest(to:)` dà Grafite ai colori quasi grigi (croma HCT sotto 16),
-  altrimenti il colore con la tonalità HCT più vicina. Solo la tonalità: con la distanza nel piano tonalità-croma un
-  azzurro (a metà tra Verde e Blu) finiva su Grafite. Il risultato resta in UserDefaults (`appIconNearestTint`):
-  calcolarlo carica JavaScriptCore, che all'avvio con un accento qualsiasi altrimenti non serve.
-- Valori delle versioni fino alla 3.2 (`AppIconColor(stored:)`, `AppIconAppearance(stored:)`, letti all'avvio e in
-  `applySynced`): oro → Arancio, petrolio → Verde, indaco → Blu, rosa → Mattone, ardesia → Grafite (i più vicini con
-  la regola sopra), `light` → automatico; all'avvio si riscrivono e si tolgono `appIconShape`, `appIconDarkBackground`
-  e `appIconNearest`.
+- 11 colori (`AppIconColor`, tinte sRGB fisse in `AppIconPalette.tints`, sature come le icone di iOS), nell'ordine dei
+  colori d'accento: Mattone #C4432B, Arancio #FF8A1F, Oro #E5AA00, Verde #22A55A, Petrolio #0E959E, Blu #1F7AF0,
+  Indaco #5856D6, Viola #9B4FE0, Rosa #DE4479, Ardesia #56677F, Grafite #5A6068; con le icone scure di iOS il cerchio è
+  più chiaro (#EC6F55, #FF9632, #F6C12C, #34C46E, #27B5BE, #3D8EFF, #7472F0, #AE73F7, #F26892, #8193AB, #7F868F). Barra
+  sempre bianca, sfondo chiaro #FBF7F4 e con le icone scure lo sfondo `automatic` (lo scuro di iOS), cerchio delle
+  icone colorate grigio 0,3 (con 0,45 iOS lo schiariva quasi al bianco). Valori di `fill` accettati da actool:
+  `automatic`, `system-dark` e i dizionari `solid`, `linear-gradient`, `automatic-gradient`, `orientation`; un valore
+  sconosciuto fa fallire la compilazione.
+- Nomi: `AppIcon-<colore>` (`AppIconChoice.assetName`). Mattone è `AppIcon.icon` e si applica con
+  `setAlternateIconName(nil)`; le altre 10 stanno in `Resources/AppIcons/` (cartella sincronizzata, Xcode passa le
+  `.icon` ad actool da sole) e i loro nomi vanno in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES` (pbxproj del target
+  BCW, Debug e Release, e `project.yml`): senza, actool non le mette nell'Info.plist.
+- Tema dell'app (di serie): `AppIconColor.nearest(to:)` dà a ogni colore d'accento proposto il suo colore
+  (`themeAccent`, Mattone (BCW) → Mattone … Ardesia → Ardesia); per un colore scelto a mano Grafite se è quasi grigio
+  (croma HCT sotto 16), altrimenti il colore con la tonalità HCT più vicina (senza Grafite e Ardesia). Solo la
+  tonalità: con la distanza nel piano tonalità-croma un azzurro finiva su Grafite. Il risultato per i colori a mano
+  resta in UserDefaults (`appIconThemeTint`; le chiavi vecchie `appIconNearestTint` e `appIconNearest` si tolgono
+  all'avvio): calcolarlo carica JavaScriptCore, che all'avvio con un accento qualsiasi altrimenti non serve.
+- Valori vecchi: i nomi dei colori della 3.1 (oro, petrolio, indaco, rosa, ardesia) sono di nuovo colori; all'avvio si
+  tolgono `appIconAppearance` (3.2), `appIconShape` e `appIconDarkBackground` (3.1); un colore sconosciuto torna al
+  tema. Chi aveva "Sempre scuro" passa all'icona normale (iOS mostra un avviso al primo avvio).
 - Rigenerare dopo aver cambiato colori o disegno: compilare, installare e lanciare
   `xcrun simctl launch --console-pty <udid> com.bcw-classeviva.app -BCWGenerateAppIcons <percorso assoluto di BCW/Resources>`
   (solo DEBUG, `AppIconGenerator`): riscrive da capo `AppIcons/` e `AppIcon.icon` (SVG del cerchio e della barra,
   `icon.json` con `JSONSerialization`, numeri come `NSDecimalNumber`: con i Double scriveva 0.29999999999999999) e
-  stampa `BCW-APPICONS OK 12`; poi ricompilare. Il generatore è deterministico: con un percorso di prova al posto di
-  `BCW/Resources` i file escono identici a quelli del repository. Per vedere le icone senza simulatore:
+  stampa `BCW-APPICONS OK 11`; poi ricompilare. Il generatore è deterministico: le icone già presenti escono identiche.
+  Per vedere le icone senza simulatore:
   `"/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool" X.icon --export-image
   --output-file X.png --platform iOS --rendition Default|Dark|TintedLight|TintedDark|ClearLight|ClearDark --width 256
   --height 256 --scale 1`.
 - Anteprima (pagina, campioni, voce di Aspetto): `AppIconPreview`/`AppIconArtwork` disegnano in SwiftUI sfondo,
   cerchio e barra con un riflesso in alto e un'ombra leggera, per somigliare al vetro; non sono identiche alla Home.
 - `AppIconController` (avviato in `RootView`) cambia l'icona solo se cambia il nome e con l'app attiva: le scelte
-  della pagina dopo 1 s; i cambi del solo accento con "Tema dell'app" aspettano l'uscita da Impostazioni › Aspetto
+  della pagina dopo 0,4 s; i cambi del solo accento con "Tema dell'app" aspettano l'uscita da Impostazioni › Aspetto
   (`holdThemeChanges`), così provando i colori iOS mostra un solo avviso; tornando nell'app con Aspetto aperta il
-  controllo si fa all'uscita. Errori in un toast (`AppIconFailureReporter`). Ogni richiesta a iOS (cioè ogni avviso)
-  scrive `Cambio d'icona: <nome>` nel registro (sottosistema `com.bcw-classeviva.app`, categoria `AppIcon`).
-- Sincronizzazione: `appIconColor` e `appIconAppearance` in `ThemeStore.syncedValues`/`applySynced` (valori vecchi
-  convertiti, sconosciuti ignorati; `appIconShape` e `appIconDarkBackground` restano sul server ma non si leggono
-  più). In `CloudSync.syncSettings` una chiave che l'ultima sincronizzazione non conosceva conta come cambiata solo se
-  il server non ce l'ha: così il valore predefinito di un dispositivo appena aggiornato non cancella la scelta fatta su
-  un altro.
-- Peso misurato (actool per iphoneos, `Assets.car`): con le 404 icone piatte 48,7 MB (iPhone e iPad) e 24,4 MB per un
-  solo iPhone (`--filter-for-device-model iPhone18,3`, come lo sfoltimento dell'App Store); con le 12 `.icon` 56,4 MB e
-  28,3 MB. Ogni `.icon` compilata tiene, per dispositivo, tre immagini 1024 già disegnate con il vetro (chiara, scura,
-  colorata: circa 2,3 MB, poco comprimibili) più i livelli; senza traslucenza si risparmia solo l'11%.
-- Verificato sulla Home del simulatore (iOS 26.3): le 12 icone in Default, Dark, Clear e Tinted (cerchio e barra lastre
-  separate); con "Tema dell'app" provando quattro accenti in Aspetto l'icona cambia una volta sola; i valori vecchi
-  (`oro`, `light`) diventano `arancio` e `auto`.
-- Limiti verificati: con le icone colorate e trasparenti iOS tinge sempre l'icona, anche con Sempre scuro: non si può
-  forzare (le 12 icone lì sono uguali). Sul simulatore (iOS 26.3) l'avviso del cambio non si apre ("couldn't load
-  upcall bundle principal class"): l'icona cambia ma `setAlternateIconName` risponde con un errore di I/O (il
-  controllore lo riconosce da `alternateIconName`) e i cambi successivi falliscono ("couldn't make icon alert token",
-  EAGAIN) finché non si riavvia lsd: `xcrun simctl spawn <udid> launchctl stop com.apple.lsd`. Le modalità delle icone
-  di iOS si cambiano dalla Home: pressione lunga, Modifica, Personalizza. Le preferenze dell'app sul simulatore si
-  cambiano con `xcrun simctl spawn <udid> defaults write <container>/Library/Preferences/com.bcw-classeviva.app …`:
-  modificando il plist a mano cfprefsd tiene i valori vecchi.
+  controllo si fa all'uscita. iOS impiega qualche secondo prima del suo avviso (non si può accelerare): intanto
+  `isChanging` fa mostrare ad `AppIconStatusReporter` l'avviso in basso "Cambio dell'icona in corso…" con
+  l'indicatore di caricamento (`OverlayHost.showToast(_:inProgress:duration:)`, chiuso con `dismissToast`), che
+  mostra anche gli errori. Sul simulatore il cambio dura meno di mezzo secondo, quindi l'avviso quasi non si vede
+  (verificato con screenshot di seguito). Ogni richiesta a iOS (cioè ogni avviso) scrive `Cambio d'icona: <nome>` nel
+  registro (sottosistema `com.bcw-classeviva.app`, categoria `AppIcon`).
+- Sincronizzazione: `appIconColor` in `ThemeStore.syncedValues`/`applySynced` (sconosciuti ignorati;
+  `appIconAppearance`, `appIconShape` e `appIconDarkBackground` restano sul server ma non si leggono più), voce "Icona
+  dell'app" di Da sincronizzare. In `CloudSync.syncSettings` una chiave che l'ultima sincronizzazione non conosceva
+  conta come cambiata solo se il server non ce l'ha: così il valore predefinito di un dispositivo appena aggiornato non
+  cancella la scelta fatta su un altro.
+- Peso misurato con le 12 `.icon` della 3.2 (actool per iphoneos, `Assets.car`): 56,4 MB per iPhone e iPad, 28,3 MB per
+  un solo iPhone (`--filter-for-device-model iPhone18,3`, come lo sfoltimento dell'App Store); con le 404 icone piatte
+  48,7 e 24,4 MB. Ogni `.icon` compilata tiene, per dispositivo, tre immagini 1024 già disegnate con il vetro (circa
+  2,3 MB, poco comprimibili) più i livelli: con 11 icone il peso è circa quello di prima (non rimisurato).
+- Verificato sulla Home del simulatore (iOS 26.3), con le 12 icone della 3.2: Default, Dark, Clear e Tinted (cerchio e
+  barra lastre separate); con "Tema dell'app" provando quattro accenti in Aspetto l'icona cambia una volta sola. Le 11
+  della 3.2.1 controllate con `ictool` (Default e Dark) e cambiando icona dalla pagina.
+- Limiti verificati: con le icone colorate e trasparenti iOS tinge sempre l'icona: non si può forzare. Sul simulatore
+  (iOS 26.3) l'avviso del cambio non si apre ("couldn't load upcall bundle principal class"): l'icona cambia ma
+  `setAlternateIconName` risponde con un errore di I/O (il controllore lo riconosce da `alternateIconName`) e i cambi
+  successivi falliscono ("couldn't make icon alert token", EAGAIN) finché non si riavvia lsd:
+  `xcrun simctl spawn <udid> launchctl stop com.apple.lsd`. Le modalità delle icone di iOS si cambiano dalla Home:
+  pressione lunga, Modifica, Personalizza. Le preferenze dell'app sul simulatore si cambiano con
+  `xcrun simctl spawn <udid> defaults write <container>/Library/Preferences/com.bcw-classeviva.app …`: modificando il
+  plist a mano cfprefsd tiene i valori vecchi.
 
 ## Convenzioni
 - Testi UI e commenti in italiano. Stile: liste segmentate, `StatusChip`, `FilterChip`, `StatTile` (anche in griglie

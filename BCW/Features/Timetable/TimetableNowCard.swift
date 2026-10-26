@@ -89,10 +89,11 @@ struct TimetableNowCard: View {
         let isRunning = model.liveActivities.isRunningToday
         return Button {
             Haptics.selection()
-            model.liveActivities.toggleToday()
-            host?.showToast(isRunning ? "Attività in diretta fermata per oggi"
-                                      : "Attività in diretta avviata: la trovi nella schermata di blocco",
-                            icon: isRunning ? "lock" : "lockClock")
+            Task {
+                // L'avviso arriva quando si sa com'è andata.
+                let result = await model.liveActivities.toggleToday()
+                host?.showToast(result.message, icon: result.failed ? "alertCircle" : (isRunning ? "lock" : "lockClock"))
+            }
         } label: {
             Icon("lockClock", size: 20)
                 .foregroundStyle(isRunning ? Theme.primaryContainer : Theme.onPrimaryContainer)

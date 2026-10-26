@@ -20,7 +20,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.bcw.app
         # App Group condiviso con i widget (group.com.bcw-classeviva.app).
         CODE_SIGN_ENTITLEMENTS: Config/BCW.entitlements
-        MARKETING_VERSION: "3.2"
+        MARKETING_VERSION: "3.2.1"
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "5.0"
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
@@ -32,7 +32,7 @@ targets:
         "INFOPLIST_FILE[sdk=iphone*]": Config/Info-iOS.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Icone alternative (Impostazioni › Aspetto › Icona dell'app, cartella BCW/Resources/AppIcons).
-        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-arancio AppIcon-verde AppIcon-blu AppIcon-viola AppIcon-grafite AppIcon-mattone-scura AppIcon-arancio-scura AppIcon-verde-scura AppIcon-blu-scura AppIcon-viola-scura AppIcon-grafite-scura"
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-arancio AppIcon-oro AppIcon-verde AppIcon-petrolio AppIcon-blu AppIcon-indaco AppIcon-viola AppIcon-rosa AppIcon-ardesia AppIcon-grafite"
         INFOPLIST_KEY_CFBundleDisplayName: BCW
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.education
@@ -50,7 +50,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.bcw.app.widgets
-        MARKETING_VERSION: "3.2"
+        MARKETING_VERSION: "3.2.1"
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "5.0"
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor

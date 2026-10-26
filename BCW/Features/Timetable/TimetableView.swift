@@ -13,14 +13,17 @@ struct TimetableView: View {
     @Environment(\.tabChrome) private var tabChrome
     @Environment(\.windowClass) private var windowClass
     @Environment(\.pageGutter) private var gutter
-    /// Cambia quando si tocca di nuovo la scheda Orario (iOS): si torna a oggi.
+    /// Cambia quando si tocca di nuovo la scheda Orario (iOS): si torna al giorno predefinito.
     var reselection = 0
 
     @State private var selectedDay = Date().startOfDay
     @State private var adjustedInitialDay = false
-    /// "Oggi" nella barra: segue il giorno scelto sempre con un'animazione, anche quando il giorno
-    /// cambia senza (scorrendo di lato, dove il contenuto si scambia di colpo).
-    @State private var showsToday = false
+    /// Il pulsante che torna al giorno predefinito ("Oggi", "Domani"…) nella barra: segue il giorno
+    /// scelto sempre con un'animazione, anche quando il giorno cambia senza (scorrendo di lato, dove
+    /// il contenuto si scambia di colpo).
+    @State private var showsJump = false
+    /// Cambia quando finisce l'ultimo evento di oggi: il giorno predefinito passa al successivo.
+    @State private var defaultDayTick = 0
     @State private var editor: TimetableEditorRequest?
     @State private var detail: TimetableDetailRequest?
     @State private var paletteWeekday: PaletteWeekday?
@@ -134,13 +137,15 @@ struct TimetableView: View {
                     return actions
                 }
                 .onAppear(perform: adjustInitialDay)
-                .onChange(of: selectedDay, initial: true) { _, day in
-                    guard showsToday == day.isToday else { return }
-                    withAnimation(Motion.spatial) { showsToday = !day.isToday }
+                .onChange(of: jumpVisible, initial: true) { _, visible in
+                    guard showsJump != visible else { return }
+                    withAnimation(Motion.spatial) { showsJump = visible }
                 }
                 .onChange(of: reselection) {
-                    select(Date().startOfDay)
+                    select(defaultDay)
                 }
+                // Finito l'ultimo evento di oggi il giorno predefinito diventa il successivo.
+                .task(id: defaultDayTick) { await waitForDefaultDayChange() }
                 // Un widget ha aperto l'orario su un giorno.
                 .onChange(of: model.openedLink) { consumeLink() }
                 // Con una bozza in anteprima non si modifica l'orario.
@@ -197,16 +202,43 @@ struct TimetableView: View {
         }
     }
 
-    /// Il giorno che l'orario mostra da solo: oggi finché c'è un evento non ancora finito, poi il
-    /// primo giorno successivo con eventi (`TimetableDefaultDay`, la stessa regola dei widget e
-    /// della versione web). Il pulsante "Oggi" porta invece sempre a oggi.
+    /// Il giorno predefinito dell'orario: oggi finché c'è un evento non ancora finito, poi il primo
+    /// giorno successivo con eventi (`TimetableDefaultDay`, la stessa regola dei widget e della
+    /// versione web). È il giorno di apertura e quello a cui riportano il pulsante accanto al giorno
+    /// in grande (o nella barra) e un nuovo tocco sulla scheda Orario.
     private var defaultDay: Date {
+        _ = defaultDayTick
         let now = Date()
         return TimetableDefaultDay.day(now: now, nowMinute: TimeOfDay.nowMinutes(of: now)) { day in
             store.entries(weekday: day.timetableWeekday, includingDraft: false)
                 .filter { !$0.isBreak }
                 .map { TimetableDefaultDay.Span(start: $0.start, end: $0.end) }
         }
+    }
+
+    /// Il pulsante che riporta al giorno predefinito si vede se il giorno scelto è un altro.
+    private var jumpVisible: Bool {
+        !selectedDay.isSameDay(as: defaultDay)
+    }
+
+    /// Nome del giorno predefinito sul pulsante che ci riporta: "Oggi", "Domani" o il giorno della
+    /// settimana ("Lunedì").
+    private func jumpTitle(_ day: Date) -> String {
+        day.isToday || day.isTomorrow ? day.relativeDayName : day.it("EEEE").capitalizedFirst
+    }
+
+    /// Aspetta la fine dell'ultimo evento di oggi (se non è ancora finito), poi fa ricalcolare il
+    /// giorno predefinito.
+    private func waitForDefaultDayChange() async {
+        let now = Date()
+        let minute = TimeOfDay.nowMinutes(of: now)
+        let ends = store.entries(weekday: now.timetableWeekday, includingDraft: false)
+            .filter { !$0.isBreak && $0.end > minute }
+            .map(\.end)
+        guard let end = ends.max() else { return }
+        try? await Task.sleep(for: .seconds(Double(end - minute) * 60 + 1))
+        guard !Task.isCancelled else { return }
+        defaultDayTick += 1
     }
 
     /// Apre il giorno chiesto da un widget (`bcw://orario?giorno=…`); senza giorno quello predefinito.
@@ -237,14 +269,16 @@ struct TimetableView: View {
 
     @ViewBuilder
     private var barActions: some View {
-        // "Oggi" c'è solo se il giorno scelto non è oggi, come "Domani" nella Dashboard. Senza
-        // Liquid Glass (e sull'iPad largo) sta accanto al giorno in grande, come nella Dashboard;
-        // nella settimana dell'iPad, che non ha il giorno in grande, sta nella barra.
+        // Il pulsante del giorno predefinito ("Oggi", "Domani"…) c'è solo se il giorno scelto è un
+        // altro, come "Domani" nella Dashboard. Senza Liquid Glass (e sull'iPad largo) sta accanto
+        // al giorno in grande, come nella Dashboard; nella settimana dell'iPad, che non ha il giorno
+        // in grande, sta nella barra.
         let regular = windowClass == .regular
-        if showsToday && ((ThemeStore.shared.liquidGlass && !regular) || isEditing || (regular && mode == .day)) {
-            BarTextButton(title: "Oggi") { select(Date()) }
+        if showsJump && ((ThemeStore.shared.liquidGlass && !regular) || isEditing || (regular && mode == .day)) {
+            let target = defaultDay
+            BarTextButton(title: jumpTitle(target)) { select(target) }
                 .keyboardShortcut("t")
-                .help("Vai a oggi")
+                .help("Vai a \(jumpTitle(target).lowercased())")
                 .transition(.scale(scale: 0.6).combined(with: .opacity))
         }
         if !isEditing {
@@ -364,9 +398,11 @@ struct TimetableView: View {
 
     /// Il giorno scelto nella Lista, con il cambio ad asse condiviso.
     private var dayList: some View {
-        DayPage(swipe: swipe, day: selectedDay) { day in
+        let target = defaultDay
+        return DayPage(swipe: swipe, day: selectedDay) { day in
             TimetableDayList(content: TimetableDayContent(day: day, model: model), actions: actions,
-                             jump: day.isToday ? nil : { select(Date()) })
+                             jumpTitle: day.isSameDay(as: target) ? nil : jumpTitle(target),
+                             jump: { select(target) })
                 .equatable()
         }
     }
@@ -515,6 +551,7 @@ struct TimetableView: View {
 enum DebugTimetable {
     static func prepareIfRequested(model: AppModel) async {
         await prepareTable(model: model)
+        fillTodayIfRequested(model: model)
         // Le verifiche arrivano con l'agenda, che può non essere ancora pronta.
         for _ in 0..<20 where model.agenda.isEmpty { try? await Task.sleep(for: .milliseconds(250)) }
         hideTestsIfRequested(model: model)
@@ -565,6 +602,19 @@ enum DebugTimetable {
         }
         let thursday = store.entries(weekday: 4).filter { !$0.isBreak }.map(\.id)
         store.applyPalette("builtin.lagoon", to: thursday)
+    }
+
+    /// `-BCWTimetableToday YES` (demo): se oggi non ha eventi (fine settimana) prende quelli del
+    /// lunedì, per provare la giornata in corso, la barra di avanzamento e la card "Adesso" a
+    /// qualsiasi giorno.
+    private static func fillTodayIfRequested(model: AppModel) {
+        let store = model.timetable
+        let today = Date().timetableWeekday
+        guard model.isDemo, UserDefaults.standard.bool(forKey: "BCWTimetableToday"),
+              store.draft == nil, store.entries(weekday: today, includingDraft: false).isEmpty else { return }
+        for entry in store.entries(weekday: 1, includingDraft: false) where entry.title != "Sportello di fisica" {
+            _ = store.duplicate(entry, to: today)
+        }
     }
 }
 #endif

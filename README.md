@@ -39,7 +39,7 @@ BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 - puoi consultare l'app anche offline, visualizzando i dati dell'ultima volta che era stata aperta
 - supporto agli account genitore con più figli
 - puoi aggiungere più account e passare dall'uno all'altro (dall'avatar in Dashboard o tenendo premuta la scheda Tu), con una dissolvenza tra i dati di un account e quelli dell'altro
-- account BCW: abbini uno o più account Classeviva ed entri in tutti con un solo accesso, su ogni dispositivo e anche nella versione web; impostazioni, aspetto e orario (con i file allegati) si sincronizzano
+- account BCW: abbini uno o più account Classeviva ed entri in tutti con un solo accesso, su ogni dispositivo e anche nella versione web; impostazioni, aspetto e orario (con i file allegati) si sincronizzano, e in Impostazioni › Account scegli cosa sincronizzare
 - ricerca in compiti, voti, comunicazioni, materiale e note dalla barra in cima alla Dashboard
 - in Tu una sezione "Da vedere" raccoglie comunicazioni e note da leggere e assenze da giustificare
 - bacheca con adesione, firma e risposta alle comunicazioni e apertura degli allegati con Quick Look
@@ -57,7 +57,9 @@ La scheda Orario contiene l'orario settimanale, che si compila a mano o si gener
 
 - due viste: Lista (la settimana in alto e gli eventi del giorno sotto) e Giorno (le ore della giornata, come nell'app Calendario)
 - in cima la settimana è una fila di pulsanti, uno per giorno; le frecce cambiano settimana, toccando le date si sceglie un giorno qualsiasi dal calendario e scorrendo di lato sugli eventi si passa al giorno prima o dopo, come nella Dashboard
-- aprendo l'Orario si vede oggi finché c'è una lezione da finire, poi il primo giorno successivo con lezioni (come il widget Orario); il pulsante Oggi riporta sempre a oggi
+- aprendo l'Orario si vede oggi finché c'è una lezione da finire, poi il primo giorno successivo con lezioni (come il widget Orario); a quel giorno riportano anche il pulsante accanto al giorno in grande ("Oggi", "Domani" o il giorno della settimana) e un nuovo tocco sulla scheda Orario
+- accanto al giorno in grande, attivandola in Impostazioni › Orario, la percentuale e la barra di avanzamento della giornata: la parte passata della durata complessiva delle lezioni (ondulata mentre la giornata è in corso); la stessa impostazione vale per i widget
+- la scheda Orario si può nascondere da Impostazioni › Orario (widget e attività in diretta continuano a funzionare e aprono la Dashboard)
 - oggi una scheda in cima mostra la lezione in corso (quanto manca) e quella dopo, oppure la prossima lezione; il pulsante con il lucchetto la porta nella schermata di blocco come attività in diretta, o la toglie
 - toccando un evento si vedono i dettagli e si aggiungono note, file e foto, per un solo giorno o per ogni settimana
 - le verifiche segnate dai docenti su Classeviva compaiono da sole sulla lezione della materia e si possono nascondere; altre verifiche si segnano a mano, per un giorno o per ogni settimana
@@ -78,7 +80,7 @@ La scheda Orario contiene l'orario settimanale, che si compila a mano o si gener
 
 Widget per la schermata Home e la schermata di blocco, con i colori, il font e le forme dell'app (in chiaro e in scuro, anche con le icone colorate o trasparenti di iOS):
 
-- Orario (piccolo, medio, grande): l'orario di oggi con la lezione in corso in evidenza e, finita l'ultima lezione, quello del giorno seguente con lezioni, come la scheda Orario all'apertura; nel grande la giornata intera con gli intervalli
+- Orario (piccolo, medio, grande): il giorno (con la percentuale e la barra di avanzamento della giornata, se attivate), sotto le lezioni in una lista segmentata con quella in corso più alta e in evidenza e un piccolo stacco al posto degli intervalli; finita l'ultima lezione il giorno seguente con lezioni, come la scheda Orario all'apertura; nel grande la giornata intera
 - Lezione in corso (piccolo e schermata di blocco): la materia, l'aula, quanto manca con la barra o l'anello di avanzamento e la lezione dopo; senza lezioni in corso la prossima
 - Compiti e verifiche (medio e grande): i prossimi compiti, verifiche ed eventi giorno per giorno
 - Prossima verifica (piccolo e schermata di blocco): la prossima verifica con i giorni che mancano
@@ -92,10 +94,12 @@ Su iPhone la lezione in corso resta nella schermata di blocco e nella Dynamic Is
 
 - nella schermata di blocco una scheda con la materia nel suo colore, aula e docente, il tempo che manca, la barra di avanzamento con gli orari e la lezione dopo
 - prima della prima lezione il conto alla rovescia all'inizio, negli intervalli quanto manca alla lezione successiva e in che aula si terrà, all'ultima lezione l'avviso che è l'ultima
-- nella Dynamic Island a sinistra la sigla della materia in una forma del suo colore e a destra il tempo che manca; con più attività un anello di avanzamento; tenendola premuta si allarga con tutti i dettagli
+- nella Dynamic Island a sinistra la sigla della materia in una forma del suo colore e a destra il tempo che manca, attaccati alla fotocamera come chiedono le linee guida di Apple; con più attività un anello di avanzamento; tenendola premuta si allarga con tutti i dettagli
 - le verifiche del giorno sono segnate sulla loro lezione, anche con "Mostra le verifiche" spenta
 - in Impostazioni › Orario si sceglie se farla partire da sola nei giorni di lezione: compare mezz'ora prima della prima lezione e sparisce dopo l'ultima, e il giorno di scuola successivo viene preparato in anticipo, così parte anche con l'app chiusa
 - dalla scheda in cima all'orario di oggi si avvia o si ferma a mano; fermata o tolta dalla schermata di blocco, quel giorno non riparte da sola
+- il conto alla rovescia usa il carattere di sistema arrotondato: su iOS 27 con un carattere personalizzato l'estensione andava in crash, l'attività veniva chiusa appena avviata o mostrava una rotella
+- tornando nell'app l'attività già in corso viene rifatta da capo (senza che si veda); se iOS non la accetta o la chiude appena avviata, un avviso lo dice
 
 ### iPad
 
@@ -120,7 +124,7 @@ L'app segue Material 3 Expressive, con colori, font e pagina Aspetto della [vers
 Anche l'esperienza d'uso è quella di un'app Material 3 Expressive: barra di ricerca in alto, liste segmentate, chip di stato, gruppi di pulsanti collegati, schede, menu del pulsante d'azione flottante e barra degli strumenti flottante, con le animazioni a molla e le transizioni di Material 3.
 Le forme usano angoli continui e su iPhone l'interfaccia ha il feedback aptico.
 In Impostazioni › Aspetto si può attivare Liquid Glass: barra di navigazione, barra delle schede e menu diventano quelli di sistema, in vetro.
-In Impostazioni › Aspetto › Icona dell'app si sceglie il colore dell'icona: quello del tema dell'app (il più vicino al colore d'accento) oppure Mattone, Arancio, Verde, Blu, Viola o Grafite. Cerchio e barra sono due lastre di vetro, come nelle icone di iOS. L'icona segue le icone chiare, scure, colorate e trasparenti di iOS, oppure resta sempre scura. Le scelte si sincronizzano con l'account BCW.
+In Impostazioni › Aspetto › Icona dell'app si sceglie il colore dell'icona: quello del tema dell'app (ogni colore d'accento proposto ha il suo, per un colore scelto a mano il più vicino) oppure Mattone, Arancio, Oro, Verde, Petrolio, Blu, Indaco, Viola, Rosa, Ardesia o Grafite. Cerchio e barra sono due lastre di vetro, come nelle icone di iOS. L'icona segue sempre le icone chiare, scure, colorate e trasparenti di iOS. Mentre iOS cambia l'icona un avviso in basso dice che il cambio è in corso. La scelta si sincronizza con l'account BCW.
 
 ### Requisiti
 
@@ -145,6 +149,7 @@ Nella schermata di accesso un gruppo di pulsanti sceglie tra Classeviva e Accoun
 
 - gli account Classeviva abbinati sono salvati sul server, con le credenziali cifrate: entrando con l'account BCW l'app li riceve e accede a Classeviva come con un account del dispositivo; aggiungere o togliere un account lo abbina o lo scollega
 - impostazioni (tranne blocco, promemoria, notifiche e Liquid Glass), aspetto (anche l'icona dell'app) e orario di ogni account abbinato, con i file allegati, si sincronizzano con la versione web e con gli altri dispositivi
+- in Impostazioni › Account › Da sincronizzare si sceglie, per ogni dispositivo, cosa sincronizzare: impostazioni, aspetto, icona dell'app, compiti fatti e orario
 - da Impostazioni › Account si accede o si crea un account BCW anche con un account Classeviva già aperto, e gli account del dispositivo si possono abbinare subito
 - chi entra con un account Classeviva vede in Impostazioni › Account a quali account BCW è abbinato e può scollegarsi da ognuno: il server verifica l'accesso con il token della sessione di Classeviva, senza la password
 - uscendo dall'account BCW gli account abbinati e i loro dati spariscono dal dispositivo e tornano quelli salvati sul dispositivo

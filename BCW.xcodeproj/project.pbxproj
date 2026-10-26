@@ -280,7 +280,7 @@
 		BC000000000000000000000E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-arancio AppIcon-verde AppIcon-blu AppIcon-viola AppIcon-grafite AppIcon-mattone-scura AppIcon-arancio-scura AppIcon-verde-scura AppIcon-blu-scura AppIcon-viola-scura AppIcon-grafite-scura";
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-arancio AppIcon-oro AppIcon-verde AppIcon-petrolio AppIcon-blu AppIcon-indaco AppIcon-viola AppIcon-rosa AppIcon-ardesia AppIcon-grafite";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Config/BCW.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -312,7 +312,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.2;
+				MARKETING_VERSION = 3.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.bcw-classeviva.app";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -331,7 +331,7 @@
 		BC000000000000000000000F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-arancio AppIcon-verde AppIcon-blu AppIcon-viola AppIcon-grafite AppIcon-mattone-scura AppIcon-arancio-scura AppIcon-verde-scura AppIcon-blu-scura AppIcon-viola-scura AppIcon-grafite-scura";
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-arancio AppIcon-oro AppIcon-verde AppIcon-petrolio AppIcon-blu AppIcon-indaco AppIcon-viola AppIcon-rosa AppIcon-ardesia AppIcon-grafite";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Config/BCW.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -363,7 +363,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.2;
+				MARKETING_VERSION = 3.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.bcw-classeviva.app";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -395,7 +395,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.2;
+				MARKETING_VERSION = 3.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.bcw-classeviva.app.widgets";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -428,7 +428,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.2;
+				MARKETING_VERSION = 3.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.bcw-classeviva.app.widgets";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;

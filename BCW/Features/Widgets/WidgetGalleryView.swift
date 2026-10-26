@@ -38,10 +38,22 @@ struct WidgetGalleryView: View {
             }
         }
 
+        /// L'esempio, con le lezioni del lunedì anche se oggi è sabato o domenica: così la giornata
+        /// in corso (avanzamento, lezione in corso) si vede a qualsiasi giorno.
+        static func weekdaySample(now: Date, progress: Bool) -> WidgetSnapshot {
+            var snapshot = WidgetSnapshot.sample(now: now)
+            snapshot.showsDayProgress = progress ? true : nil
+            let key = BCWShared.dayKey(now)
+            if let index = snapshot.days.firstIndex(where: { $0.key == key }), snapshot.days[index].events.isEmpty {
+                snapshot.days[index].events = snapshot.week[0]
+            }
+            return snapshot
+        }
+
         func snapshot(model: AppModel, now: Date) -> WidgetSnapshot {
             switch self {
             case .app: model.widgets.current ?? .sample(now: now)
-            case .sample: .sample(now: now)
+            case .sample: Self.weekdaySample(now: now, progress: model.preferences.showsDayProgress)
             case .signedOut: WidgetSnapshot(generatedAt: now, signedIn: false, theme: model.widgets.current?.theme ?? .init())
             case .empty:
                 // Con l'account ma senza orario, compiti, verifiche e voti.
@@ -227,13 +239,15 @@ private struct LiveActivityGallery: View {
         let black = Color(rgb: 0x050505)
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
+                // Come sull'iPhone: contenuto attaccato alla fotocamera (circa 126 punti).
                 HStack(spacing: 0) {
                     island.compactLeading
-                    Spacer(minLength: 120)
+                    Color.clear.frame(width: 126)
                     island.compactTrailing
                 }
-                .padding(.horizontal, 8)
-                .frame(width: 250, height: 37)
+                .padding(.leading, TimetableActivityIsland.compactMargin)
+                .padding(.trailing, TimetableActivityIsland.compactTextMargin)
+                .frame(height: TimetableActivityIsland.compactHeight)
                 .background(black, in: .capsule)
                 island.minimal
                     .frame(width: 37, height: 37)

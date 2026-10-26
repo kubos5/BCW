@@ -43,6 +43,17 @@ enum WidgetSelfTest {
             WidgetDates.offset(of: date, from: wednesday) == 7 ? [.init(start: 480, end: 540)] : []
         } == 7, "evento fra 7 giorni: quel giorno")
 
+        // Avanzamento della giornata: 5 ore di lezione, un'ora e mezza passata = 30%.
+        check(DayProgress(spans: [.init(start: 480, end: 780)], minute: 570)?.percent == 30, "avanzamento: 30%")
+        check(DayProgress(spans: [.init(start: 480, end: 600), .init(start: 540, end: 660)], minute: 900)?.total == 180,
+              "avanzamento: eventi sovrapposti contati una volta")
+        let gap = DayProgress(spans: [.init(start: 480, end: 540), .init(start: 600, end: 660)], minute: 570)
+        check(gap?.elapsed == 60 && gap?.percent == 50 && gap?.blocks.count == 2, "avanzamento fermo tra due eventi")
+        check(DayProgress(spans: [.init(start: 480, end: 540)], minute: 539)?.percent == 98
+              && DayProgress(spans: [.init(start: 480, end: 540)], minute: 540)?.isFinished == true, "100% solo alla fine")
+        check(DayProgress(spans: [], minute: 600) == nil && DayProgress(spans: [.init(start: 480, end: 540)], minute: 0)?.percent == 0,
+              "avanzamento senza eventi e prima dell'inizio")
+
         // Gli intervalli non contano: dopo l'ultima lezione resta solo un intervallo.
         var snapshot = WidgetSnapshot.sample(now: at(0, 9, 30))
         if let index = snapshot.days.firstIndex(where: { $0.key == BCWShared.dayKey(wednesday) }) {
@@ -77,7 +88,9 @@ enum WidgetSelfTest {
         check(beforeDouble.current == nil && beforeDouble.next?.end == 12 * 60 && beforeDouble.following.map(\.id) == ["sto"],
               "prossima lezione di due ore")
 
-        // Voci della linea temporale: adesso, ogni inizio e fine futuri, le mezzanotti.
+        // Voci della linea temporale: adesso, ogni inizio e fine futuri, le mezzanotti; con la barra
+        // di avanzamento accesa anche ogni 5 minuti durante le lezioni.
+        snapshot.showsDayProgress = true
         let now = at(0, 9, 30)
         let dates = BCWWidgetKind.timetable.timelineDates(snapshot: snapshot, now: now)
         check(dates.first == now, "la prima voce è adesso")
@@ -87,6 +100,16 @@ enum WidgetSelfTest {
             check(dates.contains(expected), "manca la voce \(BCWShared.dayKey(expected)) \(WidgetDates.time(expected))")
         }
         check(!dates.contains(at(0, 9)), "voce passata")
+        check(dates.contains(at(0, 9, 35)) && dates.contains(at(1, 8, 5)) && !dates.contains(at(0, 11, 5)),
+              "voci ogni 5 minuti durante le lezioni (non nell'intervallo)")
+        check(!BCWWidgetKind.now.timelineDates(snapshot: snapshot, now: now).contains(at(0, 9, 35)),
+              "lezione in corso senza le voci dell'avanzamento")
+        check(TimetableWidgetDay(snapshot: snapshot, now: now).progress?.elapsed == 90, "avanzamento del widget alle 9:30")
+        var noProgress = snapshot
+        noProgress.showsDayProgress = nil
+        check(TimetableWidgetDay(snapshot: noProgress, now: now).progress == nil
+              && !BCWWidgetKind.timetable.timelineDates(snapshot: noProgress, now: now).contains(at(0, 9, 35)),
+              "barra spenta: niente avanzamento né voci ogni 5 minuti")
         check(BCWWidgetKind.agenda.timelineDates(snapshot: snapshot, now: now) == [now, at(1, 0), at(2, 0)],
               "compiti: adesso e le mezzanotti")
         let signedOut = WidgetSnapshot(generatedAt: now, signedIn: false)

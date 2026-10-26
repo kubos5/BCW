@@ -91,6 +91,46 @@ nonisolated enum TimetableDefaultDay {
     }
 }
 
+// MARK: - Avanzamento della giornata
+
+/// A che punto è la giornata dell'orario (barra accanto al giorno in grande nella scheda Orario e
+/// nei widget "Orario"): la parte già passata della durata complessiva degli eventi. Con 5 ore di
+/// lezione e un'ora e mezza passata, il 30%. Gli eventi sovrapposti contano una volta sola; negli
+/// spazi tra un evento e l'altro (intervalli, ore libere) l'avanzamento resta fermo. Come per il
+/// giorno predefinito contano gli eventi dell'utente, non gli intervalli.
+nonisolated struct DayProgress: Equatable, Sendable {
+    /// Minuti degli eventi passati e durata complessiva (sempre più di zero).
+    let elapsed: Int
+    let total: Int
+    /// Gli eventi uniti dove si toccano o si sovrappongono (tratti in cui l'avanzamento cresce).
+    let blocks: [TimetableDefaultDay.Span]
+
+    /// - Parameters:
+    ///   - spans: gli eventi del giorno, senza intervalli.
+    ///   - minute: il minuto attuale per oggi; per un giorno passato 24 × 60, per uno futuro 0.
+    /// - Returns: `nil` se il giorno non ha eventi.
+    init?(spans: [TimetableDefaultDay.Span], minute: Int) {
+        var merged: [TimetableDefaultDay.Span] = []
+        for span in spans.filter({ $0.end > $0.start }).sorted(by: { ($0.start, $0.end) < ($1.start, $1.end) }) {
+            if let last = merged.last, span.start <= last.end {
+                merged[merged.count - 1] = .init(start: last.start, end: max(last.end, span.end))
+            } else {
+                merged.append(span)
+            }
+        }
+        let total = merged.reduce(0) { $0 + $1.end - $1.start }
+        guard total > 0 else { return nil }
+        self.total = total
+        elapsed = merged.reduce(0) { $0 + max(0, min($1.end, minute) - $1.start) }
+        blocks = merged
+    }
+
+    var fraction: Double { Double(elapsed) / Double(total) }
+    /// Percentuale per difetto: il 100% solo a giornata finita.
+    var percent: Int { elapsed * 100 / total }
+    var isFinished: Bool { elapsed >= total }
+}
+
 // MARK: - Collegamenti
 
 /// Collegamenti `bcw://` con cui i widget aprono l'app su una scheda e un giorno.

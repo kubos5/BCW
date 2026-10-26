@@ -148,6 +148,11 @@ struct WidgetPalette {
     func numeral(_ size: CGFloat, weight: CGFloat = 600, rounded: Bool = false) -> Font {
         font(size, weight: weight, rounded: rounded).monospacedDigit()
     }
+
+    /// Per `Text(timerInterval:)`: il carattere di sistema arrotondato (`WidgetFonts.timer`).
+    func timer(_ size: CGFloat, weight: CGFloat = 650) -> Font {
+        WidgetFonts.timer(size: size, weight: weight)
+    }
 }
 
 extension Color {
@@ -201,11 +206,30 @@ enum WidgetFonts {
             let descriptor = CTFontDescriptorCreateCopyWithAttributes(base, [kCTFontVariationAttribute: variation] as CFDictionary)
             font = Font(CTFontCreateWithFontDescriptor(descriptor, size, nil))
         } else {
-            font = .system(size: size, weight: weight >= 650 ? .bold : (weight >= 550 ? .semibold : .regular),
-                           design: rond > 50 ? .rounded : .default)
+            font = .system(size: size, weight: systemWeight(weight), design: rond > 50 ? .rounded : .default)
         }
         cache[key] = font
         return font
+    }
+
+    /// Carattere dei testi del tempo che iOS aggiorna da solo (`Text(timerInterval:)`): quello di
+    /// sistema arrotondato con le cifre allineate, mai Google Sans Flex. Su iOS 27.0.1 (iPhone 15,
+    /// verificato) un testo del tempo con un carattere personalizzato manda in crash l'estensione
+    /// mentre archivia la vista (`KEY_TYPE_OF_DICTIONARY_VIOLATES_HASHABLE_REQUIREMENTS` in
+    /// `CodableAttributedString`): l'attività in diretta veniva chiusa appena avviata, prima ancora
+    /// mostrava la rotella. Succede con `Font(CTFont)`, con `Font.custom` e con il formato
+    /// `.timer` di iOS 18; con il carattere di sistema no. Sul simulatore non succede.
+    static func timer(size: CGFloat, weight: CGFloat) -> Font {
+        .system(size: size, weight: systemWeight(weight), design: .rounded).monospacedDigit()
+    }
+
+    private static func systemWeight(_ weight: CGFloat) -> Font.Weight {
+        switch weight {
+        case 700...: .bold
+        case 600...: .semibold
+        case 500...: .medium
+        default: .regular
+        }
     }
 }
 

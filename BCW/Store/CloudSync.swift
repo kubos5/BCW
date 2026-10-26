@@ -67,6 +67,10 @@ nonisolated enum JSONValue: Codable, Equatable {
 /// unisce le modifiche. Le impostazioni si uniscono chiave per chiave (vincono quelle cambiate
 /// qui); l'orario è un documento unico (vince il lato cambiato, se sono cambiati entrambi questo
 /// dispositivo; la prima volta il server). I file allegati si caricano prima dell'orario che li cita.
+///
+/// Le voci spente in Impostazioni › Account › Da sincronizzare (`SyncCategory`) restano fuori: le
+/// loro impostazioni non partono e non arrivano (sul server restano i valori degli altri
+/// dispositivi), l'orario non si carica né si scarica.
 @Observable
 final class CloudSync {
     enum Status: Equatable { case idle, syncing, ok, offline, failed }
@@ -221,17 +225,44 @@ final class CloudSync {
 
     // MARK: Impostazioni
 
+    /// Le impostazioni di questo dispositivo, senza le voci che non si sincronizzano.
     private func localSettings() -> [String: JSONValue] {
         guard let model else { return [:] }
         return model.preferences.syncedValues.merging(ThemeStore.shared.syncedValues) { first, _ in first }
+            .filter { syncs(key: $0.key) }
+    }
+
+    private func syncs(key: String) -> Bool {
+        model?.preferences.syncs(SyncCategory.of(key: key)) ?? true
     }
 
     private func applySettings(_ values: [String: JSONValue]) {
+        let values = values.filter { syncs(key: $0.key) }
         isApplying = true
         model?.preferences.applySynced(values)
         ThemeStore.shared.applySynced(values)
         isApplying = false
         model?.settingsApplied()
+    }
+
+    /// Una voce di "Da sincronizzare" è stata accesa o spenta. Spegnendo un gruppo di impostazioni
+    /// le sue chiavi escono dall'ultima sincronizzazione, così riaccendendolo questo dispositivo
+    /// prende i valori dell'account BCW (come al primo accesso). Riaccendendo l'orario si allinea
+    /// come sempre: vince il lato cambiato, e se sono cambiati entrambi questo dispositivo.
+    func categoryChanged(_ category: SyncCategory, enabled: Bool) {
+        guard isEnabled, let model else { return }
+        if category == .timetable {
+            guard enabled else { return }
+            for account in model.accounts { pullTimetable(account.id) }
+            return
+        }
+        if enabled {
+            pullSettings()
+        } else if var snapshot = state.settingsSnapshot {
+            for key in snapshot.keys where SyncCategory.of(key: key) == category { snapshot[key] = nil }
+            state.settingsSnapshot = snapshot
+            saveState()
+        }
     }
 
     func settingsChanged() {
@@ -311,15 +342,17 @@ final class CloudSync {
         return model.accounts.contains { $0.id == id }
     }
 
+    private var syncsTimetable: Bool { model?.preferences.syncs(.timetable) ?? true }
+
     func timetableChanged(owner: String) {
-        guard isEnabled, !isApplying, isCloudAccount(owner) else { return }
+        guard isEnabled, !isApplying, syncsTimetable, isCloudAccount(owner) else { return }
         schedule("timetable:\(owner)", delay: .seconds(2)) { [weak self] in
             try await self?.syncTimetable(owner, fetchFirst: false)
         }
     }
 
     func pullTimetable(_ id: String) {
-        guard isCloudAccount(id) else { return }
+        guard syncsTimetable, isCloudAccount(id) else { return }
         enqueue { [weak self] in try await self?.syncTimetable(id, fetchFirst: true) }
     }
 
@@ -333,7 +366,7 @@ final class CloudSync {
     }
 
     private func syncTimetable(_ id: String, fetchFirst: Bool) async throws {
-        guard let token, isCloudAccount(id) else { return }
+        guard let token, syncsTimetable, isCloudAccount(id) else { return }
         let saved = state.timetables[id] ?? TimetableState(version: 0, hash: nil)
         let neverSynced = saved.version == 0 && saved.hash == nil
         var remote: (data: Data?, version: Int) = (nil, saved.version)
