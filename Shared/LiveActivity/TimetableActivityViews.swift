@@ -8,14 +8,10 @@ import WidgetKit
 struct ActivityPalette {
     let roles: TimetableActivityTheme.Roles
     let isDark: Bool
-    let rond: CGFloat
-    let rondBody: CGFloat
 
     init(theme: TimetableActivityTheme, dark: Bool) {
         roles = dark ? theme.dark : theme.light
         isDark = dark
-        rond = theme.rond
-        rondBody = theme.rondBody
     }
 
     /// Fondo della scheda nella schermata di blocco (contenitore della superficie).
@@ -38,12 +34,17 @@ struct ActivityPalette {
         }
     }
 
-    func font(_ size: CGFloat, weight: CGFloat = 400, rounded: Bool = false) -> Font {
-        WidgetFonts.font(size: size, weight: weight, rond: rounded ? rond : rondBody)
+    func font(_ size: CGFloat, weight: CGFloat = 400) -> Font {
+        WidgetFonts.activity(size: size, weight: weight)
     }
 
     func numeral(_ size: CGFloat, weight: CGFloat = 600) -> Font {
-        font(size, weight: weight, rounded: true).monospacedDigit()
+        font(size, weight: weight).monospacedDigit()
+    }
+
+    /// Per il conto alla rovescia: il carattere di sistema arrotondato (`WidgetFonts.timer`).
+    func timer(_ size: CGFloat, weight: CGFloat = 650) -> Font {
+        WidgetFonts.timer(size: size, weight: weight)
     }
 }
 
@@ -139,8 +140,8 @@ struct ActivityPhaseText {
     /// Con un'ora o più alla fine della fase, al posto del conto alla rovescia l'ora d'arrivo
     /// ("alle 08:00", "fino alle 10:00"): "2:10:--" toglieva spazio all'aula e al docente.
     func longWait(now: Date = Date()) -> (label: String, time: String)? {
-        guard phase.kind != .finished, phase.end.timeIntervalSince(now) >= 3600 else { return nil }
-        return (phase.kind == .before ? "alle" : "fino alle", time(phase.end))
+        guard phase.kind != .finished, phase.countdownEnd.timeIntervalSince(now) >= 3600 else { return nil }
+        return (phase.kind == .before ? "alle" : "fino alle", time(phase.countdownEnd))
     }
 
     /// Aula, o docente.
@@ -177,7 +178,7 @@ struct ActivityPhaseShape: View {
             switch phase.kind {
             case .before, .lesson:
                 Text(ActivityPhaseText.initials(phase.lesson?.title ?? "", max: letters))
-                    .font(palette.font(size * (letters >= 2 ? 0.38 : 0.5), weight: 700, rounded: true))
+                    .font(palette.font(size * (letters >= 2 ? 0.38 : 0.5), weight: 700))
                     .foregroundStyle(palette.onTint)
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
@@ -203,27 +204,179 @@ struct ActivityPhaseShape: View {
     }
 }
 
-/// Conto alla rovescia alla fine della fase, largo quanto serve (`Text(timerInterval:)` prende
-/// tutto lo spazio che gli si dà).
+/// Conto alla rovescia alla fine della fase, largo quanto serve.
+///
+/// `Text(timerInterval:)` non ha una larghezza sua: prende tutto lo spazio che gli si dà, e con
+/// `fixedSize()` diventa larga NaN (su iOS 27 l'attività resta vuota). Prima la larghezza veniva da
+/// un `frame(width:)` sul testo, che secondo altre segnalazioni fa smettere a iOS di disegnare
+/// l'attività (rotella sopra il contenuto sbiadito). Ora la dà un segnaposto invisibile con le cifre
+/// più larghe ("00:00" o "0:00:00", cifre tutte uguali con `monospacedDigit`) e il conto alla
+/// rovescia sta sopra di lui (a destra, o al centro nella Dynamic Island).
+/// Sotto i 10 minuti il segnaposto è "0:00": con "00:00" la compatta restava più larga del tempo.
+/// Il carattere è quello di sistema arrotondato (`ActivityPalette.timer`): con Google Sans Flex
+/// l'estensione andava in crash su iOS 27.0.1.
 struct ActivityTimer: View {
     let phase: TimetableActivityPhase
     let font: Font
     let color: Color
-    /// Larghezza di una cifra, per riservare lo spazio di "00:00" o "0:00:00".
-    let digitWidth: CGFloat
+    var alignment: Alignment = .trailing
 
     var body: some View {
         let now = Date()
+        let end = phase.countdownEnd
         // Prima dell'inizio della fase (avvio a mano molto presto) conta comunque fino alla fine.
-        let interval = min(now, phase.start)...max(now, phase.end)
-        let hours = phase.end.timeIntervalSince(now) >= 3600
-        Text(timerInterval: interval, countsDown: true)
+        let interval = min(now, phase.start)...max(now, end)
+        let remaining = end.timeIntervalSince(now)
+        Text(remaining >= 3600 ? "0:00:00" : remaining >= 600 ? "00:00" : "0:00")
             .font(font)
-            .foregroundStyle(color)
-            .multilineTextAlignment(.trailing)
             .lineLimit(1)
-            .frame(width: digitWidth * (hours ? 7.6 : 5.6), alignment: .trailing)
+            .hidden()
+            .overlay(alignment: alignment) {
+                Text(timerInterval: interval, countsDown: true)
+                    .font(font)
+                    .foregroundStyle(color)
+                    .multilineTextAlignment(alignment == .leading ? .leading : alignment == .center ? .center : .trailing)
+                    .lineLimit(1)
+            }
     }
+}
+
+/// Finestra su un testo del tempo che iOS aggiorna da solo: larga quanto il testo `visible`, mostra
+/// ciò che nel testo del tempo viene dopo `cut`. Le tre viste, in ordine: `cut` e `visible`
+/// invisibili (danno le misure, con lo stesso carattere) e il testo del tempo.
+///
+/// Serve perché con il tempo che manca iOS scrive il segno meno ("-45:12", `durationOffset`) e perché
+/// un testo del tempo non si può comporre a piacere: un formato scritto da noi non viene disegnato
+/// (rettangolo vuoto al posto del testo, verificato), solo quelli di sistema. Il testo è allineato
+/// a sinistra, quindi il segno è sempre il primo carattere e la finestra lo lascia fuori.
+struct ActivityTimeWindow: Layout {
+    /// Larghezza data al testo del tempo: lo spazio che prende non conta, va solo oltre la finestra.
+    private static let textWidth: CGFloat = 160
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        subviews[1].sizeThatFits(.unspecified)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews[0].place(at: bounds.origin, proposal: .unspecified)
+        subviews[1].place(at: bounds.origin, proposal: .unspecified)
+        let cut = subviews[0].sizeThatFits(.unspecified).width
+        subviews[2].place(at: CGPoint(x: bounds.minX - cut, y: bounds.minY),
+                          proposal: ProposedViewSize(width: Self.textWidth, height: bounds.height))
+    }
+}
+
+/// Il tempo nella Dynamic Island compatta, ai lati della fotocamera. Qui la larghezza conta: l'isola
+/// è larga quanto il contenuto, e iOS la misura solo quando ridisegna l'attività, non a ogni secondo.
+///
+/// iOS ridisegna quando l'app aggiorna l'attività o, una volta sola, quando scade il contenuto
+/// (`staleDate`, alla fine della fase); bloccare e sbloccare lo schermo non basta, l'estensione non
+/// può aggiornarla da sé e un `TimelineView` resta fermo al primo valore (tutto verificato). Quindi,
+/// finché non viene ridisegnata, il testo deve restare largo uguale, altrimenti accanto al tempo
+/// resta del vuoto:
+/// - con una nuova fase in arrivo il tempo tiene tutte le cifre ("0:59:59", "09:59", "09min"), con un
+///   testo di sistema che però dopo lo zero riparte a contare (`.time` e `.units`). Non si vede:
+///   alla fine della fase iOS ridisegna;
+/// - con il contenuto già scaduto (`isStale`) non arriverà più nulla, quindi il tempo è un testo che
+///   si ferma a zero, centrato: se perde una cifra il vuoto è diviso tra i due lati. Anche col formato
+///   compatto: nessun formato compatto di sistema si ferma a zero (`.components` su `dateRange` non
+///   si aggiorna proprio, verificato).
+/// Quando l'app può aggiornare l'attività (`timerStep`, anche in background) le cifre in più spariscono
+/// e l'isola si stringe.
+struct ActivityIslandTimer: View {
+    let phase: TimetableActivityPhase
+    let font: Font
+    let color: Color
+    /// Formato compatto ("1h39", "45min", "15s").
+    var compact = false
+    var isStale = false
+
+    private var source: TimeDataSource<Duration> { .durationOffset(to: phase.countdownEnd) }
+
+    var body: some View {
+        let remaining = phase.countdownEnd.timeIntervalSince(Date())
+        Group {
+            if isStale || remaining <= 0 {
+                // Non arriverà più nulla: deve fermarsi a zero.
+                ActivityTimer(phase: phase, font: font, color: color, alignment: .center)
+            } else if compact {
+                compactTime(remaining)
+            } else if remaining < 600 {
+                // Sotto i 10 minuti le cifre non cambiano più.
+                ActivityTimer(phase: phase, font: font, color: color, alignment: .leading)
+            } else if remaining < 3600 {
+                window(visible: "00:00", format: Self.minutesStyle)
+            } else {
+                let hours = Self.zeros(hours: remaining)
+                window(visible: "\(hours):00:00", format: Self.clock(hours: hours))
+            }
+        }
+        // Il testo tagliato vuole il segno e i separatori di sempre, qualunque sia la lingua del telefono.
+        .environment(\.locale, Locale(identifier: "it_IT"))
+    }
+
+    @ViewBuilder private func compactTime(_ remaining: TimeInterval) -> some View {
+        if remaining >= 3600 {
+            // "1h39": ore e minuti dallo stesso tempo ("-1:39:12"), con la "h" al posto dei due punti.
+            let hours = Self.zeros(hours: remaining)
+            HStack(spacing: 0) {
+                window(visible: hours, format: Self.clock(hours: hours))
+                Text(verbatim: "h").font(font).foregroundStyle(color)
+                window(cut: "-\(hours):", visible: "00", format: Self.clock(hours: hours))
+            }
+        } else {
+            units(remaining)
+        }
+    }
+
+    /// "45min", "9min", "15s": `.units` passa dai minuti ai secondi da solo, senza ridisegnare.
+    private func units(_ remaining: TimeInterval) -> some View {
+        // Da 10 minuti in su i minuti restano di due cifre, per non lasciare vuoto dopo "09min".
+        let padded = remaining >= 600
+        let visible = padded ? "00min" : remaining >= 60 ? "0min" : remaining >= 10 ? "00s" : "0s"
+        return window(visible: visible, format: Self.unitsStyle(padded: padded))
+            .environment(\.locale, Self.compactLocale)
+    }
+
+    /// Una finestra sul tempo che manca (di serie, tutto ciò che viene dopo il segno meno).
+    private func window<Style: DiscreteFormatStyle>(cut: String = "-", visible: String, format: Style) -> some View
+    where Style.FormatInput == Duration, Style.FormatOutput == String {
+        ActivityTimeWindow {
+            Text(verbatim: cut).hidden()
+            Text(verbatim: visible).hidden()
+            Text(source, format: format)
+                .foregroundStyle(color)
+                .multilineTextAlignment(.leading)
+        }
+        .font(font)
+        .lineLimit(1)
+        .clipped()
+    }
+
+    /// "0" o "00": le cifre delle ore.
+    private static func zeros(hours remaining: TimeInterval) -> String {
+        String(repeating: "0", count: String(Int(remaining / 3600)).count)
+    }
+
+    // Formati, visibili anche all'autotest dei widget.
+
+    /// "-09:59".
+    static let minutesStyle = Duration.TimeFormatStyle(pattern: .minuteSecond(padMinuteToLength: 2, roundFractionalSeconds: .down))
+
+    /// "-1:39:12".
+    static func clock(hours: String) -> Duration.TimeFormatStyle {
+        .time(pattern: .hourMinuteSecond(padHourToLength: hours.count, roundFractionalSeconds: .down))
+    }
+
+    /// "-45min", "-09min", "-15s" (minuti e secondi per difetto, come nel formato normale).
+    static func unitsStyle(padded: Bool) -> Duration.UnitsFormatStyle {
+        Duration.UnitsFormatStyle(allowedUnits: [.minutes, .seconds], width: .narrow, maximumUnitCount: 1,
+                                  valueLength: padded ? 2 : nil, fractionalPart: .hide(rounded: .towardZero))
+    }
+
+    /// In italiano le unità di `.units` sono staccate dal numero ("45 min"); in portoghese sono le
+    /// stesse e attaccate ("45min", "15s").
+    static let compactLocale = Locale(identifier: "pt_PT")
 }
 
 /// "tra"/"ancora" e il conto alla rovescia, o l'ora d'arrivo se manca più di un'ora.
@@ -246,8 +399,7 @@ struct ActivityTimerColumn: View {
                         .font(palette.numeral(size, weight: 650))
                         .foregroundStyle(color)
                 } else {
-                    ActivityTimer(phase: text.phase, font: palette.numeral(size, weight: 650), color: color,
-                                  digitWidth: size * 0.585)
+                    ActivityTimer(phase: text.phase, font: palette.timer(size), color: color)
                 }
             }
         }
@@ -364,7 +516,7 @@ struct TimetableActivityLockView: View {
                         }
                     }
                     Text(text.title)
-                        .font(palette.font(21, weight: 600, rounded: true))
+                        .font(palette.font(21, weight: 600))
                         .foregroundStyle(palette.ink)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
@@ -391,9 +543,28 @@ struct TimetableActivityLockView: View {
 // MARK: - Dynamic Island
 
 /// Le viste della Dynamic Island, sul fondo nero: ruoli del tema scuro.
+///
+/// Compatta come chiedono le linee guida di Apple (Live Activities, "Compact presentation"): il
+/// contenuto sta attaccato alla fotocamera, senza spazio in mezzo, e la forma vicino al bordo è
+/// concentrica con l'isola, con margini uguali. I margini sono fissati in `TimetableLiveActivity`
+/// (`contentMargins`): con quelli di sistema la forma stava a 9 punti dal bordo e a 6,3 sopra e
+/// sotto, con 6,7 punti di vuoto prima della fotocamera (misurato sul simulatore). L'espansa usa i
+/// margini di sistema.
 struct TimetableActivityIsland {
     let state: TimetableActivityState
     let isStale: Bool
+
+    /// Altezza della compatta su tutti gli iPhone con l'isola (tabella "iOS dimensions" delle
+    /// linee guida).
+    static let compactHeight: CGFloat = 36.67
+    /// La forma a sinistra nella compatta.
+    static let compactShape: CGFloat = 26
+    /// Margine della forma dal bordo, uguale sopra, sotto e a sinistra: così la forma ha lo stesso
+    /// centro della semicirconferenza dell'isola.
+    static var compactMargin: CGFloat { (compactHeight - compactShape) / 2 }
+    /// Margine del tempo dal bordo destro: con lo stesso margine della forma le cifre sembravano
+    /// attaccate al bordo (il testo non segue la curva come la forma).
+    static let compactTextMargin: CGFloat = 8
 
     var palette: ActivityPalette { ActivityPalette(theme: state.theme, dark: true) }
     var phase: TimetableActivityPhase? { state.phase(isStale: isStale) }
@@ -402,20 +573,19 @@ struct TimetableActivityIsland {
     /// Compatta, a sinistra: la forma con la sigla della materia (o la tazza nelle pause).
     @ViewBuilder var compactLeading: some View {
         if let phase {
-            ActivityPhaseShape(phase: phase, palette: palette, size: 24, letters: 1)
-                .padding(.leading, 2)
+            ActivityPhaseShape(phase: phase, palette: palette, size: Self.compactShape, letters: 1)
         }
     }
 
-    /// Compatta, a destra: il tempo che manca.
+    /// Compatta, a destra: il tempo che manca, attaccato alla fotocamera.
     @ViewBuilder var compactTrailing: some View {
         if let phase {
             if phase.kind == .finished {
                 WidgetIcon("checkCircleFill", size: 18)
                     .foregroundStyle(accent)
             } else {
-                ActivityTimer(phase: phase, font: palette.numeral(15, weight: 650), color: accent, digitWidth: 9)
-                    .padding(.trailing, 2)
+                ActivityIslandTimer(phase: phase, font: palette.timer(15), color: accent,
+                                    compact: state.compactTime == true, isStale: isStale)
             }
         }
     }
@@ -444,7 +614,7 @@ struct TimetableActivityIsland {
                 .foregroundStyle(accent)
         } else {
             Text(ActivityPhaseText.initials(phase.lesson?.title ?? "", max: 1))
-                .font(palette.font(11, weight: 750, rounded: true))
+                .font(palette.font(11, weight: 750))
                 .foregroundStyle(accent)
         }
     }
@@ -501,7 +671,7 @@ struct TimetableActivityIsland {
                         // veniva tagliato a metà dello spazio ("Matemati…") invece di
                         // rimpicciolire (verificato); così si taglia solo se non entra davvero.
                         Text(text.title)
-                            .font(palette.font(18, weight: 600, rounded: true))
+                            .font(palette.font(18, weight: 600))
                             .foregroundStyle(palette.ink)
                             .lineLimit(1)
                         Text(text.detail)

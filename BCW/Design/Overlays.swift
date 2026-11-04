@@ -26,6 +26,8 @@ final class OverlayHost {
         let id = UUID()
         let message: String
         let icon: String
+        /// Indicatore di caricamento al posto dell'icona (operazione in corso).
+        var inProgress = false
         static func == (a: Self, b: Self) -> Bool { a.id == b.id }
     }
 
@@ -56,14 +58,27 @@ final class OverlayHost {
         withAnimation(Motion.effects) { dialog = nil }
     }
 
-    func showToast(_ message: String, icon: String = "checkCircle") {
-        withAnimation(Motion.spatial) { toast = ToastPresentation(message: message, icon: icon) }
+    /// Mostra un avviso in basso. `inProgress`: con l'indicatore di caricamento, finché non lo si
+    /// chiude con `dismissToast(_:)` (al massimo `duration`).
+    @discardableResult
+    func showToast(_ message: String, icon: String = "checkCircle", inProgress: Bool = false,
+                   duration: Duration = .seconds(3.6)) -> UUID {
+        let toast = ToastPresentation(message: message, icon: icon, inProgress: inProgress)
+        withAnimation(Motion.spatial) { self.toast = toast }
         toastTask?.cancel()
         toastTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(3.6))
+            try? await Task.sleep(for: duration)
             guard !Task.isCancelled else { return }
             withAnimation(Motion.effects) { self?.toast = nil }
         }
+        return toast.id
+    }
+
+    /// Chiude l'avviso `id`, se è ancora quello mostrato.
+    func dismissToast(_ id: UUID) {
+        guard toast?.id == id else { return }
+        toastTask?.cancel()
+        withAnimation(Motion.effects) { toast = nil }
     }
 }
 
@@ -581,8 +596,12 @@ private struct ToastView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Icon(toast.icon, size: 20)
-                .foregroundStyle(Theme.inversePrimary)
+            if toast.inProgress {
+                InlineProgress(tint: Theme.inversePrimary, size: 20)
+            } else {
+                Icon(toast.icon, size: 20)
+                    .foregroundStyle(Theme.inversePrimary)
+            }
             Text(toast.message)
                 .font(.m3(14))
                 .foregroundStyle(Theme.inverseOnSurface)

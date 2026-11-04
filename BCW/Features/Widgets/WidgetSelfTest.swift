@@ -7,7 +7,30 @@ import WidgetKit
 /// temporale, la lezione in corso e la prossima, i collegamenti `bcw://`, la codifica
 /// dell'istantanea, il contenitore dell'App Group e le fasi dell'attività in diretta. Stampa `BCW-WIDGET-SELFTEST` con l'esito ed esce.
 enum WidgetSelfTest {
+    /// `-BCWWidgetProbe N`: elenca i widget installati e li fa ridisegnare N volte, ogni 6 secondi,
+    /// scrivendo quante linee temporali e quanti disegni ha fatto l'estensione. Per contare i crash
+    /// sul telefono (i `BCWWidgets-*.ips` in `systemCrashLogs`), che sul simulatore non si vedono.
+    static func probeIfRequested() {
+        let rounds = UserDefaults.standard.integer(forKey: "BCWWidgetProbe")
+        guard rounds > 0 else { return }
+        WidgetCenter.shared.getCurrentConfigurations { result in
+            switch result {
+            case let .success(widgets): print("BCW-WIDGET-PROBE installati \(widgets.count): \(widgets.map { "\($0.kind)/\($0.family)" })")
+            case let .failure(error): print("BCW-WIDGET-PROBE errore: \(error)")
+            }
+        }
+        Task { @MainActor in
+            for round in 1...rounds {
+                WidgetCenter.shared.reloadAllTimelines()
+                try? await Task.sleep(for: .seconds(6))
+                print("BCW-WIDGET-PROBE giro \(round): linee temporali \(WidgetProbe.count("probeTimelines")), disegni \(WidgetProbe.count("probeRenders"))")
+            }
+            print("BCW-WIDGET-PROBE fine")
+        }
+    }
+
     static func runIfRequested() {
+        probeIfRequested()
         guard UserDefaults.standard.bool(forKey: "BCWWidgetSelfTest") else { return }
         var failures: [String] = []
         func check(_ condition: Bool, _ message: String) { if !condition { failures.append(message) } }
@@ -43,6 +66,17 @@ enum WidgetSelfTest {
             WidgetDates.offset(of: date, from: wednesday) == 7 ? [.init(start: 480, end: 540)] : []
         } == 7, "evento fra 7 giorni: quel giorno")
 
+        // Avanzamento della giornata: 5 ore di lezione, un'ora e mezza passata = 30%.
+        check(DayProgress(spans: [.init(start: 480, end: 780)], minute: 570)?.percent == 30, "avanzamento: 30%")
+        check(DayProgress(spans: [.init(start: 480, end: 600), .init(start: 540, end: 660)], minute: 900)?.total == 180,
+              "avanzamento: eventi sovrapposti contati una volta")
+        let gap = DayProgress(spans: [.init(start: 480, end: 540), .init(start: 600, end: 660)], minute: 570)
+        check(gap?.elapsed == 60 && gap?.percent == 50 && gap?.blocks.count == 2, "avanzamento fermo tra due eventi")
+        check(DayProgress(spans: [.init(start: 480, end: 540)], minute: 539)?.percent == 98
+              && DayProgress(spans: [.init(start: 480, end: 540)], minute: 540)?.isFinished == true, "100% solo alla fine")
+        check(DayProgress(spans: [], minute: 600) == nil && DayProgress(spans: [.init(start: 480, end: 540)], minute: 0)?.percent == 0,
+              "avanzamento senza eventi e prima dell'inizio")
+
         // Gli intervalli non contano: dopo l'ultima lezione resta solo un intervallo.
         var snapshot = WidgetSnapshot.sample(now: at(0, 9, 30))
         if let index = snapshot.days.firstIndex(where: { $0.key == BCWShared.dayKey(wednesday) }) {
@@ -77,7 +111,9 @@ enum WidgetSelfTest {
         check(beforeDouble.current == nil && beforeDouble.next?.end == 12 * 60 && beforeDouble.following.map(\.id) == ["sto"],
               "prossima lezione di due ore")
 
-        // Voci della linea temporale: adesso, ogni inizio e fine futuri, le mezzanotti.
+        // Voci della linea temporale: adesso, ogni inizio e fine futuri, le mezzanotti; con la barra
+        // di avanzamento accesa anche ogni 5 minuti durante le lezioni.
+        snapshot.showsDayProgress = true
         let now = at(0, 9, 30)
         let dates = BCWWidgetKind.timetable.timelineDates(snapshot: snapshot, now: now)
         check(dates.first == now, "la prima voce è adesso")
@@ -87,6 +123,16 @@ enum WidgetSelfTest {
             check(dates.contains(expected), "manca la voce \(BCWShared.dayKey(expected)) \(WidgetDates.time(expected))")
         }
         check(!dates.contains(at(0, 9)), "voce passata")
+        check(dates.contains(at(0, 9, 35)) && dates.contains(at(1, 8, 5)) && !dates.contains(at(0, 11, 5)),
+              "voci ogni 5 minuti durante le lezioni (non nell'intervallo)")
+        check(!BCWWidgetKind.now.timelineDates(snapshot: snapshot, now: now).contains(at(0, 9, 35)),
+              "lezione in corso senza le voci dell'avanzamento")
+        check(TimetableWidgetDay(snapshot: snapshot, now: now).progress?.elapsed == 90, "avanzamento del widget alle 9:30")
+        var noProgress = snapshot
+        noProgress.showsDayProgress = nil
+        check(TimetableWidgetDay(snapshot: noProgress, now: now).progress == nil
+              && !BCWWidgetKind.timetable.timelineDates(snapshot: noProgress, now: now).contains(at(0, 9, 35)),
+              "barra spenta: niente avanzamento né voci ogni 5 minuti")
         check(BCWWidgetKind.agenda.timelineDates(snapshot: snapshot, now: now) == [now, at(1, 0), at(2, 0)],
               "compiti: adesso e le mezzanotti")
         let signedOut = WidgetSnapshot(generatedAt: now, signedIn: false)
@@ -131,8 +177,19 @@ enum WidgetSelfTest {
             let last = plan.content(at: at(0, 12, 30), theme: theme)?.state.phases
             check(last?.first?.next == nil && last?.last?.kind == .finished, "ultima lezione, poi lezioni finite")
             check(plan.content(at: at(0, 13, 10), theme: theme) == nil, "finita l'ultima lezione: niente attività")
-            check(plan.nextChange(after: at(0, 9, 30)) == at(0, 10) && plan.nextChange(after: at(0, 13)) == at(0, 13, 10),
-                  "prossimo passaggio di fase")
+            check(plan.nextChange(after: at(0, 9, 30)) == at(0, 9, 50) && plan.nextChange(after: at(0, 9, 50)) == at(0, 10)
+                  && plan.nextChange(after: at(0, 13)) == at(0, 13, 10), "prossimo passaggio di fase o di cifre")
+            // Il tempo perde delle cifre a un'ora e a 10 minuti dalla fine: lo stato cambia e l'app ridisegna l'isola.
+            check(lesson?.state.timerStep == 1 && plan.content(at: at(0, 9, 55), theme: theme)?.state.timerStep == 2
+                  && early?.state.timerStep == 0, "tratti del conto alla rovescia")
+            check(lesson?.staleDate == plan.content(at: at(0, 9, 55), theme: theme)?.staleDate,
+                  "il contenuto scade sempre alla fine della fase")
+            check(plan.content(at: at(0, 9, 30), theme: theme, compactTime: true)?.state.compactTime == true,
+                  "formato compatto nello stato")
+            if let first = lesson?.state, let second = plan.content(at: at(0, 9, 55), theme: theme)?.state {
+                check(second.differsOnlyInTimerStep(from: first) && !first.differsOnlyInTimerStep(from: early?.state ?? first),
+                      "differenza del solo tratto del conto alla rovescia")
+            }
             if let state = lesson?.state, let data = try? JSONEncoder().encode(state) {
                 check(data.count < 4096, "stato dell'attività troppo grande: \(data.count) byte")
             }
@@ -151,6 +208,80 @@ enum WidgetSelfTest {
         check(TimetableActivityPlan(day: wednesday, items: [.init(title: "Intervallo", start: at(0, 11), end: at(0, 12),
                                                                     tint: tint, isBreak: true)]) == nil,
               "senza lezioni niente piano")
+        // Intervalli: al posto della lezione in corso, anche sovrapposti. Uno in mezzo a due ore
+        // uguali di seguito, uno sul passaggio tra due ore uguali, uno dopo l'ultima lezione.
+        let breaks = TimetableActivityPlan(day: wednesday, items: [
+            .init(title: "Matematica", start: at(0, 8), end: at(0, 9), tint: tint),
+            .init(title: "Matematica", start: at(0, 9), end: at(0, 10), tint: tint),
+            .init(title: "Intervallo", start: at(0, 9, 30), end: at(0, 9, 40), tint: tint, isBreak: true),
+            .init(title: "Storia", start: at(0, 10), end: at(0, 11), tint: tint),
+            .init(title: "Storia", start: at(0, 11), end: at(0, 12), tint: tint),
+            .init(title: "Ricreazione", start: at(0, 10, 55), end: at(0, 11, 5), tint: tint, isBreak: true),
+            .init(title: "Dopo", start: at(0, 12), end: at(0, 12, 10), tint: tint, isBreak: true),
+        ])
+        if let breaks {
+            let theme = TimetableActivityTheme(snapshot.theme)
+            check(breaks.lessons.map(\.start) == [at(0, 8), at(0, 9, 40), at(0, 10), at(0, 11, 5)]
+                  && breaks.lessons.map(\.end) == [at(0, 9, 30), at(0, 10), at(0, 10, 55), at(0, 12)],
+                  "lezioni divise dagli intervalli")
+            check(breaks.phases.map(\.kind) == [.before, .lesson, .pause, .lesson, .lesson, .pause, .lesson, .finished],
+                  "fasi con gli intervalli: \(breaks.phases.map(\.kind.rawValue))")
+            check(breaks.end == at(0, 12), "un intervallo dopo l'ultima lezione non conta")
+            let before = breaks.content(at: at(0, 9, 20), theme: theme)
+            check(before?.state.phases.first?.kind == .lesson && before?.staleDate == at(0, 9, 30), "lezione fino all'intervallo")
+            let during = breaks.content(at: at(0, 9, 35), theme: theme)
+            check(during?.state.phases.first?.kind == .pause && during?.state.phases.first?.title == "Intervallo"
+                  && during?.staleDate == at(0, 9, 40) && during?.state.phases.first?.lesson?.start == at(0, 9, 40)
+                  && during?.state.phases.first?.position == 2, "intervallo al posto della lezione in corso")
+            check(breaks.content(at: at(0, 11), theme: theme)?.state.phases.first?.title == "Ricreazione",
+                  "intervallo sul passaggio tra due ore uguali")
+            check(during?.state.phases.dropFirst().first?.kind == .lesson, "dopo l'intervallo la lezione riprende")
+        } else {
+            failures.append("piano con gli intervalli mancante")
+        }
+        // Un'ora libera con un intervallo in mezzo e intervalli sovrapposti.
+        let gap2 = TimetableActivityPlan(day: wednesday, items: [
+            .init(title: "A", start: at(0, 8), end: at(0, 9), tint: tint),
+            .init(title: "B", start: at(0, 10), end: at(0, 11), tint: tint),
+            .init(title: "Intervallo", start: at(0, 9, 20), end: at(0, 9, 30), tint: tint, isBreak: true),
+            .init(title: "Altro", start: at(0, 9, 25), end: at(0, 9, 35), tint: tint, isBreak: true),
+        ])
+        check(gap2?.phases.map(\.kind) == [.before, .lesson, .pause, .pause, .pause, .pause, .lesson, .finished]
+              && gap2?.phases[2].title == nil && gap2?.phases[3].title == "Intervallo" && gap2?.phases[4].title == "Altro"
+              && gap2?.phases[4].start == at(0, 9, 30) && gap2?.phases[5].title == nil, "ora libera con intervalli")
+        // Un intervallo che copre l'ultima lezione e ne scavalca la fine; uno prima della prima lezione.
+        let covered = TimetableActivityPlan(day: wednesday, items: [
+            .init(title: "A", start: at(0, 8), end: at(0, 9), tint: tint),
+            .init(title: "B", start: at(0, 9), end: at(0, 9, 10), tint: tint),
+            .init(title: "Lungo", start: at(0, 9), end: at(0, 9, 20), tint: tint, isBreak: true),
+            .init(title: "Presto", start: at(0, 7, 40), end: at(0, 7, 50), tint: tint, isBreak: true),
+        ])
+        check(covered?.lessons.count == 1 && covered?.end == at(0, 9, 20) && covered?.phases.last?.kind == .finished,
+              "intervallo sopra l'ultima lezione")
+        check(covered?.phases.map(\.kind) == [.before, .pause, .before, .lesson, .pause, .finished]
+              && covered?.phases[0].countdownEnd == at(0, 8) && covered?.phases[0].end == at(0, 7, 40)
+              && covered?.phases[4].lesson == nil, "intervallo prima della prima lezione")
+        check(TimetableActivityPlan(day: wednesday, items: [
+            .init(title: "A", start: at(0, 8), end: at(0, 9), tint: tint),
+            .init(title: "Tutta", start: at(0, 7), end: at(0, 10), tint: tint, isBreak: true),
+        ]) == nil, "lezione tutta coperta: niente piano")
+
+        // Formati del tempo nell'isola, come li scrive iOS (il testo è negativo fino alla fine).
+        func remaining(_ seconds: Double) -> Duration { .seconds(-seconds) }
+        let compact = ActivityIslandTimer.compactLocale
+        check(remaining(2712).formatted(ActivityIslandTimer.unitsStyle(padded: true).locale(compact)) == "-45min",
+              "45min: \(remaining(2712).formatted(ActivityIslandTimer.unitsStyle(padded: true).locale(compact)))")
+        check(remaining(599).formatted(ActivityIslandTimer.unitsStyle(padded: true).locale(compact)) == "-09min"
+              && remaining(599).formatted(ActivityIslandTimer.unitsStyle(padded: false).locale(compact)) == "-9min", "9min")
+        check(remaining(61).formatted(ActivityIslandTimer.unitsStyle(padded: false).locale(compact)) == "-1min", "1min")
+        check(remaining(59).formatted(ActivityIslandTimer.unitsStyle(padded: false).locale(compact)) == "-59s", "59s")
+        check(remaining(15).formatted(ActivityIslandTimer.unitsStyle(padded: true).locale(compact)) == "-15s", "15s")
+        let italian2 = Locale(identifier: "it_IT")
+        check(remaining(5952).formatted(ActivityIslandTimer.clock(hours: "0").locale(italian2)) == "-1:39:12"
+              && remaining(3599).formatted(ActivityIslandTimer.clock(hours: "0").locale(italian2)) == "-0:59:59", "1:39:12 e 0:59:59")
+        check(remaining(599).formatted(ActivityIslandTimer.minutesStyle.locale(italian2)) == "-09:59"
+              && remaining(2712).formatted(ActivityIslandTimer.minutesStyle.locale(italian2)) == "-45:12", "09:59")
+
         // Il caso peggiore per i 4 KB di ActivityKit: nomi lunghi in ogni ora, nessuna unita.
         let long = String(repeating: "Lungo nome ", count: 6)
         let crowded = TimetableActivityPlan(day: wednesday, items: (0..<8).map { hour in

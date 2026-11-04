@@ -29,6 +29,10 @@ struct TimetableLiveActivity: Widget {
             } minimal: {
                 island.minimal
             }
+            // Compatta: forma concentrica con l'isola a sinistra, tempo a destra, entrambi
+            // attaccati alla fotocamera (vedi `TimetableActivityIsland`).
+            .contentMargins(.leading, TimetableActivityIsland.compactMargin, for: .compactLeading)
+            .contentMargins(.trailing, TimetableActivityIsland.compactTextMargin, for: .compactTrailing)
             .keylineTint(island.accent)
             .widgetURL(Self.url(context.attributes))
         }

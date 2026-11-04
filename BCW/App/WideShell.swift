@@ -145,11 +145,15 @@ struct NavigationRail: View {
     /// Pressione prolungata su Tu: cambio dell'account, come nella barra in basso.
     let longPressYou: () -> Void
 
+    private var mainTabs: [MainTabView.AppTab] {
+        MainTabView.AppTab.mainTabs(timetable: model.preferences.showsTimetableTab)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 4) {
                 VStack(spacing: 2) {
-                    ForEach(MainTabView.AppTab.mainTabs, id: \.self) { tab in
+                    ForEach(mainTabs, id: \.self) { tab in
                         item(tab, badge: 0)
                     }
                 }
@@ -188,6 +192,7 @@ struct NavigationRail: View {
 
     private func item(_ tab: MainTabView.AppTab, badge: Int) -> some View {
         RailItem(tab: tab, selected: tab == selection, expanded: expanded, badge: badge,
+                 shortcutIndex: mainTabs.firstIndex(of: tab),
                  select: { select(tab) }, longPress: tab == .you ? longPressYou : nil)
     }
 }
@@ -197,6 +202,8 @@ private struct RailItem: View {
     let selected: Bool
     let expanded: Bool
     let badge: Int
+    /// Posizione tra le destinazioni principali visibili, per ⌘1–⌘4 (`nil` per le sezioni).
+    let shortcutIndex: Int?
     let select: () -> Void
     var longPress: (() -> Void)?
     @State private var pressed = false
@@ -223,7 +230,7 @@ private struct RailItem: View {
                 longPress()
             }
         )
-        .modifier(MainTabShortcut(tab: tab))
+        .modifier(MainTabShortcut(index: shortcutIndex))
         .hoverEffect(.highlight)
         .animation(Motion.effectsFast, value: pressed)
         .animation(Motion.spatial, value: selected)
@@ -315,12 +322,12 @@ private struct OptionalAccessibilityAction: ViewModifier {
     }
 }
 
-/// ⌘1–⌘4 per Dashboard, Orario, Voti e Tu (con una tastiera collegata).
+/// ⌘1–⌘4 per Dashboard, Orario, Voti e Tu (⌘1–⌘3 con l'Orario nascosto; con una tastiera collegata).
 private struct MainTabShortcut: ViewModifier {
-    let tab: MainTabView.AppTab
+    let index: Int?
 
     func body(content: Content) -> some View {
-        if let index = MainTabView.AppTab.mainTabs.firstIndex(of: tab) {
+        if let index {
             content.keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
         } else {
             content

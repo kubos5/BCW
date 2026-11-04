@@ -1,7 +1,13 @@
 {
   "fill-specializations" : [
     {
-      "value" : "system-dark"
+      "value" : {
+        "solid" : "srgb:0.98431,0.96863,0.95686,1.00000"
+      }
+    },
+    {
+      "appearance" : "dark",
+      "value" : "automatic"
     }
   ],
   "groups" : [
@@ -43,7 +49,13 @@
           "fill-specializations" : [
             {
               "value" : {
-                "solid" : "srgb:0.92549,0.43529,0.33333,1.00000"
+                "solid" : "srgb:0.87059,0.26667,0.47451,1.00000"
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "srgb:0.94902,0.40784,0.57255,1.00000"
               }
             },
             {

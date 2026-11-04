@@ -221,24 +221,17 @@ final class ThemeStore {
     var appIconColor: AppIconColor {
         didSet { defaults.set(appIconColor.rawValue, forKey: "appIconColor"); syncedChanged() }
     }
-    var appIconAppearance: AppIconAppearance {
-        didSet { defaults.set(appIconAppearance.rawValue, forKey: "appIconAppearance"); syncedChanged() }
-    }
 
-    /// Icona scelta, con il colore del tema già risolto (il colore proposto più vicino all'accento).
+    /// Icona scelta, con il colore del tema già risolto (quello del colore d'accento).
     var appIconChoice: AppIconChoice {
-        AppIconChoice(color: appIconColor == .theme ? AppIconColor.nearest(to: accentColor) : appIconColor,
-                      appearance: appIconAppearance)
+        AppIconChoice(color: appIconColor == .theme ? AppIconColor.nearest(to: accentColor) : appIconColor)
     }
 
-    var appIconIsDefault: Bool {
-        appIconColor == .theme && appIconAppearance == .automatic
-    }
+    var appIconIsDefault: Bool { appIconColor == .theme }
 
-    /// Ripristina l'icona di BCW (colore del tema, automatica).
+    /// Ripristina l'icona di BCW (colore del tema).
     func resetAppIcon() {
         appIconColor = .theme
-        appIconAppearance = .automatic
     }
 
     /// Asse ROND dei titoli e del testo.
@@ -274,20 +267,12 @@ final class ThemeStore {
         motion = MotionStyle(rawValue: defaults.string(forKey: "motion") ?? "") ?? .expressive
         roundedText = RoundedText(rawValue: defaults.string(forKey: "roundedText") ?? "") ?? .titles
         liquidGlass = defaults.object(forKey: "liquidGlass") as? Bool ?? false
-        // Valori delle versioni precedenti (fino alla 3.2: dieci colori, otto forme, "Sempre chiaro",
-        // sfondo scuro Material o iOS): i colori tolti diventano il più vicino, "Sempre chiaro"
-        // automatico; forma e sfondo scuro non ci sono più.
-        let storedIconColor = defaults.string(forKey: "appIconColor") ?? ""
-        let storedIconAppearance = defaults.string(forKey: "appIconAppearance") ?? ""
-        appIconColor = AppIconColor(stored: storedIconColor) ?? .theme
-        appIconAppearance = AppIconAppearance(stored: storedIconAppearance) ?? .automatic
-        if !storedIconColor.isEmpty, storedIconColor != appIconColor.rawValue {
-            defaults.set(appIconColor.rawValue, forKey: "appIconColor")
+        // Icona: un colore sconosciuto torna al tema. L'aspetto ("Sempre scuro", fino alla 3.2), la
+        // forma e lo sfondo scuro (fino alla 3.1) non ci sono più: lo sfondo segue le icone di iOS.
+        appIconColor = AppIconColor(stored: defaults.string(forKey: "appIconColor") ?? "") ?? .theme
+        for key in ["appIconAppearance", "appIconShape", "appIconDarkBackground"] + AppIconColor.oldNearestKeys {
+            defaults.removeObject(forKey: key)
         }
-        if !storedIconAppearance.isEmpty, storedIconAppearance != appIconAppearance.rawValue {
-            defaults.set(appIconAppearance.rawValue, forKey: "appIconAppearance")
-        }
-        for key in ["appIconShape", "appIconDarkBackground", "appIconNearest"] { defaults.removeObject(forKey: key) }
         #if DEBUG
         // Per le prove: `-BCWLiquidGlass YES` attiva Liquid Glass.
         if defaults.object(forKey: "BCWLiquidGlass") != nil { liquidGlass = defaults.bool(forKey: "BCWLiquidGlass") }
@@ -311,7 +296,6 @@ final class ThemeStore {
             "motion": .string(motion.rawValue),
             "roundedText": .string(roundedText.rawValue),
             "appIconColor": .string(appIconColor.rawValue),
-            "appIconAppearance": .string(appIconAppearance.rawValue),
         ]
     }
 
@@ -329,15 +313,10 @@ final class ThemeStore {
         if let value = values["roundedText"]?.string.flatMap(RoundedText.init(rawValue:)), value != roundedText {
             roundedText = value
         }
-        // Icona dell'app: i valori di un dispositivo con una versione precedente si convertono (colori
-        // tolti → il più vicino, "Sempre chiaro" → automatico), quelli sconosciuti si saltano.
-        // `appIconShape` e `appIconDarkBackground`, ancora sul server, non servono più.
+        // Icona dell'app: i colori sconosciuti si saltano. `appIconAppearance`, `appIconShape` e
+        // `appIconDarkBackground`, ancora sul server, non servono più.
         if let value = values["appIconColor"]?.string.flatMap(AppIconColor.init(stored:)), value != appIconColor {
             appIconColor = value
-        }
-        if let value = values["appIconAppearance"]?.string.flatMap(AppIconAppearance.init(stored:)),
-           value != appIconAppearance {
-            appIconAppearance = value
         }
     }
 

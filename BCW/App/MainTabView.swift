@@ -43,10 +43,15 @@ struct MainTabView: View {
         /// Sezione di Tu come destinazione a sé (solo sull'iPad).
         case section(AppSection)
 
-        /// Le quattro destinazioni principali.
-        static let mainTabs: [AppTab] = [.dashboard, .timetable, .grades, .you]
+        /// Le quattro destinazioni principali (tre con la scheda Orario nascosta, Impostazioni › Orario).
+        static func mainTabs(timetable: Bool) -> [AppTab] {
+            timetable ? [.dashboard, .timetable, .grades, .you] : [.dashboard, .grades, .you]
+        }
+
         /// Schede della barra di sistema, nell'ordine (per le icone piene e la pressione su Tu).
-        static let barTabs: [AppTab] = [.dashboard, .timetable, .grades, .you, .search]
+        static func barTabs(timetable: Bool) -> [AppTab] {
+            mainTabs(timetable: timetable) + [.search]
+        }
 
         var title: String {
             switch self {
@@ -119,6 +124,7 @@ struct MainTabView: View {
     var body: some View {
         let glass = ThemeStore.shared.liquidGlass
         let wide = isRegular && !glass
+        let showsTimetable = model.preferences.showsTimetableTab
         shell
         .environment(\.tabChrome, chrome)
         .environment(\.appNavigation, navigation)
@@ -127,7 +133,8 @@ struct MainTabView: View {
         // perché né la `TabView` né le pile di navigazione passano il margine di un `safeAreaInset`.
         .overlay(alignment: .bottom) {
             if !glass && !isRegular && !chrome.hidesBar {
-                M3NavigationBar(selection: selection, badge: model.unreadNoticesCount) { tab in
+                M3NavigationBar(tabs: AppTab.mainTabs(timetable: showsTimetable), selection: selection,
+                                badge: model.unreadNoticesCount) { tab in
                     tabSelection.wrappedValue = tab
                 } longPress: { tab in
                     if tab == .you { switchingAccount = true }
@@ -140,23 +147,35 @@ struct MainTabView: View {
         // Tenendo premuta la scheda Tu si cambia account al volo.
         .background {
             if glass && !isRegular {
-                TabBarItemLongPress(index: 3) { switchingAccount = true }
-                TabBarSelectedImages(names: AppTab.barTabs.map(\.selectedIcon))
+                // Tu è la quarta scheda, la terza con l'Orario nascosto (le schede nascoste non sono
+                // nella barra di sistema).
+                TabBarItemLongPress(index: AppTab.barTabs(timetable: showsTimetable).firstIndex(of: .you) ?? 3) {
+                    switchingAccount = true
+                }
+                TabBarSelectedImages(names: AppTab.barTabs(timetable: showsTimetable).map(\.selectedIcon))
             }
         }
         .sheet(isPresented: $switchingAccount) {
             AccountSwitcherSheet()
         }
-        // Collegamenti dei widget: la scheda; il giorno lo sceglie la scheda stessa.
+        // Collegamenti dei widget: la scheda; il giorno lo sceglie la scheda stessa. Con la scheda
+        // Orario nascosta l'orario di un giorno apre la Dashboard su quel giorno.
         .onChange(of: model.openedLink, initial: true) { _, link in
             switch link {
             case .dashboard: selection = .dashboard
+            case let .timetable(day) where !showsTimetable:
+                selection = .dashboard
+                model.openedLink = .dashboard(day)
             case .timetable: selection = .timetable
             case .grades:
                 selection = .grades
                 model.openedLink = nil
             case nil: break
             }
+        }
+        // Scheda Orario nascosta mentre è aperta: si torna alla Dashboard.
+        .onChange(of: showsTimetable, initial: true) { _, shows in
+            if !shows && selection == .timetable { selection = .dashboard }
         }
         // Senza Liquid Glass la scheda Cerca non è nella barra in basso: si torna alla Dashboard.
         .onChange(of: glass, initial: true) { old, glass in
@@ -193,7 +212,7 @@ struct MainTabView: View {
             DebugScript.shared.tab = nil
             switch name {
             case "dashboard": tabSelection.wrappedValue = .dashboard
-            case "timetable": tabSelection.wrappedValue = .timetable
+            case "timetable" where showsTimetable: tabSelection.wrappedValue = .timetable
             case "grades": tabSelection.wrappedValue = .grades
             case "you": tabSelection.wrappedValue = .you
             case "search": tabSelection.wrappedValue = .search
@@ -288,6 +307,8 @@ struct MainTabView: View {
             } label: {
                 tabLabel(.timetable)
             }
+            // Impostazioni › Orario › Mostra la scheda Orario.
+            .hidden(!model.preferences.showsTimetableTab)
             Tab(value: AppTab.grades) {
                 GradesView()
                     .modifier(MaterialTab(reselection: reselections[.grades, default: 0]))
@@ -492,6 +513,7 @@ private struct MaterialTab: ViewModifier {
 /// Barra di navigazione di Material 3 (corta, 64 punti) con l'indicatore a pillola.
 private struct M3NavigationBar: View {
     static let height: CGFloat = 68
+    let tabs: [MainTabView.AppTab]
     let selection: MainTabView.AppTab
     let badge: Int
     let select: (MainTabView.AppTab) -> Void
@@ -500,7 +522,7 @@ private struct M3NavigationBar: View {
     var body: some View {
         HStack(spacing: 0) {
             // La ricerca sta nella barra in cima alla Dashboard, come nelle app Google.
-            ForEach(MainTabView.AppTab.mainTabs, id: \.self) { tab in
+            ForEach(tabs, id: \.self) { tab in
                 NavigationBarItem(tab: tab, selected: tab == selection, badge: tab == .you ? badge : 0,
                                   select: { select(tab) }, longPress: { longPress(tab) })
             }

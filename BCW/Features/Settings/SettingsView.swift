@@ -383,9 +383,6 @@ struct AppearanceSettingsSection: View {
             SelectRow("Contrasto", icon: "contrast", selection: $theme.contrast,
                       options: ContrastLevel.allCases.map { ($0, $0.title, nil) })
         }
-        // Con "Tema dell'app" l'icona segue l'accento: cambia (con l'avviso di iOS) uscendo dalla pagina.
-        .onAppear { AppIconController.shared.holdThemeChanges(true) }
-        .onDisappear { AppIconController.shared.holdThemeChanges(false) }
 
         ListGroup {
             AppIconSettingsLink()

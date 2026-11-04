@@ -3,7 +3,7 @@ import Foundation
 
 /// Generatore delle icone (solo DEBUG). Con `-BCWGenerateAppIcons /percorso/assoluto/BCW/Resources`
 /// scrive le icone di Icon Composer di Impostazioni › Aspetto › Icona dell'app, poi esce: la
-/// principale `AppIcon.icon` (Mattone, automatica) e le altre in `AppIcons/<nome>.icon`. iOS non
+/// principale `AppIcon.icon` (Mattone) e le altre dieci in `AppIcons/<nome>.icon`. iOS non
 /// sa disegnare le icone mentre l'app gira: vanno tutte nel pacchetto.
 ///
 /// Ogni icona ha tre livelli: lo sfondo, il cerchio e la barra, questi ultimi in due gruppi
@@ -76,19 +76,10 @@ enum AppIconGenerator {
         let tint = choice.color.tint ?? AppIconPalette.tints[.mattone]!
         let gray = String(format: "%.5f", AppIconPalette.tintedShapeWhite)
         let tintedShape: [String: Any] = ["solid": "srgb:\(gray),\(gray),\(gray),1.00000"]
-        // Automatica: sfondo bianco caldo, e con le icone scure quello di iOS (`automatic`) con il
-        // cerchio più chiaro. Sempre scura: lo sfondo scuro di iOS (`system-dark`) e il cerchio della
-        // scura anche con le icone chiare. Con le icone colorate il cerchio è grigio (iOS tinge).
-        let background: [[String: Any]]
-        let shape: [[String: Any]]
-        switch choice.appearance {
-        case .automatic:
-            background = [entry(nil, solid(AppIconPalette.lightBackground)), entry("dark", "automatic")]
-            shape = [entry(nil, solid(tint.light)), entry("dark", solid(tint.dark)), entry("tinted", tintedShape)]
-        case .dark:
-            background = [entry(nil, "system-dark")]
-            shape = [entry(nil, solid(tint.dark)), entry("tinted", tintedShape)]
-        }
+        // Sfondo bianco caldo, e con le icone scure quello di iOS (`automatic`) con il cerchio più
+        // chiaro. Con le icone colorate il cerchio è grigio (iOS tinge).
+        let background = [entry(nil, solid(AppIconPalette.lightBackground)), entry("dark", "automatic")]
+        let shape = [entry(nil, solid(tint.light)), entry("dark", solid(tint.dark)), entry("tinted", tintedShape)]
         func group(_ name: String, _ layer: String, _ fills: [[String: Any]], _ scale: CGFloat) -> [String: Any] {
             [
                 "layers": [[

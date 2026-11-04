@@ -28,6 +28,13 @@ nonisolated struct TimetableActivityState: Codable, Hashable, Sendable {
     /// Lezioni del giorno (ore uguali di seguito contano una volta).
     var lessonCount: Int
     var theme: TimetableActivityTheme
+    /// Tempo in formato compatto ("1h39", "45min", "15s") nella Dynamic Island ai lati della
+    /// fotocamera (Impostazioni › Orario). Facoltativo: gli stati di prima non ce l'hanno.
+    var compactTime: Bool?
+    /// Tratto del conto alla rovescia (`TimetableActivityPhase.timerStep`): cambia quando il tempo
+    /// perde delle cifre. L'isola prende la larghezza solo quando viene ridisegnata, e iOS la
+    /// ridisegna solo se lo stato cambia: senza questo valore l'aggiornamento non partiva.
+    var timerStep: Int?
 
     /// La fase da mostrare. Scaduto il contenuto, almeno la seconda; se iOS ridisegna più tardi
     /// (es. riaccendendo lo schermo), quella in corso in quel momento.
@@ -35,17 +42,25 @@ nonisolated struct TimetableActivityState: Codable, Hashable, Sendable {
         guard isStale, phases.count > 1 else { return phases.first }
         return phases[phases.indices.dropFirst().last { phases[$0].start <= now } ?? 1]
     }
+
+    /// Rispetto a `other` cambia solo il tratto del conto alla rovescia.
+    func differsOnlyInTimerStep(from other: TimetableActivityState) -> Bool {
+        var copy = other
+        copy.timerStep = timerStep
+        return copy == self
+    }
 }
 
-/// Un tratto della giornata con lo stesso contenuto: prima dell'inizio, una lezione, una pausa tra
-/// due lezioni, lezioni finite.
+/// Un tratto della giornata con lo stesso contenuto: prima dell'inizio, una lezione, un intervallo
+/// o un'ora libera, lezioni finite.
 nonisolated struct TimetableActivityPhase: Codable, Hashable, Sendable {
     enum Kind: String, Codable, Sendable {
         /// Prima della prima lezione: conto alla rovescia all'inizio.
         case before
         /// Lezione in corso.
         case lesson
-        /// Intervallo o ora libera tra due lezioni: conto alla rovescia alla prossima.
+        /// Un intervallo dell'orario (con `title`, al posto della lezione in corso se le si
+        /// sovrappone) o un'ora libera tra due lezioni: conto alla rovescia alla fine.
         case pause
         /// Dopo l'ultima lezione (solo come contenuto finale o scaduto).
         case finished
@@ -54,7 +69,8 @@ nonisolated struct TimetableActivityPhase: Codable, Hashable, Sendable {
     var kind: Kind
     var start: Date
     var end: Date
-    /// La lezione in evidenza: quella in corso, o la prossima (prima dell'inizio e nelle pause).
+    /// La lezione in evidenza: quella in corso, o la prossima (prima dell'inizio e nelle pause;
+    /// `nil` se dopo un intervallo non ci sono altre lezioni).
     var lesson: TimetableActivityLesson?
     /// La lezione dopo quella in evidenza (`nil`: è l'ultima).
     var next: TimetableActivityLesson?
@@ -64,6 +80,25 @@ nonisolated struct TimetableActivityPhase: Codable, Hashable, Sendable {
     var position: Int
 
     var interval: ClosedRange<Date> { start...max(start.addingTimeInterval(1), end) }
+
+    /// Dove arriva il conto alla rovescia: la fine della fase; prima dell'inizio la prima lezione,
+    /// anche se in mezzo c'è un intervallo.
+    var countdownEnd: Date { kind == .before ? lesson?.start ?? end : end }
+
+    /// Secondi che mancano sotto i quali il conto alla rovescia ha meno cifre ("0:00:00", "00:00",
+    /// "0:00").
+    static let timerThresholds: [TimeInterval] = [3600, 600]
+
+    /// Quante soglie del conto alla rovescia sono passate a un certo istante.
+    func timerStep(at date: Date) -> Int {
+        let remaining = countdownEnd.timeIntervalSince(date)
+        return Self.timerThresholds.filter { remaining < $0 }.count
+    }
+
+    /// Gli istanti in cui il conto alla rovescia perde delle cifre.
+    var timerChanges: [Date] {
+        kind == .finished ? [] : Self.timerThresholds.map { countdownEnd.addingTimeInterval(-$0) }
+    }
 }
 
 /// Una lezione (ore uguali di seguito unite).
@@ -96,8 +131,6 @@ nonisolated struct TimetableActivityTheme: Codable, Hashable, Sendable {
 
     var light: Roles
     var dark: Roles
-    var rond: Double
-    var rondBody: Double
 
     init(_ theme: WidgetSnapshot.ThemeSnapshot) {
         func roles(_ values: [String: String], _ defaults: [String: String]) -> Roles {
@@ -111,8 +144,6 @@ nonisolated struct TimetableActivityTheme: Codable, Hashable, Sendable {
         }
         light = roles(theme.light, ThemeDefaults.light)
         dark = roles(theme.dark, ThemeDefaults.dark)
-        rond = theme.rond
-        rondBody = theme.rondBody
     }
 }
 
@@ -138,6 +169,10 @@ nonisolated struct TimetableActivityPlan {
     /// Fasi portate da ogni contenuto: quella in corso e le successive (lo stato resta sotto i 4 KB
     /// che ActivityKit accetta).
     static let carried = 4
+    /// iOS segna scaduto un contenuto non prima di 120 secondi dall'ultimo aggiornamento (visto nei
+    /// registri di `liveactivitiesd`): un aggiornamento più vicino di così alla fine della fase farebbe
+    /// slittare il passaggio alla fase dopo.
+    static let staleFloor: TimeInterval = 130
 
     let day: Date
     let lessons: [TimetableActivityLesson]
@@ -147,43 +182,92 @@ nonisolated struct TimetableActivityPlan {
     /// `nil` senza lezioni.
     init?(day: Date, items: [Item]) {
         self.day = day
+        // Intervalli in ordine e senza sovrapposizioni.
+        var breaks: [Item] = []
+        for item in items.filter({ $0.isBreak && $0.end > $0.start }).sorted(by: { ($0.start, $0.end) < ($1.start, $1.end) }) {
+            var item = item
+            if let last = breaks.last {
+                if item.end <= last.end { continue }
+                item.start = max(item.start, last.end)
+            }
+            breaks.append(item)
+        }
         // Lezioni in ordine, senza sovrapposizioni; ore uguali di seguito (stessa materia, colore,
-        // aula) unite come nei gruppi dell'orario.
-        var lessons: [TimetableActivityLesson] = []
+        // aula) unite come nei gruppi dell'orario, ma non se sul passaggio c'è un intervallo (come
+        // nella vista Lista, `TimetableLayout(splitAtBreaks:)`).
+        var merged: [TimetableActivityLesson] = []
         for item in items.filter({ !$0.isBreak && $0.end > $0.start }).sorted(by: { ($0.start, $0.end) < ($1.start, $1.end) }) {
             var start = item.start
-            if let last = lessons.last {
+            if let last = merged.last {
                 if item.end <= last.end { continue }
                 start = max(start, last.end)
-                if start == last.end, item.title == last.title, item.tint == last.tint, item.room == last.room {
-                    lessons[lessons.count - 1].end = item.end
-                    lessons[lessons.count - 1].isTest = last.isTest || item.isTest
-                    if lessons[lessons.count - 1].teacher.isEmpty { lessons[lessons.count - 1].teacher = item.teacher }
+                if start == last.end, item.title == last.title, item.tint == last.tint, item.room == last.room,
+                   !breaks.contains(where: { $0.start <= start && start <= $0.end }) {
+                    merged[merged.count - 1].end = item.end
+                    merged[merged.count - 1].isTest = last.isTest || item.isTest
+                    if merged[merged.count - 1].teacher.isEmpty { merged[merged.count - 1].teacher = item.teacher }
                     continue
                 }
             }
-            lessons.append(TimetableActivityLesson(title: item.title, room: item.room, teacher: item.teacher,
-                                                   start: start, end: item.end, tint: item.tint, isTest: item.isTest))
+            merged.append(TimetableActivityLesson(title: item.title, room: item.room, teacher: item.teacher,
+                                                  start: start, end: item.end, tint: item.tint, isTest: item.isTest))
         }
-        guard let first = lessons.first, let last = lessons.last else { return nil }
+        // Mentre è in corso un intervallo si vede l'intervallo: le lezioni perdono i tratti coperti
+        // (una lezione con un intervallo in mezzo diventa due).
+        var lessons: [TimetableActivityLesson] = []
+        for lesson in merged {
+            var part = lesson
+            for pause in breaks where pause.end > part.start && pause.start < lesson.end {
+                if pause.start > part.start {
+                    part.end = pause.start
+                    lessons.append(part)
+                }
+                part.start = pause.end
+                part.end = lesson.end
+            }
+            if part.start < part.end { lessons.append(part) }
+        }
+        guard let first = lessons.first, let schoolEnd = merged.last?.end else { return nil }
         self.lessons = lessons
-        let breaks = items.filter(\.isBreak)
+
+        // Gli intervalli che contano: dalla mezz'ora prima della prima lezione fino alla fine
+        // dell'ultima (uno rimasto dopo l'ultima lezione non tiene aperta l'attività, come nel
+        // giorno predefinito dell'orario).
+        let autoStart = first.start.addingTimeInterval(-Self.lead)
+        var pending = breaks.filter { $0.end > autoStart && $0.start < schoolEnd }[...]
 
         func lesson(_ index: Int) -> TimetableActivityLesson? { lessons.indices.contains(index) ? lessons[index] : nil }
-        var phases = [TimetableActivityPhase(kind: .before, start: first.start.addingTimeInterval(-Self.lead),
-                                             end: first.start, lesson: first, next: lesson(1), position: 1)]
-        for (index, current) in lessons.enumerated() {
-            phases.append(TimetableActivityPhase(kind: .lesson, start: current.start, end: current.end, lesson: current,
-                                                 next: lesson(index + 1), position: index + 1))
-            if let following = lesson(index + 1), following.start > current.end {
-                // Il nome dell'intervallo che cade nella pausa, se nell'orario c'è.
-                let pause = breaks.first { $0.start < following.start && $0.end > current.end }
-                phases.append(TimetableActivityPhase(kind: .pause, start: current.end, end: following.start,
-                                                     lesson: following, next: lesson(index + 2),
-                                                     title: pause?.title, position: index + 2))
+        var phases: [TimetableActivityPhase] = []
+        var cursor = autoStart
+        /// La prima lezione non ancora cominciata.
+        var upcoming = 0
+        /// Il tratto senza lezioni né intervalli fino a `date`.
+        func addWait(until date: Date) {
+            guard date > cursor else { return }
+            phases.append(TimetableActivityPhase(kind: upcoming == 0 ? .before : .pause, start: cursor, end: date,
+                                                 lesson: lesson(upcoming), next: lesson(upcoming + 1),
+                                                 position: upcoming + 1))
+        }
+        while upcoming < lessons.count || !pending.isEmpty {
+            if let pause = pending.first, upcoming == lessons.count || pause.start <= lessons[upcoming].start {
+                let start = max(pause.start, cursor)
+                addWait(until: start)
+                phases.append(TimetableActivityPhase(kind: .pause, start: start, end: pause.end,
+                                                     lesson: lesson(upcoming), next: lesson(upcoming + 1),
+                                                     title: pause.title, position: min(upcoming + 1, lessons.count)))
+                cursor = pause.end
+                pending.removeFirst()
+            } else {
+                let current = lessons[upcoming]
+                addWait(until: current.start)
+                phases.append(TimetableActivityPhase(kind: .lesson, start: current.start, end: current.end,
+                                                     lesson: current, next: lesson(upcoming + 1),
+                                                     position: upcoming + 1))
+                cursor = current.end
+                upcoming += 1
             }
         }
-        phases.append(TimetableActivityPhase(kind: .finished, start: last.end, end: last.end.addingTimeInterval(3600),
+        phases.append(TimetableActivityPhase(kind: .finished, start: cursor, end: cursor.addingTimeInterval(3600),
                                              position: lessons.count))
         self.phases = phases
     }
@@ -201,8 +285,8 @@ nonisolated struct TimetableActivityPlan {
 
     /// Inizio della prima lezione.
     var firstStart: Date { lessons[0].start }
-    /// Fine dell'ultima lezione: lì l'attività finisce.
-    var end: Date { lessons[lessons.count - 1].end }
+    /// Fine dell'ultima lezione (o dell'intervallo che la scavalca): lì l'attività finisce.
+    var end: Date { phases[phases.count - 1].start }
     /// Inizio dell'avvio automatico.
     var autoStart: Date { firstStart.addingTimeInterval(-Self.lead) }
 
@@ -213,11 +297,14 @@ nonisolated struct TimetableActivityPlan {
 
     /// Contenuto dell'attività a un certo istante: la fase in corso e le successive, scaduto alla
     /// fine della fase in corso. `nil` dopo l'ultima lezione.
-    func content(at date: Date, theme: TimetableActivityTheme) -> ActivityContent<TimetableActivityState>? {
+    func content(at date: Date, theme: TimetableActivityTheme,
+                 compactTime: Bool = false) -> ActivityContent<TimetableActivityState>? {
         guard date < end else { return nil }
         let index = phaseIndex(at: date)
         let shown = Array(phases[index...].prefix(Self.carried))
-        return ActivityContent(state: TimetableActivityState(phases: shown, lessonCount: lessons.count, theme: theme),
+        return ActivityContent(state: TimetableActivityState(phases: shown, lessonCount: lessons.count, theme: theme,
+                                                             compactTime: compactTime,
+                                                             timerStep: phases[index].timerStep(at: date)),
                                staleDate: phases[index].end)
     }
 
@@ -228,9 +315,10 @@ nonisolated struct TimetableActivityPlan {
                         staleDate: nil)
     }
 
-    /// Il prossimo istante in cui il contenuto cambia (inizio di una fase o fine delle lezioni).
+    /// Il prossimo istante in cui il contenuto cambia: inizio di una fase, fine delle lezioni o
+    /// conto alla rovescia che perde delle cifre (l'isola va ridisegnata per stringersi).
     func nextChange(after date: Date) -> Date? {
-        phases.map(\.start).first { $0 > date }
+        (phases.map(\.start) + phases[phaseIndex(at: date)].timerChanges).filter { $0 > date }.min()
     }
 }
 
@@ -239,7 +327,8 @@ nonisolated struct TimetableActivityPlan {
 
 nonisolated extension TimetableActivityPlan {
     /// Orario finto per le prove (`-BCWLiveActivityDemo YES` e galleria dei widget): prima lezione a
-    /// `start`, lezioni da 2 `unit`, un intervallo da `unit`, la seconda lezione con una verifica.
+    /// `start`, lezioni da 2 `unit`, un intervallo da `unit`, la seconda lezione con una verifica e
+    /// un intervallo sovrapposto da mezza `unit`.
     static func sampleItems(start: Date, unit: TimeInterval) -> [Item] {
         func at(_ units: Double) -> Date { start.addingTimeInterval(units * unit) }
         func tint(_ light: Int, _ dark: Int) -> WidgetSnapshot.Tint { .init(light: light, dark: dark) }
@@ -249,6 +338,7 @@ nonisolated extension TimetableActivityPlan {
             Item(title: "Intervallo", start: at(2), end: at(3), tint: tint(0x9A8C78, 0xB8AC98), isBreak: true),
             Item(title: "Storia", room: "Lab 2", teacher: "Verdi Andrea", start: at(3), end: at(5),
                  tint: tint(0x7C5808, 0xEFBF6A), isTest: true),
+            Item(title: "Ricreazione", start: at(3.5), end: at(4), tint: tint(0x9A8C78, 0xB8AC98), isBreak: true),
             Item(title: "Inglese", room: "Lab 1", teacher: "Smith Anna", start: at(5), end: at(7),
                  tint: tint(0x29685F, 0x94D2C7)),
         ]

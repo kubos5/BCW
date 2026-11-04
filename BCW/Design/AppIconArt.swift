@@ -2,10 +2,11 @@ import SwiftUI
 
 // MARK: - Icona dell'app: opzioni (Impostazioni › Aspetto › Icona dell'app)
 
-/// Colore dell'icona: quello del tema (il colore proposto più vicino all'accento) o uno dei sei
-/// colori dell'icona. Ogni colore ha due icone di Icon Composer (automatica e sempre scura).
+/// Colore dell'icona: quello del tema o uno degli undici colori dell'icona, uno per ogni colore
+/// d'accento proposto in Aspetto più Grafite. Ogni colore ha un'icona di Icon Composer; lo sfondo
+/// segue sempre le icone chiare, scure o colorate di iOS.
 enum AppIconColor: String, CaseIterable, Identifiable {
-    case theme, mattone, arancio, verde, blu, viola, grafite
+    case theme, mattone, arancio, oro, verde, petrolio, blu, indaco, viola, rosa, ardesia, grafite
 
     var id: String { rawValue }
 
@@ -17,9 +18,14 @@ enum AppIconColor: String, CaseIterable, Identifiable {
         case .theme: "Tema dell'app"
         case .mattone: "Mattone"
         case .arancio: "Arancio"
+        case .oro: "Oro"
         case .verde: "Verde"
+        case .petrolio: "Petrolio"
         case .blu: "Blu"
+        case .indaco: "Indaco"
         case .viola: "Viola"
+        case .rosa: "Rosa"
+        case .ardesia: "Ardesia"
         case .grafite: "Grafite"
         }
     }
@@ -27,32 +33,40 @@ enum AppIconColor: String, CaseIterable, Identifiable {
     /// Tinte del cerchio (`nil` per il tema).
     var tint: AppIconTint? { AppIconPalette.tints[self] }
 
-    /// Valore salvato o arrivato dall'account BCW, anche di una versione precedente (fino alla 3.2
-    /// c'erano dieci colori, quelli di `accentPresets`): i colori tolti diventano il più vicino
-    /// (calcolato con `nearest`). `nil` per un valore sconosciuto.
-    init?(stored: String) {
-        if let color = AppIconColor(rawValue: stored) {
-            self = color
-            return
-        }
-        switch stored {
-        case "oro": self = .arancio
-        case "petrolio": self = .verde
-        case "indaco": self = .blu
-        case "rosa": self = .mattone
-        case "ardesia": self = .grafite
-        default: return nil
+    /// Colore d'accento proposto in Aspetto (`accentPresets`) a cui il colore dell'icona fa da
+    /// predefinito: con "Tema dell'app" e quell'accento l'icona prende questo colore. Grafite non
+    /// corrisponde a nessun accento (lo prendono i colori quasi grigi scelti a mano).
+    var themeAccent: String? {
+        switch self {
+        case .mattone: "#a23e2f"
+        case .arancio: "#c0661b"
+        case .oro: "#9a7b12"
+        case .verde: "#2f7d55"
+        case .petrolio: "#1f7a80"
+        case .blu: "#2f6db5"
+        case .indaco: "#5b5bb0"
+        case .viola: "#8a4fb0"
+        case .rosa: "#b8456f"
+        case .ardesia: "#5f6b7a"
+        case .theme, .grafite: nil
         }
     }
 
-    /// Il colore dell'icona più vicino a un colore qualsiasi (HCT di Material): Grafite per i
-    /// colori quasi grigi (croma sotto 16), altrimenti il colore con la tonalità più vicina.
-    /// Solo la tonalità, non la distanza nel piano tonalità-croma: con sei colori distanti tra loro
-    /// un azzurro (a metà tra Verde e Blu) finiva su Grafite, che ha poco croma ma una tonalità blu.
+    /// Valore salvato o arrivato dall'account BCW. I nomi dei colori della 3.1 (uno per accento)
+    /// sono di nuovo colori dell'icona; `nil` per un valore sconosciuto.
+    init?(stored: String) {
+        self.init(rawValue: stored)
+    }
+
+    /// Il colore dell'icona per un colore d'accento: per i colori proposti in Aspetto il loro
+    /// (`themeAccent`); per un colore scelto a mano Grafite se è quasi grigio (croma HCT sotto 16),
+    /// altrimenti il colore con la tonalità più vicina. Solo la tonalità, non la distanza nel piano
+    /// tonalità-croma: un azzurro a metà tra Petrolio e Blu finiva su Grafite, che ha poco croma ma
+    /// una tonalità blu.
     static func nearest(to accent: String) -> AppIconColor {
         let hex = ThemeStore.normalize(accent) ?? defaultAccent
+        if let preset = presets.first(where: { $0.themeAccent == hex }) { return preset }
         if let cached = nearestCache[hex] { return cached }
-        if hex == defaultAccent { return .mattone }
         // Il risultato resta salvato tra un avvio e l'altro: calcolarlo carica JavaScriptCore, che
         // all'avvio con un colore qualsiasi non serve (i colori del tema sono in cache), e
         // `AppIconController` lo chiede appena parte l'interfaccia.
@@ -68,7 +82,7 @@ enum AppIconColor: String, CaseIterable, Identifiable {
             best = .grafite
         } else {
             var bestDistance = Double.infinity
-            for color in presets where color != .grafite {
+            for color in presets where color != .grafite && color != .ardesia {
                 guard let hue = color.tint.flatMap({ ColorEngine.shared.hueChroma($0.lightHex)?.hue }) else { continue }
                 let difference = abs(hue - target.hue).truncatingRemainder(dividingBy: 360)
                 let distance = min(difference, 360 - difference)
@@ -83,57 +97,29 @@ enum AppIconColor: String, CaseIterable, Identifiable {
         return best
     }
 
-    /// Chiave del risultato salvato (quella delle versioni con dieci colori era `appIconNearest`).
-    private static let nearestKey = "appIconNearestTint"
+    /// Chiave del risultato salvato. Quelle delle versioni precedenti (`appIconNearestTint` con sei
+    /// colori, `appIconNearest` con dieci) davano colori che ora non sono più i più vicini.
+    private static let nearestKey = "appIconThemeTint"
+    static let oldNearestKeys = ["appIconNearestTint", "appIconNearest"]
     private static var nearestCache: [String: AppIconColor] = [:]
 }
 
-/// Aspetto dell'icona rispetto alla modalità delle icone di iOS (chiare, scure, colorate).
-enum AppIconAppearance: String, CaseIterable, Identifiable {
-    case automatic = "auto", dark
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .automatic: "Automatico"
-        case .dark: "Sempre scuro"
-        }
-    }
-
-    /// Valore salvato o arrivato dall'account BCW: "Sempre chiaro" (fino alla 3.2) diventa
-    /// automatico.
-    init?(stored: String) {
-        if let appearance = AppIconAppearance(rawValue: stored) {
-            self = appearance
-        } else if stored == "light" {
-            self = .automatic
-        } else {
-            return nil
-        }
-    }
-}
-
-/// Icona scelta: colore già risolto (mai `.theme`) e aspetto.
+/// Icona scelta, con il colore già risolto (mai `.theme`).
 struct AppIconChoice: Hashable {
     var color: AppIconColor
-    var appearance: AppIconAppearance
 
-    /// Combinazione dell'icona principale (`AppIcon.icon`).
-    static let primary = AppIconChoice(color: .mattone, appearance: .automatic)
+    /// Icona principale (`AppIcon.icon`).
+    static let primary = AppIconChoice(color: .mattone)
 
     /// Nome dell'icona alternativa (`AppIcons/<nome>.icon`, `nil` = icona principale). Gli stessi
     /// nomi vanno in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES` (progetto e `project.yml`).
     var assetName: String? {
-        if self == .primary { return nil }
-        return appearance == .dark ? "AppIcon-\(color.rawValue)-scura" : "AppIcon-\(color.rawValue)"
+        self == .primary ? nil : "AppIcon-\(color.rawValue)"
     }
 
-    /// Tutte le combinazioni, la principale per prima (per il generatore).
+    /// Tutte le icone, la principale per prima (per il generatore).
     static var all: [AppIconChoice] {
-        AppIconAppearance.allCases.flatMap { appearance in
-            AppIconColor.presets.map { AppIconChoice(color: $0, appearance: appearance) }
-        }
+        AppIconColor.presets.map { AppIconChoice(color: $0) }
     }
 }
 
@@ -173,9 +159,14 @@ enum AppIconPalette {
     static let tints: [AppIconColor: AppIconTint] = [
         .mattone: AppIconTint(light: 0xC4432B, dark: 0xEC6F55),
         .arancio: AppIconTint(light: 0xFF8A1F, dark: 0xFF9632),
+        .oro: AppIconTint(light: 0xE5AA00, dark: 0xF6C12C),
         .verde: AppIconTint(light: 0x22A55A, dark: 0x34C46E),
+        .petrolio: AppIconTint(light: 0x0E959E, dark: 0x27B5BE),
         .blu: AppIconTint(light: 0x1F7AF0, dark: 0x3D8EFF),
+        .indaco: AppIconTint(light: 0x5856D6, dark: 0x7472F0),
         .viola: AppIconTint(light: 0x9B4FE0, dark: 0xAE73F7),
+        .rosa: AppIconTint(light: 0xDE4479, dark: 0xF26892),
+        .ardesia: AppIconTint(light: 0x56677F, dark: 0x8193AB),
         .grafite: AppIconTint(light: 0x5A6068, dark: 0x7F868F),
     ]
     /// Sfondo dell'icona chiara: un bianco caldo.
@@ -196,9 +187,9 @@ enum AppIconPalette {
         let tint = choice.color.tint ?? tints[.mattone]!
         func color(_ hex: Int) -> Color { Color(platformColor: PlatformColor(hex: hex)) }
         switch mode {
-        case .light where choice.appearance == .automatic:
+        case .light:
             return AppIconColors(background: .solid(color(lightBackground)), shape: color(tint.light), bar: color(bar))
-        case .light, .dark:
+        case .dark:
             return AppIconColors(background: systemDark, shape: color(tint.dark), bar: color(bar))
         case .tinted:
             return AppIconColors(background: .clear, shape: Color(white: tintedShapeWhite), bar: color(bar))
@@ -283,7 +274,7 @@ struct AppIconPreview: View {
     var body: some View {
         let mask = RoundedRectangle(cornerRadius: size * AppIconGeometry.mask, style: .continuous)
         let colors = AppIconPalette.colors(for: choice, mode: mode)
-        let darkBackground = mode != .light || choice.appearance == .dark
+        let darkBackground = mode != .light
         ZStack {
             if mode == .tinted {
                 // iOS tinge la scala di grigi sul suo sfondo scuro.
