@@ -59,6 +59,9 @@ nonisolated struct BCWTimelineProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<BCWWidgetEntry>) -> Void) {
+        #if DEBUG
+        WidgetProbe.bump("probeTimelines")
+        #endif
         let now = Date()
         let snapshot = WidgetSnapshot.load() ?? WidgetSnapshot()
         let entries = kind.timelineDates(snapshot: snapshot, now: now).map { BCWWidgetEntry(date: $0, snapshot: snapshot) }
@@ -77,6 +80,9 @@ struct BCWWidgetEntryView: View {
     @Environment(\.widgetRenderingMode) private var renderingMode
 
     var body: some View {
+        #if DEBUG
+        let _ = WidgetProbe.bump("probeRenders")
+        #endif
         let palette = WidgetPalette(theme: entry.snapshot.theme, colorScheme: colorScheme, look: WidgetLook(renderingMode))
         kind.content(snapshot: entry.snapshot, now: entry.date, family: family, palette: palette)
             .containerBackground(for: .widget) {

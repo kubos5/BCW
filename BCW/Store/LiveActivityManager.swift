@@ -11,8 +11,9 @@ import UIKit
 ///   l'attività segue i cambi dell'orario, `refreshAll`, il ritorno nell'app e la mezzanotte.
 /// - Lo stato porta la fase attuale e la successiva e scade alla fine della prima: se l'app non si
 ///   sveglia in tempo, la vista mostra da sola la fase successiva (`isStale`).
-/// - Con l'app in esecuzione si aggiorna a ogni passaggio di fase; in secondo piano ci prova
-///   l'aggiornamento in background programmato al passaggio successivo (iOS decide se e quando).
+/// - Con l'app in esecuzione si aggiorna a ogni passaggio di fase e quando il conto alla rovescia
+///   perde delle cifre (l'isola si stringe solo così); in secondo piano ci prova l'aggiornamento in
+///   background programmato al passaggio successivo (iOS decide se e quando).
 /// - Avvio automatico (Impostazioni › Orario): oggi dalla mezz'ora prima della prima lezione fino
 ///   alla fine dell'ultima; il prossimo giorno di scuola viene programmato in anticipo (iOS 26) e
 ///   parte da solo anche con l'app chiusa.
@@ -199,25 +200,26 @@ final class LiveActivityManager {
         // Con "Prova la demo" niente avvio automatico (né programmato, con il suo avviso, per il
         // giorno dopo): l'orario è di prova e la demo resta aperta anche riaprendo l'app. A mano sì.
         let automatic = model.preferences.liveActivities && !isDemo && !snapshot.isDemo
+        let compactTime = model.preferences.liveActivityCompactTime
         var wishes: [Wish] = []
 
         let todayPlan = plan(for: today, snapshot: snapshot)
         #if DEBUG
         // `-BCWLiveActivityDemoStart N`: la prova parte da sola tra N secondi, anche con l'app chiusa.
         if let plan = todayPlan, let start = demoStart, now < start.addingTimeInterval(-5),
-           let content = plan.content(at: start, theme: theme) {
+           let content = plan.content(at: start, theme: theme, compactTime: compactTime) {
             return ([Wish(dayKey: todayKey, start: start, plan: plan, content: content)], todayPlan)
         }
         #endif
         let waiting = retryAfter.map { now < $0 } ?? false
         if let plan = todayPlan, manual || (automatic && stopped != todayKey), !waiting,
-           let content = plan.content(at: now, theme: theme) {
+           let content = plan.content(at: now, theme: theme, compactTime: compactTime) {
             let running = TimetableActivity.activities.contains {
                 $0.attributes.dayKey == todayKey && ($0.activityState == .active || $0.activityState == .stale)
             }
             if manual || running || now >= plan.autoStart.addingTimeInterval(-60) {
                 wishes.append(Wish(dayKey: todayKey, start: nil, plan: plan, content: content))
-            } else if let content = plan.content(at: plan.autoStart, theme: theme) {
+            } else if let content = plan.content(at: plan.autoStart, theme: theme, compactTime: compactTime) {
                 wishes.append(Wish(dayKey: todayKey, start: plan.autoStart, plan: plan, content: content))
             }
         }
@@ -228,7 +230,7 @@ final class LiveActivityManager {
                       let plan = plan(for: day, snapshot: snapshot) else { continue }
                 let key = BCWShared.dayKey(day)
                 if stopped != key, plan.autoStart > now.addingTimeInterval(60),
-                   let content = plan.content(at: plan.autoStart, theme: theme) {
+                   let content = plan.content(at: plan.autoStart, theme: theme, compactTime: compactTime) {
                     wishes.append(Wish(dayKey: key, start: plan.autoStart, plan: plan, content: content))
                 }
                 break
@@ -279,7 +281,11 @@ final class LiveActivityManager {
                 }
                 satisfied.insert(index)
                 let content = wishes[index].content
-                if activity.content.state != content.state || activity.content.staleDate != content.staleDate {
+                // Solo per stringere l'isola non vale la pena rischiare il passaggio alla fase dopo.
+                let endsSoon = (content.state.phases.first?.end.timeIntervalSince(now) ?? 0) < TimetableActivityPlan.staleFloor
+                let skipped = endsSoon && content.state.differsOnlyInTimerStep(from: activity.content.state)
+                    && activity.content.staleDate == content.staleDate
+                if !skipped, activity.content.state != content.state || activity.content.staleDate != content.staleDate {
                     await activity.update(content)
                     log("aggiornata \(activity.attributes.dayKey): \(content.state.phases.map(\.kind.rawValue))")
                 }
@@ -421,7 +427,8 @@ final class LiveActivityManager {
     #if DEBUG
     /// Solo DEBUG, `-BCWLiveActivityDemo YES`: un orario finto attorno a adesso con fasi brevi
     /// (`-BCWLiveActivitySeconds N`, 60 di serie): prima lezione tra N secondi, lezioni da 2N,
-    /// un intervallo da N, la seconda lezione con una verifica. Con `-BCWLiveActivityDemoStart S`
+    /// un intervallo da N, la seconda lezione con una verifica. Con `-BCWLiveActivityLessonLeft S`
+    /// la prima lezione è già in corso e finisce tra S secondi. Con `-BCWLiveActivityDemoStart S`
     /// l'attività viene programmata (iOS 26) e parte da sola tra S secondi, prima lezione N
     /// secondi dopo.
     ///
@@ -438,7 +445,10 @@ final class LiveActivityManager {
             // Secondi interi: le date tornano uguali da ActivityKit.
             let delay = TimeInterval(max(0, defaults.integer(forKey: "BCWLiveActivityDemoStart")))
             demoStart = delay > 0 ? now.addingTimeInterval(delay) : nil
-            start = now.addingTimeInterval(delay + unit)
+            // `-BCWLiveActivityLessonLeft S`: la prima lezione è già in corso e finisce tra S secondi
+            // (per vedere il tempo che perde delle cifre: 3610, 610, 70).
+            let lessonLeft = TimeInterval(defaults.integer(forKey: "BCWLiveActivityLessonLeft"))
+            start = lessonLeft > 0 ? now.addingTimeInterval(lessonLeft - 2 * unit) : now.addingTimeInterval(delay + unit)
             defaults.set([start.timeIntervalSinceReferenceDate, unit,
                           demoStart?.timeIntervalSinceReferenceDate ?? 0], forKey: Self.demoKey)
             // Una prova nuova parte anche se oggi l'attività è stata fermata.

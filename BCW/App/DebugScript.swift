@@ -8,7 +8,8 @@ import UIKit
 /// `class=compact|regular|auto` (classe della finestra), `orientation=landscape|portrait`,
 /// `sidebar=open|close` (barra laterale di sistema), `action=<nome>` (azioni delle pagine:
 /// `settings`, `rail`, `search`; Dashboard e Orario: `next`, `prev`; Dashboard: `scroll`, `top`;
-/// Orario: `nextweek`, `editing`, `mode`).
+/// Orario: `nextweek`, `editing`, `mode`), `accent=#rrggbb` (come dalla pagina Aspetto),
+/// `syncaccent=#rrggbb` (come dall'account BCW), `iconcolor=<colore>` (come dalla pagina dell'icona).
 @Observable
 final class DebugScript {
     static let shared = DebugScript()
@@ -58,6 +59,9 @@ final class DebugScript {
         case "ax": DebugAccessibility.dump(filter: value)
         case "views": DebugAccessibility.views(minWidth: Double(value) ?? 300)
         case "navbars": DebugAccessibility.navigationBars()
+        case "accent": ThemeStore.shared.accentColor = value
+        case "syncaccent": ThemeStore.shared.applySynced(["accentColor": .string(value)])
+        case "iconcolor": ThemeStore.shared.appIconColor = AppIconColor(stored: value) ?? .theme
         default: print("BCW-SCRIPT comando sconosciuto: \(command)")
         }
     }

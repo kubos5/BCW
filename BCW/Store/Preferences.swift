@@ -169,6 +169,11 @@ final class Preferences {
     /// Attività in diretta "Orario di oggi" avviata da sola nei giorni con lezioni (solo su questo
     /// dispositivo, come le notifiche).
     var liveActivities: Bool { didSet { defaults.set(liveActivities, forKey: "liveActivities") } }
+    /// Tempo in formato compatto ("1h39", "45min", "15s") nella Dynamic Island, ai lati della
+    /// fotocamera (solo su questo dispositivo, come le attività in diretta).
+    var liveActivityCompactTime: Bool {
+        didSet { defaults.set(liveActivityCompactTime, forKey: "liveActivityCompactTime") }
+    }
     /// Tipi di novità per cui arriva una notifica (`NewsNotifications`).
     var newsNotifications: Set<NewsKind> {
         didSet { defaults.set(newsNotifications.map(\.rawValue), forKey: "newsNotifications") }
@@ -210,6 +215,7 @@ final class Preferences {
         newsNotifications = Set((defaults.stringArray(forKey: "newsNotifications") ?? []).compactMap(NewsKind.init(rawValue:)))
         // `bool(forKey:)` legge anche i valori passati come argomenti di avvio (`-liveActivities NO`).
         liveActivities = defaults.object(forKey: "liveActivities") == nil || defaults.bool(forKey: "liveActivities")
+        liveActivityCompactTime = defaults.bool(forKey: "liveActivityCompactTime")
         showsTimetableTab = defaults.object(forKey: "showsTimetableTab") == nil || defaults.bool(forKey: "showsTimetableTab")
         showsDayProgress = defaults.bool(forKey: "showsDayProgress")
         unsyncedCategories = Set((defaults.stringArray(forKey: "unsyncedCategories") ?? []).compactMap(SyncCategory.init(rawValue:)))

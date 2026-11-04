@@ -199,6 +199,8 @@ private struct LiveActivityGallery: View {
             ("Prima dell'inizio", state(start: now.addingTimeInterval(12 * minute), now: now)),
             ("Prima dell'inizio, più di un'ora", state(start: now.addingTimeInterval(95 * minute), now: now)),
             ("Lezione in corso", state(start: now.addingTimeInterval(-20 * minute), now: now)),
+            ("Lezione in corso, tempo compatto", state(start: now.addingTimeInterval(-20 * minute), now: now, compact: true)),
+            ("Più di un'ora, tempo compatto", state(start: now.addingTimeInterval(95 * minute), now: now, compact: true)),
             ("Intervallo", state(start: now.addingTimeInterval(-70 * minute), now: now)),
             ("Ultima lezione", state(start: now.addingTimeInterval(-170 * minute), now: now)),
             ("Lezioni finite", plan(start: now.addingTimeInterval(-300 * minute))?.finalContent(theme: theme).state),
@@ -229,8 +231,8 @@ private struct LiveActivityGallery: View {
         TimetableActivityPlan(day: start, items: TimetableActivityPlan.sampleItems(start: start, unit: 1800))
     }
 
-    private func state(start: Date, now: Date) -> TimetableActivityState? {
-        plan(start: start)?.content(at: now, theme: theme)?.state
+    private func state(start: Date, now: Date, compact: Bool = false) -> TimetableActivityState? {
+        plan(start: start)?.content(at: now, theme: theme, compactTime: compact)?.state
     }
 
     /// Compatta (forma e tempo ai lati della fotocamera), minima ed espansa, sul nero dell'isola.

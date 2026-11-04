@@ -233,11 +233,18 @@ private struct LiveActivitySettingsGroup: View {
             ToggleRow("Attività in diretta", subtitle: "Si avvia da sola nei giorni di lezione", icon: "lockClock",
                       isOn: Bindable(model.preferences).liveActivities)
                 .disabled(!live.areActivitiesEnabled)
+            // Solo per la Dynamic Island, che sull'iPad non c'è.
+            if !WindowClass.isPad {
+                ToggleRow("Tempo in formato compatto", subtitle: "Ai lati della fotocamera: 1h39, 45min, 15s", icon: "timer",
+                          isOn: Bindable(model.preferences).liveActivityCompactTime)
+                    .disabled(!live.areActivitiesEnabled)
+            }
             if !live.areActivitiesEnabled {
                 ButtonRow("Apri le Impostazioni di iOS", icon: "externalLink") { Platform.openNotificationSettings() }
             }
         }
         .onChange(of: model.preferences.liveActivities) { model.liveActivities.sync() }
+        .onChange(of: model.preferences.liveActivityCompactTime) { model.liveActivities.sync() }
     }
 }
 

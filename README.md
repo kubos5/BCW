@@ -93,12 +93,15 @@ Toccando un widget si apre l'app sul giorno o sulla scheda giusta. I widget si a
 Su iPhone la lezione in corso resta nella schermata di blocco e nella Dynamic Island come attività in diretta, con i colori del tema, il font e le forme dell'app, in chiaro e in scuro:
 
 - nella schermata di blocco una scheda con la materia nel suo colore, aula e docente, il tempo che manca, la barra di avanzamento con gli orari e la lezione dopo
-- prima della prima lezione il conto alla rovescia all'inizio, negli intervalli quanto manca alla lezione successiva e in che aula si terrà, all'ultima lezione l'avviso che è l'ultima
+- prima della prima lezione il conto alla rovescia all'inizio, all'ultima lezione l'avviso che è l'ultima
+- quando è in corso un intervallo dell'orario si vede l'intervallo con il tempo che manca alla sua fine, al posto della lezione se le si sovrappone, e la lezione dopo con la sua aula; lo stesso nelle ore libere tra due lezioni
 - nella Dynamic Island a sinistra la sigla della materia in una forma del suo colore e a destra il tempo che manca, attaccati alla fotocamera come chiedono le linee guida di Apple; con più attività un anello di avanzamento; tenendola premuta si allarga con tutti i dettagli
+- ai lati della fotocamera l'isola è larga quanto il tempo che mostra. iOS la misura solo quando ridisegna l'attività: fino a quel momento il tempo tiene le stesse cifre (0:59:59, 09:59) per non lasciare spazio vuoto, e appena l'app può aggiornare l'attività l'isola si stringe
+- in Impostazioni › Orario si può scegliere il tempo in formato compatto nell'isola: 1h39 invece di 1:39:12, 45min invece di 45:12, 15s invece di 0:15
 - le verifiche del giorno sono segnate sulla loro lezione, anche con "Mostra le verifiche" spenta
 - in Impostazioni › Orario si sceglie se farla partire da sola nei giorni di lezione: compare mezz'ora prima della prima lezione e sparisce dopo l'ultima, e il giorno di scuola successivo viene preparato in anticipo, così parte anche con l'app chiusa
 - dalla scheda in cima all'orario di oggi si avvia o si ferma a mano; fermata o tolta dalla schermata di blocco, quel giorno non riparte da sola
-- il conto alla rovescia usa il carattere di sistema arrotondato: su iOS 27 con un carattere personalizzato l'estensione andava in crash, l'attività veniva chiusa appena avviata o mostrava una rotella
+- il conto alla rovescia usa il carattere di sistema arrotondato e gli altri testi le istanze normali di Google Sans Flex, senza l'arrotondamento dell'app: su iOS 27 con il carattere variabile l'estensione andava in crash, l'attività veniva chiusa appena avviata o mostrava una rotella
 - tornando nell'app l'attività già in corso viene rifatta da capo (senza che si veda); se iOS non la accetta o la chiude appena avviata, un avviso lo dice
 
 ### iPad
@@ -124,7 +127,7 @@ L'app segue Material 3 Expressive, con colori, font e pagina Aspetto della [vers
 Anche l'esperienza d'uso è quella di un'app Material 3 Expressive: barra di ricerca in alto, liste segmentate, chip di stato, gruppi di pulsanti collegati, schede, menu del pulsante d'azione flottante e barra degli strumenti flottante, con le animazioni a molla e le transizioni di Material 3.
 Le forme usano angoli continui e su iPhone l'interfaccia ha il feedback aptico.
 In Impostazioni › Aspetto si può attivare Liquid Glass: barra di navigazione, barra delle schede e menu diventano quelli di sistema, in vetro.
-In Impostazioni › Aspetto › Icona dell'app si sceglie il colore dell'icona: quello del tema dell'app (ogni colore d'accento proposto ha il suo, per un colore scelto a mano il più vicino) oppure Mattone, Arancio, Oro, Verde, Petrolio, Blu, Indaco, Viola, Rosa, Ardesia o Grafite. Cerchio e barra sono due lastre di vetro, come nelle icone di iOS. L'icona segue sempre le icone chiare, scure, colorate e trasparenti di iOS. Mentre iOS cambia l'icona un avviso in basso dice che il cambio è in corso. La scelta si sincronizza con l'account BCW.
+In Impostazioni › Aspetto › Icona dell'app si sceglie il colore dell'icona: quello del tema dell'app (ogni colore d'accento proposto ha il suo, per un colore scelto a mano il più vicino) oppure Mattone, Arancio, Oro, Verde, Petrolio, Blu, Indaco, Viola, Rosa, Ardesia o Grafite. Cerchio e barra sono due lastre di vetro, come nelle icone di iOS. L'icona segue sempre le icone chiare, scure, colorate e trasparenti di iOS. L'icona cambia subito, anche quando il colore d'accento cambia dalla pagina Aspetto o da un altro dispositivo; solo se dopo un secondo iOS non ha ancora risposto, un avviso in basso dice che il cambio è in corso. La scelta si sincronizza con l'account BCW.
 
 ### Requisiti
 
@@ -141,7 +144,7 @@ Le credenziali sono salvate nel Portachiavi del dispositivo e inviate ai server 
 Le risposte vengono salvate nella cache dell'app per l'uso offline.
 L'orario è salvato sul dispositivo, separato per ogni account.
 Per i widget l'app scrive nel contenitore dell'App Group un riassunto dei dati che mostrano (orario dei prossimi giorni, compiti e verifiche, medie, colori del tema), senza credenziali.
-L'attività in diretta non ha bisogno di un server: l'app la aggiorna quando è aperta, a ogni passaggio di lezione, e prova a farlo in background; ogni aggiornamento contiene anche la fase successiva, che iOS mostra da sola quando la lezione finisce, anche se l'app non si è risvegliata. Senza server iOS fa questo passaggio una volta sola: se l'app resta chiusa più a lungo, il conto alla rovescia si ferma alla fine della lezione successiva e l'attività si rimette in pari appena l'app si apre o si aggiorna in background. Quando parte un'attività preparata in anticipo, iOS mostra un avviso con la prima lezione.
+L'attività in diretta non ha bisogno di un server: l'app la aggiorna quando è aperta, a ogni passaggio di lezione e quando il tempo perde delle cifre, e prova a farlo in background; ogni aggiornamento contiene anche la fase successiva, che iOS mostra da sola quando la lezione finisce, anche se l'app non si è risvegliata. Senza server iOS fa questo passaggio una volta sola: se l'app resta chiusa più a lungo, il conto alla rovescia si ferma alla fine della lezione successiva e l'attività si rimette in pari appena l'app si apre o si aggiorna in background. Quando parte un'attività preparata in anticipo, iOS mostra un avviso con la prima lezione.
 
 ### Account BCW
 

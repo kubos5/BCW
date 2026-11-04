@@ -350,9 +350,17 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (`AppModel.liveActivities`). `NSSupportsLiveActivities` e l'identificatore `com.bcw.app.liveactivity` in
   `Config/Info-iOS.plist`.
 - Fasi (`TimetableActivityPlan`, dall'istantanea dei widget, ore uguali di seguito unite): prima dell'inizio (da
-  mezz'ora prima, conto alla rovescia), lezione, pausa tra due lezioni (conto alla rovescia, aula della successiva),
-  lezioni finite (contenuto finale per 10 minuti, poi l'attività si chiude). Le verifiche si segnano sempre
-  (`WidgetSnapshot.Event.hasTest`), anche con "Mostra le verifiche" spenta.
+  mezz'ora prima, conto alla rovescia), lezione, pausa (un intervallo dell'orario con il suo nome, o un'ora libera:
+  conto alla rovescia alla sua fine, aula della lezione dopo), lezioni finite (contenuto finale per 10 minuti, poi
+  l'attività si chiude). Le verifiche si segnano sempre (`WidgetSnapshot.Event.hasTest`), anche con "Mostra le verifiche"
+  spenta.
+- Intervalli (richiesta dell'utente, novembre 2026): mentre è in corso un intervallo si vede l'intervallo, anche se si
+  sovrappone a una lezione. Le lezioni perdono i tratti coperti (`TimetableActivityPlan.lessons`: una lezione con un
+  intervallo in mezzo diventa due e conta due volte in "2 di 5"), un intervallo sul passaggio tra due ore uguali non le
+  unisce (come la vista Lista). Contano gli intervalli dalla mezz'ora prima della prima lezione fino alla fine dell'ultima:
+  uno che comincia alla fine dell'ultima o dopo non tiene aperta l'attività (come `TimetableDefaultDay`), uno che la
+  scavalca sì. Prima dell'inizio il conto alla rovescia va alla prima lezione anche se in mezzo c'è un intervallo
+  (`TimetableActivityPhase.countdownEnd`).
 - Aggiornamenti senza server: `WidgetExporter` passa ogni istantanea al gestore (avvio, ritorno nell'app, `refreshAll`,
   orario cambiato, mezzanotte), che allinea le attività a quelle volute (`reconcile`: aggiorna, chiude, richiede) e,
   con l'app in esecuzione, si risveglia a ogni passaggio di fase. In secondo piano un `BGAppRefreshTask` programmato al
@@ -381,6 +389,22 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `devicectl device info files --domain-type systemCrashLogs` (`BCWWidgets-….ips`, da copiare con
   `devicectl device copy from`); i "Widgets-….ips" sono di altre app. `-BCWLiveActivityDemoPlan '()'` ora cancella
   anche la prova salvata (prima ripartiva riaprendo l'app).
+- Crash con il carattere variabile (novembre 2026, iPhone 15 con iOS 27.0.1): anche dopo la correzione del timer
+  l'estensione andava in crash circa una volta su 10 mentre archiviava l'attività, con la stessa firma
+  (`encodeAttachedValue` in `CodableAttributedString.Range.encode`; anche sulla 3.2.1 installata, il 29 ottobre). Non
+  dipende dal tipo di timer: `Text(timerInterval:)` come `.time`. Prove con ogni avvio di un'attività: Google Sans Flex
+  variabile 4 crash su 40, istanze con nome 0 su 40, carattere di sistema 0 su 24; sul simulatore mai. `CTFont`,
+  descrittori e `CGFont` hanno hash stabili (provato), quindi la chiave instabile è dentro SwiftUI. Correzione:
+  `WidgetFonts.activity`, istanze con nome (Regular, Medium, SemiBold, Bold) in tutta l'attività; il file non ne ha di
+  arrotondate, quindi nell'attività niente asse ROND (`TimetableActivityTheme` non lo porta più). I widget tengono il
+  variabile con l'asse ROND: il crash non li riguarda. Provati sull'iPhone 15 con `-BCWWidgetProbe 1` (solo DEBUG:
+  elenca i widget installati, li ricarica e scrive quante linee temporali e quanti disegni ha fatto l'estensione, con
+  `WidgetProbe`): tutti e 7 i tipi installati (Orario piccolo, medio e grande, Lezione in corso, Compiti, Prossima
+  verifica, Media) con `-BCWWidgetNowLesson YES` e l'attività spenta, 406 linee temporali e 3.828 disegni in 30 avvii, 0
+  crash; il solo Orario grande, in altri 60 avvii tra dati veri e lezione simulata, 0 crash. Non provati gli accessori
+  della schermata di blocco. Ricariche ravvicinate nello stesso avvio vengono ignorate: per contare i crash riaprire
+  l'app (`devicectl device process launch --console --terminate-existing`) e confrontare i `BCWWidgets-*.ips` in
+  `systemCrashLogs`. `devicectl device capture screenshot` non disegna la Dynamic Island né la barra di stato.
 - Lo stato porta fino a 4 fasi con `staleDate` alla fine della prima: scaduto, la vista mostra la fase in corso al
   momento del disegno (`TimetableActivityState.phase(isStale:)`). Verificato con l'app chiusa: il passaggio arriva
   puntuale, ma iOS ridisegna una volta sola, quindi senza un altro aggiornamento alla fine della seconda fase il conto
@@ -392,6 +416,39 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (materia, ora, aula). Verificato: parte con ~2 s di ritardo e iOS apre l'app in background ("Activity started"),
   che subito allinea il contenuto. Un'attività in attesa con un altro inizio (orario cambiato) viene rifatta
   (`scheduledStart` negli attributi).
+- Larghezza dell'isola compatta (richiesta dell'utente, novembre 2026: il tempo che perde cifre lasciava del vuoto).
+  Verificato su iOS 27: l'isola prende la larghezza solo quando iOS ridisegna l'attività, cioè quando l'app la aggiorna
+  o, una volta sola, quando scade il contenuto (e non prima di 120 s dall'ultimo aggiornamento, `staleFloor`). Non la
+  ridisegnano blocco e sblocco dello schermo. Non funzionano: `TimelineView` nell'attività (resta fermo al primo
+  valore), aggiornare dall'estensione (`Activity.activities` lì è vuoto e il processo viene sospeso subito dopo il
+  disegno), formati del tempo scritti da noi con `DiscreteFormatStyle` (al posto del testo un rettangolo vuoto: solo i
+  formati di sistema vengono disegnati). Quindi `ActivityIslandTimer`: con un ridisegno in arrivo a fine fase il tempo
+  tiene le stesse cifre (`.time`: "0:59:59", "09:59"), ma questi testi dopo lo zero ripartono a contare: con il contenuto
+  già scaduto (`isStale`, non arriverà altro) si usa `Text(timerInterval:)`, che si ferma a zero, centrato. Sotto i 10
+  minuti `Text(timerInterval:)` sempre. Con l'app in vita o l'aggiornamento in background l'isola si stringe:
+  `TimetableActivityState.timerStep` cambia a un'ora e a 10 minuti dalla fine (senza, lo stato era uguale e non partiva
+  l'aggiornamento) e `nextChange` conta anche quei momenti; non a meno di 2 minuti dalla fine, per non far slittare il
+  passaggio di fase. `staleDate` resta alla fine della fase: il passaggio di fase vale più delle cifre.
+- Prove sul telefono: orario finto con `-BCWLiveActivityDemo YES`, app chiusa con `devicectl device process terminate`, poi
+  rilanciare senza argomenti per ridare l'attività programmata e l'icona. Guardare l'isola tocca all'utente.
+- Testi del tempo tagliati (`ActivityTimeWindow`, un `Layout`): con `durationOffset` iOS scrive il segno meno ("-45:12"),
+  e sono l'unico modo per cifre sempre uguali. Testo allineato a sinistra, spostato della larghezza di ciò che va
+  nascosto (misurata con un `Text` invisibile dello stesso carattere), ritagliato con `clipped()`. Lingua fissa con
+  `environment(\.locale)`: `.locale()` sul formato viene ignorato nell'attività.
+- Tempo compatto (richiesta dell'utente, novembre 2026; `Preferences.liveActivityCompactTime`, solo su questo dispositivo,
+  Impostazioni › Orario, non sull'iPad; `TimetableActivityState.compactTime`), solo ai lati della fotocamera: "1h39" (due
+  finestre sullo stesso `.time`, ore e minuti, con una "h" tra le due; si arriva a "0h59" se non viene ridisegnata),
+  "45min" e "15s" (`.units` con una sola unità passa da solo dai minuti ai secondi; da 10 minuti in su `valueLength: 2`,
+  quindi "09min"; lingua `pt_PT` perché in italiano l'unità è staccata: "45 min"). Passando da "1min" a "59s" senza
+  ridisegno resta un po' di vuoto nell'ultimo minuto. A contenuto scaduto si torna a `Text(timerInterval:)` ("9:59"):
+  nessun formato compatto di sistema si ferma a zero (`.components` su `dateRange` non si aggiorna proprio, verificato).
+- Misure dell'isola compatta (novembre 2026, iOS 27.0): iOS tiene il lato sinistro largo almeno il 75% di quello destro
+  (39 su 52 punti con "45:07", 49,5 su 66 con "1:00:02"): con tempi lunghi tra la forma e la fotocamera resta spazio.
+  Visto 2 volte su circa 15 avvii di una prova: forma e tempo spostati di 8 punti verso la fotocamera e tagliati (prima
+  cifra del tempo quasi sparita), finché non parte un'attività nuova. Non riprodotto a comando (né reinstallando, né con il
+  processore sotto carico); tocca anche la forma, che non c'entra con il tempo. Non provato con il codice di prima.
+  Provati sull'iPhone 15 con l'app chiusa e guardati dall'utente: `0:59:xx`, `1h39`, passaggio alla tazzina a fine fase.
+  L'aggiornamento in background sul simulatore non esiste e sul telefono non è stato provato.
 - Avvio e fermata: Impostazioni › Orario › "Attività in diretta" (`Preferences.liveActivities`, di serie sì, solo su
   questo dispositivo); pulsante a icona nella `TimetableNowCard` (pieno quando è in corso). Fermata a mano o tolta
   dalla schermata di blocco, quel giorno non riparte da sola (`liveActivityStoppedDay`); avviata a mano resta anche
@@ -427,9 +484,12 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   in corso a qualsiasi ora (rilanciare l'app senza l'argomento per tornare ai dati veri).
   `-BCWWidgetGalleryKind live` mostra solo l'attività in diretta (schermata di blocco e isola, tutte le fasi).
 - Prove dell'attività (solo DEBUG): `-BCWLiveActivityDemo YES` la avvia con un orario finto attorno a adesso (prima
-  lezione tra N secondi, lezioni da 2N, un intervallo da N, verifica alla seconda; `-BCWLiveActivitySeconds N`, 60 di
-  serie, almeno 130 per vedere i passaggi a tempo), `-BCWLiveActivityDemoStart S` la programma tra S secondi (poi
-  chiudere l'app). La prova resta salvata (`BCWLiveActivityDemoPlan`) finché non finisce, perché iOS riapre l'app
+  lezione tra N secondi, lezioni da 2N, un intervallo da N, verifica alla seconda con un intervallo sovrapposto da mezza
+  N; `-BCWLiveActivitySeconds N`, 60 di serie, almeno 130 per vedere i passaggi a tempo), `-BCWLiveActivityLessonLeft S`
+  con la prima lezione già in corso che finisce tra S secondi (N maggiore di S/2; 3610 e 610 per il tempo che perde
+  cifre, con `-liveActivityCompactTime YES` per il formato compatto; `simctl terminate` per provare senza aggiornamenti:
+  in background l'app viene sospesa comunque dopo pochi secondi), `-BCWLiveActivityDemoStart S` la programma tra S
+  secondi (poi chiudere l'app). La prova resta salvata (`BCWLiveActivityDemoPlan`) finché non finisce, perché iOS riapre l'app
   senza argomenti; il pulsante della card la ferma come quella vera, e `-BCWLiveActivityDemoPlan '()' -liveActivities NO`
   chiude tutto (prima di lasciare il simulatore condiviso: un'attività in attesa parte anche giorni dopo). I messaggi `BCW-LIVE` nella console dicono cosa
   viene richiesto, aggiornato e chiuso. Isola espansa: pressione lunga (`touch_path` di ~1 s) sull'isola con l'app in
@@ -708,15 +768,27 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   --height 256 --scale 1`.
 - Anteprima (pagina, campioni, voce di Aspetto): `AppIconPreview`/`AppIconArtwork` disegnano in SwiftUI sfondo,
   cerchio e barra con un riflesso in alto e un'ombra leggera, per somigliare al vetro; non sono identiche alla Home.
-- `AppIconController` (avviato in `RootView`) cambia l'icona solo se cambia il nome e con l'app attiva: le scelte
-  della pagina dopo 0,4 s; i cambi del solo accento con "Tema dell'app" aspettano l'uscita da Impostazioni › Aspetto
-  (`holdThemeChanges`), così provando i colori iOS mostra un solo avviso; tornando nell'app con Aspetto aperta il
-  controllo si fa all'uscita. iOS impiega qualche secondo prima del suo avviso (non si può accelerare): intanto
-  `isChanging` fa mostrare ad `AppIconStatusReporter` l'avviso in basso "Cambio dell'icona in corso…" con
-  l'indicatore di caricamento (`OverlayHost.showToast(_:inProgress:duration:)`, chiuso con `dismissToast`), che
-  mostra anche gli errori. Sul simulatore il cambio dura meno di mezzo secondo, quindi l'avviso quasi non si vede
-  (verificato con screenshot di seguito). Ogni richiesta a iOS (cioè ogni avviso) scrive `Cambio d'icona: <nome>` nel
-  registro (sottosistema `com.bcw-classeviva.app`, categoria `AppIcon`).
+- `AppIconController` (avviato in `RootView`, riscritto su richiesta dell'utente, novembre 2026): chiede a iOS l'icona
+  appena cambia la scelta (tocco nella pagina, accento in Aspetto con "Tema dell'app", sincronizzazione; solo con l'app
+  attiva, altrimenti al ritorno), senza attese. Prima c'erano 0,4 s per le scelte, 2 s per l'accento e l'attesa
+  dell'uscita da Aspetto (`holdThemeChanges`, che poteva restare bloccata: l'icona non seguiva più il tema).
+  L'app lascia il primo piano per l'avviso di iOS 0,15 s dopo la richiesta sull'iPhone 15 (iOS 27.0.1, misurato due volte,
+  e per l'utente è quasi istantaneo) e 0,1–0,4 s sul simulatore.
+- Verificato su iOS 27 (simulatore: l'avviso si apre, su 26.3 no): iOS cambia l'icona, mostra il suo avviso fuori dall'app
+  (`willResignActive`) e `setAlternateIconName` risponde solo quando si preme OK. Finché non risponde, **leggere
+  `alternateIconName` blocca il thread principale** (`dispatch_sync` sulla coda di LaunchServices della richiesta): il nome
+  sta in `currentName` e durante una richiesta non si legge. Due richieste insieme danno EAGAIN, che resta fino al riavvio:
+  una alla volta, alla risposta si ricontrolla la scelta (cambi ravvicinati uniti; con un accento cambiato sotto
+  l'avviso, dopo OK ne parte un altro).
+- Avviso "Cambio dell'icona in corso…" (`isSlow`, `AppIconStatusReporter`, `OverlayHost.showToast(_:inProgress:duration:)`):
+  compare solo se dopo 1 s l'app è ancora attiva, cioè iOS non ha ancora mostrato il suo avviso, e sparisce a
+  `willResignActive`. Con il tempo della risposta di iOS non si può fare: arriva dopo l'OK (il vecchio avviso restava
+  sopra quello di iOS per questo). `-BCWIconDelay N` (solo DEBUG) fa aspettare N secondi prima della richiesta per vederlo;
+  `-BCWIconTest <colore>` (solo DEBUG) chiede quell'icona senza toccare le impostazioni, per misurare sul telefono: `iconcolor=`,
+  `accent=`, `syncaccent=` e `-BCWAccent` cambiano valori che con l'account BCW possono finire sul server;
+  `-BCWScript` ha `accent=`, `syncaccent=` e `iconcolor=` per provare i cambi. Ogni richiesta a iOS (cioè ogni avviso)
+  scrive `Cambio d'icona: <nome>` nel registro (sottosistema `com.bcw-classeviva.app`, categoria `AppIcon`) e, in DEBUG,
+  `BCW-ICON` con i tempi nella console.
 - Sincronizzazione: `appIconColor` in `ThemeStore.syncedValues`/`applySynced` (sconosciuti ignorati;
   `appIconAppearance`, `appIconShape` e `appIconDarkBackground` restano sul server ma non si leggono più), voce "Icona
   dell'app" di Da sincronizzare. In `CloudSync.syncSettings` una chiave che l'ultima sincronizzazione non conosceva
@@ -729,8 +801,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Verificato sulla Home del simulatore (iOS 26.3), con le 12 icone della 3.2: Default, Dark, Clear e Tinted (cerchio e
   barra lastre separate); con "Tema dell'app" provando quattro accenti in Aspetto l'icona cambia una volta sola. Le 11
   della 3.2.1 controllate con `ictool` (Default e Dark) e cambiando icona dalla pagina.
-- Limiti verificati: con le icone colorate e trasparenti iOS tinge sempre l'icona: non si può forzare. Sul simulatore
-  (iOS 26.3) l'avviso del cambio non si apre ("couldn't load upcall bundle principal class"): l'icona cambia ma
+- Limiti verificati: con le icone colorate e trasparenti iOS tinge sempre l'icona: non si può forzare. Sul simulatore di
+  iOS 26.3 l'avviso del cambio non si apre ("couldn't load upcall bundle principal class"): l'icona cambia ma
   `setAlternateIconName` risponde con un errore di I/O (il controllore lo riconosce da `alternateIconName`) e i cambi
   successivi falliscono ("couldn't make icon alert token", EAGAIN) finché non si riavvia lsd:
   `xcrun simctl spawn <udid> launchctl stop com.apple.lsd`. Le modalità delle icone di iOS si cambiano dalla Home:
