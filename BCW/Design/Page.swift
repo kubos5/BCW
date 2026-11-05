@@ -346,6 +346,8 @@ struct SheetAction {
     static func confirm(_ title: String, disabled: Bool = false, action: @escaping () -> Void) -> SheetAction {
         SheetAction(title: title, role: .confirm, disabled: disabled, action: action)
     }
+
+    fileprivate var toolbarID: String { "\(title)-\(disabled)" }
 }
 
 extension View {
@@ -424,7 +426,10 @@ private struct SheetChrome: ViewModifier {
                             button(leading)
                         }
                     }
-                    ForEach(Array(trailing.enumerated()), id: \.offset) { _, action in
+                    // Con la barra di sistema un pulsante già nella barra non si riattiva più cambiando
+                    // `disabled` (verificato con "Salva" nell'editor, iOS 27): l'identità dipende anche da
+                    // `disabled`, così il sistema lo rifà.
+                    ForEach(Array(trailing.enumerated()), id: \.element.toolbarID) { _, action in
                         ToolbarItem(placement: action.role == .confirm ? .confirmationAction : .primaryAction) {
                             button(action)
                         }

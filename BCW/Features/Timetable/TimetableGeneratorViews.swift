@@ -15,31 +15,7 @@ struct TimetableGeneratorSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    ListGroup("Ore di lezione", footer: hoursFooter) {
-                        ListRow("Inizio della prima ora") {
-                            TimeField(minutes: $settings.firstHourStart)
-                        }
-                        StepperRow(title: "Durata di un'ora", value: $settings.hourLength, range: 30...120, step: 5) { "\($0) min" }
-                        SelectRow("Lezioni da esaminare", selection: $settings.weeks,
-                                  options: [(2, "Ultime 2 settimane", nil), (4, "Ultime 4 settimane", nil), (6, "Ultime 6 settimane", nil),
-                                            (10, "Ultime 10 settimane", nil), (0, "Tutto l'anno", nil)])
-                    }
-
-                    ListGroup("Intervalli", footer: "Facoltativi: compaiono sopra le lezioni nei giorni in cui c'è scuola a quell'ora, senza cambiarne la durata. Per toglierne uno usa il pulsante rosso accanto.") {
-                        ForEach($settings.breaks) { $rule in
-                            breakRow($rule)
-                        }
-                        ButtonRow("Aggiungi intervallo", icon: "coffee") {
-                            let after = settings.breaks.last.map { $0.start + 120 }
-                                ?? (settings.firstHourStart + settings.hourLength * 3 - 10)
-                            withAnimation(Motion.spatial) { settings.breaks.append(.init(start: min(after, 23 * 60), duration: 10)) }
-                        }
-                        if !settings.breaks.isEmpty {
-                            ButtonRow("Rimuovi gli intervalli", icon: "trash", destructive: true) {
-                                withAnimation(Motion.spatial) { settings.breaks = [] }
-                            }
-                        }
-                    }
+                    TimetableGenerationFields(settings: $settings, hoursFooter: hoursFooter)
 
                     VStack(alignment: .leading, spacing: 8) {
                         Button {
@@ -53,7 +29,7 @@ struct TimetableGeneratorSheet: View {
                         }
                         .buttonStyle(.m3(.filled, size: .m, wide: true))
                         .disabled(isGenerating)
-                        ListFooter("BCW guarda in quale ora della giornata si è svolta ogni materia, settimana per settimana, e tiene quelle che si ripetono (le settimane recenti contano di più, supplenze e recuperi isolati vengono ignorati). Vedrai l'orario in anteprima, con i bordi tratteggiati, prima di applicarlo.")
+                        ListFooter("BCW guarda in quale ora della giornata si è svolta ogni materia, settimana per settimana, e tiene quelle che si ripetono (le settimane recenti contano di più, supplenze e recuperi isolati vengono ignorati). Vedrai l'orario in anteprima prima di applicarlo.")
                     }
                 }
                 .padding(.horizontal, 20)
@@ -88,6 +64,52 @@ struct TimetableGeneratorSheet: View {
         return "Classeviva registra solo in quale ora della giornata si svolge una lezione: l'orario si ricava da qui."
     }
 
+    private func generate() async {
+        isGenerating = true
+        defer { isGenerating = false }
+        do {
+            let draft = try await model.makeTimetableDraft(settings: settings)
+            withAnimation(Motion.spatial) { store.draft = draft }
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+/// Le impostazioni della generazione (ore di lezione e intervalli), nel foglio e nell'introduzione.
+struct TimetableGenerationFields: View {
+    @Binding var settings: GenerationSettings
+    let hoursFooter: String
+
+    var body: some View {
+        ListGroup("Ore di lezione", footer: hoursFooter) {
+            ListRow("Inizio della prima ora") {
+                TimeField(minutes: $settings.firstHourStart)
+            }
+            StepperRow(title: "Durata di un'ora", value: $settings.hourLength, range: 30...120, step: 5) { "\($0) min" }
+            SelectRow("Lezioni da esaminare", selection: $settings.weeks,
+                      options: [(2, "Ultime 2 settimane", nil), (4, "Ultime 4 settimane", nil), (6, "Ultime 6 settimane", nil),
+                                (10, "Ultime 10 settimane", nil), (0, "Tutto l'anno", nil)])
+        }
+
+        ListGroup("Intervalli", footer: "Facoltativi: compaiono sopra le lezioni nei giorni in cui c'è scuola a quell'ora, senza cambiarne la durata. Per toglierne uno usa il pulsante rosso accanto.") {
+            ForEach($settings.breaks) { $rule in
+                breakRow($rule)
+            }
+            ButtonRow("Aggiungi intervallo", icon: "coffee") {
+                let after = settings.breaks.last.map { $0.start + 120 }
+                    ?? (settings.firstHourStart + settings.hourLength * 3 - 10)
+                withAnimation(Motion.spatial) { settings.breaks.append(.init(start: min(after, 23 * 60), duration: 10)) }
+            }
+            if !settings.breaks.isEmpty {
+                ButtonRow("Rimuovi gli intervalli", icon: "trash", destructive: true) {
+                    withAnimation(Motion.spatial) { settings.breaks = [] }
+                }
+            }
+        }
+    }
+
     /// Un intervallo: inizio, durata e il pulsante per toglierlo.
     private func breakRow(_ rule: Binding<GenerationSettings.BreakRule>) -> some View {
         let id = rule.wrappedValue.id
@@ -113,106 +135,6 @@ struct TimetableGeneratorSheet: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-    }
-
-    private func generate() async {
-        isGenerating = true
-        defer { isGenerating = false }
-        let range = TimetableGenerator.range(for: settings)
-        let lessons: [Lesson]
-        do {
-            lessons = try await model.fetchLessons(from: range.from, to: range.to)
-        } catch {
-            errorMessage = "Non riesco a scaricare le lezioni: \(error.localizedDescription)"
-            return
-        }
-        var result = TimetableGenerator.generate(from: lessons, settings: settings)
-        // Con l'allineamento automatico anche la bozza rispetta le ore e le mezz'ore.
-        if store.alignment == .automatic {
-            result.entries = result.entries.flatMap { $0.alignedPieces() }
-        }
-        guard !result.entries.isEmpty else {
-            errorMessage = lessons.isEmpty
-                ? "Non ci sono lezioni registrate nel periodo scelto. Riprova più avanti o esamina un periodo più lungo."
-                : "Le lezioni registrate sono troppo poche o troppo irregolari per ricavare un orario. Prova a esaminare un periodo più lungo."
-            return
-        }
-        withAnimation(Motion.spatial) {
-            store.draft = TimetableDraft(entries: result.entries, settings: settings, analyzedDays: result.analyzedDays,
-                                         from: range.from, to: range.to)
-        }
-        dismiss()
-    }
-}
-
-/// Banner dell'anteprima: applica o scarta l'orario generato (bordo tratteggiato, come la bozza).
-struct TimetableDraftBanner: View {
-    @Environment(AppModel.self) private var model
-    let onSettings: () -> Void
-    @State private var confirmingApply = false
-
-    var body: some View {
-        if let draft = model.timetable.draft {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 12) {
-                    Icon("wand")
-                        .foregroundStyle(Theme.primary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Anteprima dell'orario generato")
-                            .font(.m3(15, weight: 650))
-                            .foregroundStyle(Theme.ink)
-                        Text("\(lessonCount(draft)) lezioni ricavate da \(draft.analyzedDays) giorni di registro (\(draft.from.shortDay) – \(draft.to.shortDay)). Controllale prima di applicarle.")
-                            .font(.m3(12))
-                            .foregroundStyle(Theme.secondaryInk)
-                            .lineLimit(4)
-                    }
-                }
-                HStack(spacing: 8) {
-                    Button {
-                        if model.timetable.timetable.isEmpty {
-                            withAnimation(Motion.spatial) { model.timetable.applyDraft(replacing: true) }
-                        } else {
-                            confirmingApply = true
-                        }
-                    } label: {
-                        Label { Text("Applica") } icon: { Icon("check") }
-                    }
-                    .buttonStyle(.m3(.filled, size: .xs))
-                    Button {
-                        withAnimation(Motion.spatial) { model.timetable.draft = nil }
-                    } label: {
-                        Label { Text("Scarta") } icon: { Icon("x") }
-                    }
-                    .buttonStyle(.m3(.tonal, size: .xs))
-                    Spacer(minLength: 0)
-                    IconButton("tune", label: "Cambia le impostazioni e rigenera", kind: .tonal, size: 32, action: onSettings)
-                }
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.secondaryContainer.mix(Theme.surfaceContainerLow, 0.6),
-                        in: .rect(cornerRadius: Theme.radii.li, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.radii.li, style: .continuous)
-                    .strokeBorder(Theme.primary.opacity(0.6), style: StrokeStyle(lineWidth: 1.2, dash: [6, 4]))
-            }
-            .transition(.opacity.combined(with: .move(edge: .top)))
-            .m3Dialog("Hai già un orario", isPresented: $confirmingApply,
-                      message: "Sostituendolo, eventi, note, file e verifiche segnate a mano dell'orario attuale verranno eliminati.",
-                      stacked: true) {
-                [DialogAction(title: "Sostituisci l'orario attuale", style: .destructive) {
-                    withAnimation(Motion.spatial) { model.timetable.applyDraft(replacing: true) }
-                },
-                 DialogAction(title: "Aggiungi solo dove è libero") {
-                    withAnimation(Motion.spatial) { model.timetable.applyDraft(replacing: false) }
-                },
-                 .cancel()]
-            }
-        }
-    }
-
-    private func lessonCount(_ draft: TimetableDraft) -> Int {
-        draft.entries.filter { !$0.isBreak }.count
     }
 }
 
@@ -267,11 +189,9 @@ struct TimetableSettingsSection: View {
             ToggleRow("Mostra la scheda Orario", icon: "timetable", isOn: Bindable(model.preferences).showsTimetableTab)
         }
 
-        ListGroup("Vista e allineamento", footer: "Con \"Mostra le verifiche\" la vista Lista segna le verifiche di Classeviva e quelle segnate a mano; si vedono sempre nel dettaglio dell'evento e nella vista Giorno. Quelle nascoste, e le regole per nasconderle in automatico, sono in Verifiche nascoste (menu ⋯ dell'orario). L'allineamento vale per tutto l'orario e per la modalità di modifica (pulsante + dell'orario › Modifica orario). Automatico: gli eventi iniziano all'ora o alla mezz'ora e durano 30 minuti o un'ora; passando all'automatico gli eventi non allineati vengono allineati, dopo una conferma. Libero: qualsiasi orario e durata. Gli intervalli si posizionano sempre liberamente.") {
+        ListGroup("Vista e allineamento", footer: "Di serie la vista Lista segna le verifiche di Classeviva e quelle segnate a mano; spegnendo \"Mostra le verifiche\" restano nel dettaglio dell'evento e nella vista Giorno. Quelle nascoste, e le regole per nasconderle in automatico, sono in Verifiche nascoste (menu ⋯ dell'orario). L'allineamento vale per tutto l'orario e per la modalità di modifica (pulsante + dell'orario › Modifica orario). Automatico: gli eventi iniziano all'ora o alla mezz'ora e durano 30 minuti o un'ora; passando all'automatico gli eventi non allineati vengono allineati, dopo una conferma. Libero: qualsiasi orario e durata. Gli intervalli si posizionano sempre liberamente.") {
             TimetableAlignmentPicker()
             ToggleRow("Mostra le verifiche nella lista", icon: "test", isOn: Bindable(model.preferences).timetableShowsTests)
-            ToggleRow("Barra di avanzamento della giornata", subtitle: "Accanto al giorno e nei widget Orario",
-                      icon: "timeline", isOn: Bindable(model.preferences).showsDayProgress)
         }
 
         LiveActivitySettingsGroup()

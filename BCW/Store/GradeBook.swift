@@ -26,10 +26,20 @@ struct SubjectSummary: Identifiable, Hashable {
 
 /// Raccolta di voti e periodi con tutti i calcoli sulle medie.
 struct GradeBook {
-    let grades: [Grade]
+    private let storedGrades: [Grade]
+    /// Voti ipotetici del simulatore, insieme a quelli veri in tutti i calcoli.
+    fileprivate var extraGrades: [Grade] = []
+    var grades: [Grade] { extraGrades.isEmpty ? storedGrades : storedGrades + extraGrades }
     let periods: [Period]
     var mode: AverageMode = .allGrades
     var weighted: Bool = false
+
+    init(grades: [Grade], periods: [Period], mode: AverageMode = .allGrades, weighted: Bool = false) {
+        storedGrades = grades
+        self.periods = periods
+        self.mode = mode
+        self.weighted = weighted
+    }
 
     /// Periodi che hanno almeno un voto, ordinati.
     var activePeriods: [Period] {
@@ -137,6 +147,39 @@ struct GradeBook {
         }
         let sum = valid.compactMap(\.value).reduce(0, +)
         return (target * (Double(valid.count) + n) - sum) / n
+    }
+}
+
+/// Voto ipotetico del simulatore della media (`GradeSimulator`).
+struct HypotheticalGrade: Identifiable, Equatable {
+    let id = UUID()
+    let subjectId: Int
+    let subjectName: String
+    let value: Double
+    let weight: Double
+}
+
+extension GradeBook {
+    /// Lo stesso libretto con in più dei voti ipotetici, datati oggi e nel periodo indicato.
+    func adding(_ hypothetical: [HypotheticalGrade], position: Int, periodName: String) -> GradeBook {
+        var book = self
+        book.extraGrades = hypothetical.compactMap { Grade.hypothetical($0, position: position, periodName: periodName) }
+        return book
+    }
+}
+
+extension Grade {
+    /// Un voto che non esiste, dallo stesso JSON dell'API (i campi di `Grade` si riempiono solo decodificando).
+    static func hypothetical(_ grade: HypotheticalGrade, position: Int, periodName: String) -> Grade? {
+        let json: [String: Any] = [
+            "evtId": -abs(grade.id.hashValue % 1_000_000_000) - 1,
+            "subjectId": grade.subjectId, "subjectDesc": grade.subjectName, "evtCode": "GRV0",
+            "evtDate": CVDate.dayKey(Date()), "decimalValue": grade.value,
+            "displayValue": GradeFormat.short(grade.value), "periodPos": position, "periodDesc": periodName,
+            "weightFactor": grade.weight, "noAverage": false, "canceled": false,
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: json) else { return nil }
+        return try? JSONDecoder().decode(Grade.self, from: data)
     }
 }
 

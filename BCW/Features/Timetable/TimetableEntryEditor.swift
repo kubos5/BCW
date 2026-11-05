@@ -115,6 +115,10 @@ struct TimetableEntryEditor: View {
                 .padding(.bottom, 24)
             }
             .scrollDismissesKeyboard(.interactively)
+            #if DEBUG
+            // Script di prova (`-BCWScript`): scrive il titolo.
+            .debugAction("entrytitle") { draft.title = "Fisica di prova" }
+            #endif
             .onAppear {
                 // Un evento fuori dalle mezz'ore con l'allineamento automatico (es. da un backup):
                 // l'editor lo allinea, come farebbe il passaggio all'allineamento automatico.

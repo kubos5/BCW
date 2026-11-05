@@ -137,8 +137,7 @@ final class WidgetExporter {
             week: week,
             agenda: agenda(model: model, from: today),
             grades: grades(model: model, now: now),
-            theme: theme,
-            showsDayProgress: model.preferences.showsDayProgress ? true : nil)
+            theme: theme)
     }
 
     /// Solo DEBUG, `-BCWWidgetNowLesson YES`: per provare i widget veri a qualsiasi ora, gli orari

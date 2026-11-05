@@ -151,7 +151,7 @@ final class Preferences {
     var homeworkReminders: Bool { didSet { defaults.set(homeworkReminders, forKey: "homeworkReminders") } }
     var reminderHour: Int { didSet { defaults.set(reminderHour, forKey: "reminderHour") } }
     var dashboardMode: DashboardMode { didSet { defaults.set(dashboardMode.rawValue, forKey: "dashboardMode"); syncedChanged() } }
-    /// Verifiche nella vista Lista dell'orario (spente di serie).
+    /// Verifiche nella vista Lista dell'orario (accese di serie: si nascondono solo su richiesta).
     var timetableShowsTests: Bool { didSet { defaults.set(timetableShowsTests, forKey: "timetableShowsTests"); syncedChanged() } }
     var timetableMode: TimetableMode { didSet { defaults.set(timetableMode.rawValue, forKey: "timetableMode"); syncedChanged() } }
     var appearance: AppearanceMode { didSet { defaults.set(appearance.rawValue, forKey: "appearance"); syncedChanged() } }
@@ -178,11 +178,6 @@ final class Preferences {
     var newsNotifications: Set<NewsKind> {
         didSet { defaults.set(newsNotifications.map(\.rawValue), forKey: "newsNotifications") }
     }
-    /// Barra di avanzamento della giornata accanto al giorno in grande dell'Orario e nei widget
-    /// "Orario" (Impostazioni › Orario; spenta di serie).
-    var showsDayProgress: Bool {
-        didSet { defaults.set(showsDayProgress, forKey: "showsDayProgress"); syncedChanged() }
-    }
     /// La scheda Orario nella barra delle schede (Impostazioni › Orario). Nascosta, l'orario resta
     /// per widget e attività in diretta.
     var showsTimetableTab: Bool {
@@ -204,7 +199,7 @@ final class Preferences {
         let hour = defaults.integer(forKey: "reminderHour")
         reminderHour = hour == 0 ? 18 : hour
         dashboardMode = DashboardMode(rawValue: defaults.string(forKey: "dashboardMode") ?? "") ?? .list
-        timetableShowsTests = defaults.bool(forKey: "timetableShowsTests")
+        timetableShowsTests = defaults.object(forKey: "timetableShowsTests") == nil || defaults.bool(forKey: "timetableShowsTests")
         timetableMode = TimetableMode(rawValue: defaults.string(forKey: "timetableMode") ?? "") ?? .list
         appearance = AppearanceMode(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
         hideCompletedHomework = defaults.bool(forKey: "hideCompletedHomework")
@@ -217,7 +212,8 @@ final class Preferences {
         liveActivities = defaults.object(forKey: "liveActivities") == nil || defaults.bool(forKey: "liveActivities")
         liveActivityCompactTime = defaults.bool(forKey: "liveActivityCompactTime")
         showsTimetableTab = defaults.object(forKey: "showsTimetableTab") == nil || defaults.bool(forKey: "showsTimetableTab")
-        showsDayProgress = defaults.bool(forKey: "showsDayProgress")
+        // La barra di avanzamento della giornata (3.2.1) non c'è più.
+        defaults.removeObject(forKey: "showsDayProgress")
         unsyncedCategories = Set((defaults.stringArray(forKey: "unsyncedCategories") ?? []).compactMap(SyncCategory.init(rawValue:)))
     }
 
@@ -252,7 +248,6 @@ final class Preferences {
             "titleAbbreviation": .string(titleAbbreviation.rawValue),
             "appearance": .string(appearance.rawValue),
             "showsTimetableTab": .bool(showsTimetableTab),
-            "showsDayProgress": .bool(showsDayProgress),
         ]
     }
 
@@ -292,7 +287,6 @@ final class Preferences {
             appearance = value
         }
         if let value = values["showsTimetableTab"]?.bool, value != showsTimetableTab { showsTimetableTab = value }
-        if let value = values["showsDayProgress"]?.bool, value != showsDayProgress { showsDayProgress = value }
     }
 
     func isCollapsed(_ section: DashboardSection) -> Bool { collapsedSections.contains(section.rawValue) }

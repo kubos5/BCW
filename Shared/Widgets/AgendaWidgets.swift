@@ -337,7 +337,7 @@ struct NextTestWidgetView: View {
             .min { $0.begin < $1.begin }
     }
 
-    static func background(_ palette: WidgetPalette) -> Color { palette.role("tertiary-container") }
+    static func background(_ palette: WidgetPalette) -> Color { palette.containerBackground("tertiary") }
 
     var body: some View {
         let test = Self.nextTest(snapshot, now: now)

@@ -64,18 +64,21 @@ struct TimetableDayList: View {
                 TimetableNowCard(content: content, actions: actions)
                     .padding(.bottom, 6)
             }
-            if showsTests && !content.unmatchedTests.isEmpty {
+            if showsTests && !content.unmatchedTests.isEmpty && !content.isDraft {
                 unmatchedTests
             }
             if content.entries.isEmpty {
                 emptyState
             } else {
                 ForEach(rows) { row in
-                    switch row {
-                    case let .run(clusters): runView(clusters)
-                    case let .pause(entry): BreakRow(entry: entry, day: content.day, isDraft: content.isDraft, actions: actions)
-                    case let .gap(start, end): gapRow(start: start, end: end)
+                    Group {
+                        switch row {
+                        case let .run(clusters): runView(clusters)
+                        case let .pause(entry): BreakRow(entry: entry, day: content.day, isDraft: content.isDraft, actions: actions)
+                        case let .gap(start, end): gapRow(start: start, end: end)
+                        }
                     }
+                    .transition(content.isDraft ? .draftBlock(index: 0) : .opacity)
                 }
             }
         }
@@ -83,11 +86,14 @@ struct TimetableDayList: View {
 
     /// Lezioni di seguito: angoli ampi solo in cima e in fondo, 2 punti tra l'una e l'altra.
     private func runView(_ clusters: [TimetableLayout.Cluster]) -> some View {
-        VStack(spacing: 2) {
+        // In anteprima le righe sono pillole staccate, che applicando si uniscono in una lista.
+        let draft = content.isDraft
+        return VStack(spacing: draft ? 6 : 2) {
             ForEach(Array(clusters.enumerated()), id: \.element.id) { index, cluster in
                 clusterView(cluster, corners: ListCellCorners(
-                    top: index == 0 ? Theme.radii.li : Theme.radii.xs,
-                    bottom: index == clusters.count - 1 ? Theme.radii.li : Theme.radii.xs))
+                    top: draft || index == 0 ? Theme.radii.xl : Theme.radii.xs,
+                    bottom: draft || index == clusters.count - 1 ? Theme.radii.xl : Theme.radii.xs))
+                    .transition(draft ? .draftBlock(index: index) : .opacity)
             }
         }
     }
@@ -100,26 +106,17 @@ struct TimetableDayList: View {
             // Come il giorno in grande della Dashboard.
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 0) {
-                    // A destra del nome del giorno, a che punto è la giornata.
-                    HStack(alignment: .center, spacing: 16) {
-                        Text(relative ? day.relativeDayName : day.it("EEEE").capitalizedFirst)
-                            .font(.m3(40, weight: 500, rounded: true))
-                            .tracking(-0.5)
-                            .foregroundStyle(Theme.ink)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                            .accessibilityAddTraits(.isHeader)
-                            .layoutPriority(1)
-                        if model.preferences.showsDayProgress, !content.isDraft, !progressSpans.isEmpty {
-                            TimetableDayProgress(day: day, spans: progressSpans)
-                                .frame(maxWidth: 240, alignment: .leading)
-                        }
-                    }
+                    Text(relative ? day.relativeDayName : day.it("EEEE").capitalizedFirst)
+                        .font(.m3(40, weight: 500, rounded: true))
+                        .tracking(-0.5)
+                        .foregroundStyle(Theme.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .accessibilityAddTraits(.isHeader)
                     Text(relative ? day.longDay : day.it("dMMMMyyyy"))
                         .font(.m3(16, weight: 500))
                         .foregroundStyle(Theme.secondaryInk)
                 }
-                // Tutto lo spazio fino al pulsante: la barra di avanzamento si allunga fin lì.
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if let jumpTitle, !ThemeStore.shared.liquidGlass || windowClass == .regular {
                     Button(action: jump) {
@@ -139,11 +136,6 @@ struct TimetableDayList: View {
         .padding(.horizontal, 4)
         .padding(.top, 4)
         .padding(.bottom, 8)
-    }
-
-    /// Gli eventi del giorno per la barra di avanzamento (senza intervalli).
-    private var progressSpans: [TimetableDefaultDay.Span] {
-        content.entries.filter { !$0.isBreak }.map { TimetableDefaultDay.Span(start: $0.start, end: $0.end) }
     }
 
     private var statusChips: [StatusChip] {
@@ -285,14 +277,14 @@ struct EntryBlockCard: View {
                     .accessibilityAddTraits(.isButton)
             }
         }
-        .clipShape(corners.shape)
         .overlay {
             if content.isDraft {
-                corners.shape
-                    .strokeBorder(Theme.timetableColor(block.entries[0], store: model.timetable),
-                                  style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+                DraftSheen()
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
             }
         }
+        .clipShape(corners.shape)
     }
 }
 
@@ -304,7 +296,7 @@ struct EntryRow: View {
     var showsTitle = true
     let tint: Color
     var isDraft = false
-    /// L'evento è di oggi: mentre è in corso mostra quanto manca e una barra di avanzamento.
+    /// L'evento è di oggi: mentre è in corso mostra "In corso".
     var isToday = false
 
     var body: some View {
@@ -333,9 +325,9 @@ struct EntryRow: View {
                 .padding(.top, 1)
                 .frame(width: 46, alignment: .trailing)
             }
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(tint.opacity(isDraft ? 0.6 : 1))
-                .frame(width: 4)
+            // In anteprima un'onda, che applicando si raddrizza.
+            DraftWaveBar(amplitude: isDraft ? 2.5 : 0, color: tint)
+                .frame(width: isDraft ? 10 : 4)
             VStack(alignment: .leading, spacing: 2) {
                 if compact {
                     Text(entry.timeRange)

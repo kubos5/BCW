@@ -109,6 +109,38 @@ struct SchemeValues: Codable, Equatable {
     }
 }
 
+extension SchemeValues {
+    /// Bianco e nero, senza alcun accento: l'app prima di scegliere i colori nell'introduzione.
+    static func monochrome(dark: Bool) -> SchemeValues {
+        if dark {
+            return SchemeValues(roles: [
+                "primary": "#ffffff", "on-primary": "#000000", "primary-container": "#2e2e2e", "on-primary-container": "#ffffff",
+                "secondary": "#d4d4d4", "on-secondary": "#000000", "secondary-container": "#2a2a2a", "on-secondary-container": "#f2f2f2",
+                "tertiary": "#bdbdbd", "on-tertiary": "#000000", "tertiary-container": "#363636", "on-tertiary-container": "#f2f2f2",
+                "error": "#ffffff", "on-error": "#000000", "error-container": "#2e2e2e", "on-error-container": "#ffffff",
+                "surface": "#000000", "surface-dim": "#000000", "surface-bright": "#2c2c2c",
+                "surface-container-lowest": "#000000", "surface-container-low": "#111111", "surface-container": "#1a1a1a",
+                "surface-container-high": "#232323", "surface-container-highest": "#2e2e2e",
+                "on-surface": "#ffffff", "on-surface-variant": "#bdbdbd", "outline": "#8a8a8a", "outline-variant": "#444444",
+                "inverse-surface": "#f0f0f0", "inverse-on-surface": "#1a1a1a", "inverse-primary": "#333333",
+                "brand": "#ffffff", "shadow": "#000000",
+            ])
+        }
+        return SchemeValues(roles: [
+            "primary": "#000000", "on-primary": "#ffffff", "primary-container": "#e6e6e6", "on-primary-container": "#000000",
+            "secondary": "#333333", "on-secondary": "#ffffff", "secondary-container": "#e9e9e9", "on-secondary-container": "#111111",
+            "tertiary": "#4a4a4a", "on-tertiary": "#ffffff", "tertiary-container": "#dcdcdc", "on-tertiary-container": "#111111",
+            "error": "#000000", "on-error": "#ffffff", "error-container": "#e6e6e6", "on-error-container": "#000000",
+            "surface": "#ffffff", "surface-dim": "#e8e8e8", "surface-bright": "#ffffff",
+            "surface-container-lowest": "#ffffff", "surface-container-low": "#f7f7f7", "surface-container": "#f1f1f1",
+            "surface-container-high": "#ebebeb", "surface-container-highest": "#e3e3e3",
+            "on-surface": "#000000", "on-surface-variant": "#4a4a4a", "outline": "#767676", "outline-variant": "#c8c8c8",
+            "inverse-surface": "#1a1a1a", "inverse-on-surface": "#f5f5f5", "inverse-primary": "#cccccc",
+            "brand": "#000000", "shadow": "#000000",
+        ])
+    }
+}
+
 /// Colori del tema in uso: ogni ruolo è un colore che cambia tra chiaro e scuro.
 struct SchemeColors {
     let primary, onPrimary, primaryContainer, onPrimaryContainer: Color
@@ -215,6 +247,11 @@ final class ThemeStore {
     var liquidGlass: Bool {
         didSet { defaults.set(liquidGlass, forKey: "liquidGlass") }
     }
+    /// L'app in bianco e nero, nell'introduzione finché non si sceglie un colore. Non si salva e
+    /// tocca solo l'interfaccia: i widget (`values`) e le scelte salvate restano quelli veri.
+    var isMonochrome: Bool {
+        didSet { if isMonochrome != oldValue { regenerate() } }
+    }
 
     // Icona dell'app (Impostazioni › Aspetto › Icona dell'app), sincronizzata con l'account BCW.
     // La applica `AppIconController`.
@@ -267,6 +304,7 @@ final class ThemeStore {
         motion = MotionStyle(rawValue: defaults.string(forKey: "motion") ?? "") ?? .expressive
         roundedText = RoundedText(rawValue: defaults.string(forKey: "roundedText") ?? "") ?? .titles
         liquidGlass = defaults.object(forKey: "liquidGlass") as? Bool ?? false
+        isMonochrome = Onboarding.isFirstRun
         // Icona: un colore sconosciuto torna al tema. L'aspetto ("Sempre scuro", fino alla 3.2), la
         // forma e lo sfondo scuro (fino alla 3.1) non ci sono più: lo sfondo segue le icone di iOS.
         appIconColor = AppIconColor(stored: defaults.string(forKey: "appIconColor") ?? "") ?? .theme
@@ -360,8 +398,16 @@ final class ThemeStore {
     }
 
     private func setScheme(light: SchemeValues, dark: SchemeValues) {
-        colors = SchemeColors(light: light, dark: dark)
+        colors = isMonochrome ? SchemeColors(light: .monochrome(dark: false), dark: .monochrome(dark: true))
+            : SchemeColors(light: light, dark: dark)
         values = (light, dark)
+    }
+
+    /// Calcola in anticipo i colori di alcuni accenti: la scelta nell'introduzione parte senza attese.
+    func prepareScheme(accents: [String]) {
+        for accent in accents where accent != defaultAccent {
+            _ = ColorEngine.shared.build(signature: [accent, colorStyle.rawValue, contrast.rawValue].joined(separator: "|"))
+        }
     }
 
     private struct CachedScheme: Codable {
@@ -420,15 +466,19 @@ final class ColorEngine {
     }()
 
     private var swatches: [String: [String]] = [:]
+    private var builds: [String: (light: SchemeValues, dark: SchemeValues)] = [:]
 
     func build(signature: String) -> (light: SchemeValues, dark: SchemeValues)? {
+        if let built = builds[signature] { return built }
         let parts = signature.split(separator: "|").map(String.init)
         guard parts.count == 3,
               let result = context?.evaluateScript("BCWTheme.build('\(parts[0])','\(parts[1])','\(parts[2])')")?.toString(),
               let data = result.data(using: .utf8),
               let json = try? JSONDecoder().decode([String: [String: String]].self, from: data),
               let light = json["light"], let dark = json["dark"] else { return nil }
-        return (SchemeValues(roles: light), SchemeValues(roles: dark))
+        let built = (light: SchemeValues(roles: light), dark: SchemeValues(roles: dark))
+        builds[signature] = built
+        return built
     }
 
     private var hueChromas: [String: (hue: Double, chroma: Double)] = [:]

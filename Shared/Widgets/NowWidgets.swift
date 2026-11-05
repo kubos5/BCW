@@ -25,8 +25,9 @@ struct NowWidgetView: View {
         .widgetURL(DeepLink.timetable(snapshot.signedIn ? day.day : nil).url)
     }
 
-    /// Sfondo: il contenitore primario, come la card "Adesso" della scheda Orario.
-    static func background(_ palette: WidgetPalette) -> Color { palette.role("primary-container") }
+    /// Sfondo: il contenitore primario, come la card "Adesso" della scheda Orario (o quello scelto in
+    /// Modifica widget).
+    static func background(_ palette: WidgetPalette) -> Color { palette.containerBackground("primary") }
 }
 
 /// Piccolo: "Adesso", materia, aula, quanto manca e la barra di avanzamento; sotto la successiva.

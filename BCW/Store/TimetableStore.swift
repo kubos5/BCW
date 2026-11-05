@@ -283,6 +283,20 @@ final class TimetableStore {
         }
     }
 
+    /// Sposta più eventi insieme (minuti per evento, `TimetableEntry.shifted`). `freeAlignment` passa
+    /// anche all'allineamento libero: con quello automatico gli eventi stanno alle ore e alle mezz'ore.
+    func shift(_ minutes: [UUID: Int], freeAlignment: Bool = false) {
+        guard minutes.values.contains(where: { $0 != 0 }) else { return }
+        mutate { table in
+            if freeAlignment { table.alignment = .free }
+            for index in table.entries.indices {
+                if let delta = minutes[table.entries[index].id], delta != 0 {
+                    table.entries[index] = table.entries[index].shifted(by: delta)
+                }
+            }
+        }
+    }
+
     func duplicate(_ entry: TimetableEntry, to weekday: Int? = nil) -> TimetableEntry {
         var copy = entry
         copy.id = UUID()

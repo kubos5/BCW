@@ -52,21 +52,40 @@ struct Eyebrow: View {
 /// Logo di BCW: la scritta in Google Sans Flex e la linea nel colore del marchio.
 struct BCWLogo: View {
     var size: CGFloat = 20
+    /// La barra sotto la scritta, centrata, invece che a fianco (stessa barra).
+    var stacked = false
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: size * 0.42) {
-            Text("BCW")
-                .font(.m3(size, weight: 800, rounded: true))
-                .tracking(-size * 0.01)
-                .foregroundStyle(Theme.ink)
-            Capsule(style: .continuous)
-                .fill(Theme.brand)
-                .frame(width: size * 1.1, height: size * 0.15)
-                .alignmentGuide(.firstTextBaseline) { $0.height + size * 0.2 }
+        Group {
+            if stacked {
+                VStack(spacing: size * 0.02) {
+                    // Senza lo spazio vuoto sopra le maiuscole: così il centro è quello che si vede.
+                    word
+                        .padding(.top, -size * 0.27)
+                    Capsule(style: .continuous)
+                        .fill(Theme.brand)
+                        .frame(width: size * 1.1, height: size * 0.15)
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: size * 0.42) {
+                    word
+                    Capsule(style: .continuous)
+                        .fill(Theme.brand)
+                        .frame(width: size * 1.1, height: size * 0.15)
+                        .alignmentGuide(.firstTextBaseline) { $0.height + size * 0.2 }
+                }
+            }
         }
         .fixedSize()
         .accessibilityElement()
         .accessibilityLabel("BCW")
+    }
+
+    private var word: some View {
+        Text("BCW")
+            .font(.m3(size, weight: 800, rounded: true))
+            .tracking(-size * 0.01)
+            .foregroundStyle(Theme.ink)
     }
 }
 

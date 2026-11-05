@@ -136,6 +136,7 @@ struct GradeBookView: View {
                         AverageHero(book: book, selectedPeriod: $period)
                         TrendCard(book: book, period: period, subjectId: subjectFilter)
                     }
+                    GradeSimulator(book: book, period: period, suggestedSubject: subjectFilter, collapsible: true)
                     lists
                 }
             }
@@ -157,6 +158,7 @@ struct GradeBookView: View {
             VStack(alignment: .leading, spacing: 24) {
                 AverageHero(book: book, selectedPeriod: $period, size: 168)
                 TrendCard(book: book, period: period, subjectId: subjectFilter)
+                GradeSimulator(book: book, period: period, suggestedSubject: subjectFilter, collapsible: true)
             }
         } main: {
             VStack(alignment: .leading, spacing: 20) {

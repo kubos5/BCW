@@ -649,7 +649,7 @@ struct CloudServerSheet: View {
 }
 
 /// Campo dell'accesso: pieno, con l'icona; quando è attivo ha il bordo primario e gli angoli più stretti.
-private struct LoginField<Content: View>: View {
+struct LoginField<Content: View>: View {
     let icon: String
     let focused: Bool
     @ViewBuilder let content: () -> Content
@@ -715,7 +715,7 @@ private extension VerticalAlignment {
     static let capCenter = VerticalAlignment(CapCenter.self)
 }
 
-private struct ProfileChoiceSheet: View {
+struct ProfileChoiceSheet: View {
     @Environment(\.dismiss) private var dismiss
     let choices: [LoginChoice]
     let onSelect: (LoginChoice) -> Void
