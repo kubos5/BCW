@@ -161,9 +161,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   cambia i dati senza animazioni mentre non si vede e la fa riapparire quando ci sono i dati (subito con la cache,
   altrimenti a fine aggiornamento, al massimo 3 s). Così niente si ridimensiona davanti all'utente.
 - `project.yml` è un'alternativa per XcodeGen.
-- Icona: `Resources/AppIcon.icon` (Icon Composer, a livelli di vetro: sfondo, cerchio e barra, con varianti
+- Icona: `Resources/AppIcon.icon` (Icon Composer, a livelli di vetro: sfondo, scritta e barra, con varianti
   chiara/scura/colorata) è l'icona principale, il cui nome corrisponde a `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`;
-  le 11 alternative sono altre `.icon` in `Resources/AppIcons/`, elencate in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`
+  le 9 alternative sono altre `.icon` in `Resources/AppIcons/`, elencate in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`
   (vedi "Icona dell'app"). Nel catalogo `Assets.xcassets` non c'è più un `AppIcon.appiconset`: non aggiungerlo, andrebbe
   in conflitto.
 - Build settings: `SWIFT_VERSION = 5.0`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, approachable concurrency.
@@ -758,43 +758,50 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   come nelle app di iOS, colori più adatti a iOS, meno opzioni (prima: 8 forme, 10 colori dei ruoli di Tonal Spot, 5
   varianti, 404 icone piatte). Terza richiesta (3.2.1, ottobre 2026): niente più "Sempre scuro" (lo sfondo segue
   sempre le icone di iOS) e un colore per ogni tema proposto in Aspetto, predefinito per quel tema, tenendo i sei di
-  prima.
-- Disegno: la barra del logo (pillola 64 × 8,73, come `bcw-linea.svg`) al centro di un cerchio largo l'86% della tela;
-  la barra è larga il 77% del cerchio (`AppIconGeometry`). Ogni icona è una `.icon` di Icon Composer con lo sfondo e
-  due gruppi con `glass: true`, la barra (sopra) e il cerchio: iOS li disegna come due lastre, con ombra e riflessi per
-  gruppo (verificato sulla Home).
-- 11 colori (`AppIconColor`, tinte sRGB fisse in `AppIconPalette.tints`, sature come le icone di iOS), nell'ordine dei
-  colori d'accento: Mattone #C4432B, Arancio #FF8A1F, Oro #E5AA00, Verde #22A55A, Petrolio #0E959E, Blu #1F7AF0,
-  Indaco #5856D6, Viola #9B4FE0, Rosa #DE4479, Ardesia #56677F, Grafite #5A6068; con le icone scure di iOS il cerchio è
-  più chiaro (#EC6F55, #FF9632, #F6C12C, #34C46E, #27B5BE, #3D8EFF, #7472F0, #AE73F7, #F26892, #8193AB, #7F868F). Barra
-  sempre bianca, sfondo chiaro #FBF7F4 e con le icone scure lo sfondo `automatic` (lo scuro di iOS), cerchio delle
-  icone colorate grigio 0,3 (con 0,45 iOS lo schiariva quasi al bianco). Valori di `fill` accettati da actool:
+  prima. Quarta richiesta (3.3, novembre 2026, con uno schizzo): il logo dell'introduzione al posto del cerchio, scritta
+  "BCW" e barra come due lastre di vetro, un colore per ogni tema dell'app (niente più Grafite) con i colori di Material.
+- Disegno: il logo di `BCWLogo(stacked: true)` (`AppIconLogo`): la scritta "BCW" in Google Sans Flex (peso 800, ROND
+  100, spaziatura −0,01) larga il 66% della tela (`AppIconGeometry.text`) e sotto, centrata, la barra larga 1,1 volte la
+  misura del testo e alta 0,15, a 0,3 dalla linea di base (misurato sull'introduzione); l'insieme centrato e poi
+  spostato in basso del 2,2% della tela (`opticalOffset`): centrato a misura sembrava troppo in alto (scelta dell'utente). I tracciati
+  vengono dai glifi (`CTFontCreatePathForGlyph`), gli stessi per l'anteprima e per gli SVG. Ogni icona è una `.icon` di
+  Icon Composer con lo sfondo e due gruppi con `glass: true`, la barra (sopra) e la scritta: iOS li disegna come due
+  lastre, con ombra e riflessi per gruppo. Gli SVG sono in punti della tela con un margine di 2 e `scale` 1; Icon Composer
+  mette il centro dell'immagine al centro della tela più `translation-in-points` (y verso il basso, verificato con
+  `ictool`). I glifi del carattere variabile hanno contorni sovrapposti: si riempiono (non zero), ma un tratto li mostra
+  dentro le lettere (per questo l'anteprima non ha il bordo chiaro).
+- 10 colori (`AppIconColor`, `AppIconPalette.schemes`), uno per colore d'accento proposto, con i ruoli di Material 3 del
+  suo tema (Tonal Spot, contrasto standard, calcolati con `bcw-theme.js`; se cambiano i temi vanno ricalcolati, anche con
+  `jsc` di JavaScriptCore sui due script, togliendo l'`export` come fa `ColorEngine`) come il logo dell'introduzione:
+  sfondo `primary-container`, scritta `on-surface`, barra `brand` (es. Mattone #FAAA9D/#3E2F2C/#A23E2F); con le icone
+  scure lo sfondo scuro di iOS (`automatic`, scelta dell'utente) con scritta e barra del tema scuro (#F9E0DC/#E28070). Con le icone colorate scritta bianca e barra grigia 0,6 (con 0,3 spariva quasi).
+  Grafite (3.2.1) è tolta: non corrisponde a un tema; un valore salvato sconosciuto torna al tema. Valori di `fill` accettati da actool:
   `automatic`, `system-dark` e i dizionari `solid`, `linear-gradient`, `automatic-gradient`, `orientation`; un valore
   sconosciuto fa fallire la compilazione.
 - Nomi: `AppIcon-<colore>` (`AppIconChoice.assetName`). Mattone è `AppIcon.icon` e si applica con
-  `setAlternateIconName(nil)`; le altre 10 stanno in `Resources/AppIcons/` (cartella sincronizzata, Xcode passa le
+  `setAlternateIconName(nil)`; le altre 9 stanno in `Resources/AppIcons/` (cartella sincronizzata, Xcode passa le
   `.icon` ad actool da sole) e i loro nomi vanno in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES` (pbxproj del target
   BCW, Debug e Release, e `project.yml`): senza, actool non le mette nell'Info.plist.
 - Tema dell'app (di serie): `AppIconColor.nearest(to:)` dà a ogni colore d'accento proposto il suo colore
-  (`themeAccent`, Mattone (BCW) → Mattone … Ardesia → Ardesia); per un colore scelto a mano Grafite se è quasi grigio
-  (croma HCT sotto 16), altrimenti il colore con la tonalità HCT più vicina (senza Grafite e Ardesia). Solo la
-  tonalità: con la distanza nel piano tonalità-croma un azzurro finiva su Grafite. Il risultato per i colori a mano
-  resta in UserDefaults (`appIconThemeTint`; le chiavi vecchie `appIconNearestTint` e `appIconNearest` si tolgono
-  all'avvio): calcolarlo carica JavaScriptCore, che all'avvio con un accento qualsiasi altrimenti non serve.
+  (`themeAccent`, Mattone (BCW) → Mattone … Ardesia → Ardesia); per un colore scelto a mano Ardesia se è quasi grigio
+  (croma HCT sotto 16), altrimenti il colore con la tonalità HCT (del suo accento) più vicina, senza Ardesia. Solo la
+  tonalità: con la distanza nel piano tonalità-croma un azzurro finiva sul grigio. Il risultato per i colori a mano
+  resta in UserDefaults (`appIconThemeColor`; le chiavi vecchie `appIconNearestTint`, `appIconNearest` e
+  `appIconThemeTint` si tolgono all'avvio): calcolarlo carica JavaScriptCore, che all'avvio con un accento qualsiasi altrimenti non serve.
 - Valori vecchi: i nomi dei colori della 3.1 (oro, petrolio, indaco, rosa, ardesia) sono di nuovo colori; all'avvio si
   tolgono `appIconAppearance` (3.2), `appIconShape` e `appIconDarkBackground` (3.1); un colore sconosciuto torna al
   tema. Chi aveva "Sempre scuro" passa all'icona normale (iOS mostra un avviso al primo avvio).
 - Rigenerare dopo aver cambiato colori o disegno: compilare, installare e lanciare
   `xcrun simctl launch --console-pty <udid> com.bcw-classeviva.app -BCWGenerateAppIcons <percorso assoluto di BCW/Resources>`
-  (solo DEBUG, `AppIconGenerator`): riscrive da capo `AppIcons/` e `AppIcon.icon` (SVG del cerchio e della barra,
+  (solo DEBUG, `AppIconGenerator`): riscrive da capo `AppIcons/` e `AppIcon.icon` (SVG della scritta e della barra,
   `icon.json` con `JSONSerialization`, numeri come `NSDecimalNumber`: con i Double scriveva 0.29999999999999999) e
-  stampa `BCW-APPICONS OK 11`; poi ricompilare. Il generatore è deterministico: le icone già presenti escono identiche.
+  stampa `BCW-APPICONS OK 10`; poi ricompilare. Il generatore è deterministico: le icone già presenti escono identiche.
   Per vedere le icone senza simulatore:
   `"/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool" X.icon --export-image
   --output-file X.png --platform iOS --rendition Default|Dark|TintedLight|TintedDark|ClearLight|ClearDark --width 256
   --height 256 --scale 1`.
 - Anteprima (pagina, campioni, voce di Aspetto): `AppIconPreview`/`AppIconArtwork` disegnano in SwiftUI sfondo,
-  cerchio e barra con un riflesso in alto e un'ombra leggera, per somigliare al vetro; non sono identiche alla Home.
+  scritta e barra (`AppIconLogo.Text`/`.Bar`) con un riflesso in alto e un'ombra leggera, per somigliare al vetro; non sono identiche alla Home.
 - `AppIconController` (avviato in `RootView`, riscritto su richiesta dell'utente, novembre 2026): chiede a iOS l'icona
   appena cambia la scelta (tocco nella pagina, accento in Aspetto con "Tema dell'app", sincronizzazione; solo con l'app
   attiva, altrimenti al ritorno), senza attese. Prima c'erano 0,4 s per le scelte, 2 s per l'accento e l'attesa
@@ -827,7 +834,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   2,3 MB, poco comprimibili) più i livelli: con 11 icone il peso è circa quello di prima (non rimisurato).
 - Verificato sulla Home del simulatore (iOS 26.3), con le 12 icone della 3.2: Default, Dark, Clear e Tinted (cerchio e
   barra lastre separate); con "Tema dell'app" provando quattro accenti in Aspetto l'icona cambia una volta sola. Le 11
-  della 3.2.1 controllate con `ictool` (Default e Dark) e cambiando icona dalla pagina.
+  della 3.2.1 controllate con `ictool` (Default e Dark) e cambiando icona dalla pagina. Le 10 della 3.3 (logo) controllate
+  con `ictool` (Default, Dark, TintedDark), sulla Home del simulatore (iOS 27.2, icone chiare) e cambiando icona con
+  `-BCWIconTest blu` (l'avviso di iOS mostra la nuova icona); non provate sull'iPhone.
 - Limiti verificati: con le icone colorate e trasparenti iOS tinge sempre l'icona: non si può forzare. Sul simulatore di
   iOS 26.3 l'avviso del cambio non si apre ("couldn't load upcall bundle principal class"): l'icona cambia ma
   `setAlternateIconName` risponde con un errore di I/O (il controllore lo riconosce da `alternateIconName`) e i cambi

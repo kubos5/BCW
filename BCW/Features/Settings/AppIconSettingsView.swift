@@ -86,7 +86,7 @@ private struct AppIconHero: View {
     static let tint = Color(platformColor: PlatformColor(hex: 0xF6D58A))
 }
 
-/// Colori: "Tema dell'app" e gli undici colori dell'icona, ognuno con il cerchio e la barra.
+/// Colori: "Tema dell'app" e i dieci colori dell'icona, ognuno con lo sfondo e la barra.
 private struct AppIconColorGrid: View {
     @Binding var selection: AppIconColor
     @Environment(\.colorScheme) private var colorScheme
@@ -114,7 +114,7 @@ private struct AppIconColorGrid: View {
     }
 }
 
-/// Campione di un colore dell'icona: il cerchio e la barra come nell'icona chiara o scura.
+/// Campione di un colore dell'icona: lo sfondo e la barra come nell'icona chiara o scura.
 private struct AppIconColorSwatch: View {
     let color: AppIconColor
     let dark: Bool
@@ -122,10 +122,10 @@ private struct AppIconColorSwatch: View {
     let icon: String?
 
     var body: some View {
-        let colors = AppIconPalette.colors(for: AppIconChoice(color: color), mode: dark ? .dark : .light)
+        let scheme = AppIconPalette.scheme(for: color, dark: dark)
         let shape = RoundedRectangle(cornerRadius: selected ? Theme.radii.l : 22, style: .continuous)
         ZStack {
-            colors.shape
+            Color(platformColor: PlatformColor(hex: scheme.background))
             if let icon {
                 Icon(icon, size: 18)
                     .foregroundStyle(Theme.ink)
@@ -133,7 +133,7 @@ private struct AppIconColorSwatch: View {
                     .background(Theme.surfaceContainerLowest, in: .circle)
             } else {
                 Capsule(style: .circular)
-                    .fill(colors.bar)
+                    .fill(Color(platformColor: PlatformColor(hex: scheme.bar)))
                     .frame(width: 26, height: 26 * AppIconGeometry.barAspect)
             }
         }

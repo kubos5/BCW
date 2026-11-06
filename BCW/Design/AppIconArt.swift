@@ -1,12 +1,13 @@
+import CoreText
 import SwiftUI
 
 // MARK: - Icona dell'app: opzioni (Impostazioni › Aspetto › Icona dell'app)
 
-/// Colore dell'icona: quello del tema o uno degli undici colori dell'icona, uno per ogni colore
-/// d'accento proposto in Aspetto più Grafite. Ogni colore ha un'icona di Icon Composer; lo sfondo
-/// segue sempre le icone chiare, scure o colorate di iOS.
+/// Colore dell'icona: quello del tema o uno dei dieci colori dell'icona, uno per ogni colore
+/// d'accento proposto in Aspetto (richiesta dell'utente, 3.3: ogni colore corrisponde a un tema). Ogni
+/// colore ha un'icona di Icon Composer, chiara o scura come le icone di iOS.
 enum AppIconColor: String, CaseIterable, Identifiable {
-    case theme, mattone, arancio, oro, verde, petrolio, blu, indaco, viola, rosa, ardesia, grafite
+    case theme, mattone, arancio, oro, verde, petrolio, blu, indaco, viola, rosa, ardesia
 
     var id: String { rawValue }
 
@@ -26,16 +27,14 @@ enum AppIconColor: String, CaseIterable, Identifiable {
         case .viola: "Viola"
         case .rosa: "Rosa"
         case .ardesia: "Ardesia"
-        case .grafite: "Grafite"
         }
     }
 
-    /// Tinte del cerchio (`nil` per il tema).
-    var tint: AppIconTint? { AppIconPalette.tints[self] }
+    /// Colori dell'icona chiara e scura (`nil` per il tema).
+    var palette: AppIconSchemes? { AppIconPalette.schemes[self] }
 
-    /// Colore d'accento proposto in Aspetto (`accentPresets`) a cui il colore dell'icona fa da
-    /// predefinito: con "Tema dell'app" e quell'accento l'icona prende questo colore. Grafite non
-    /// corrisponde a nessun accento (lo prendono i colori quasi grigi scelti a mano).
+    /// Colore d'accento proposto in Aspetto (`accentPresets`) da cui vengono i colori dell'icona:
+    /// con "Tema dell'app" e quell'accento l'icona prende questo colore.
     var themeAccent: String? {
         switch self {
         case .mattone: "#a23e2f"
@@ -48,7 +47,7 @@ enum AppIconColor: String, CaseIterable, Identifiable {
         case .viola: "#8a4fb0"
         case .rosa: "#b8456f"
         case .ardesia: "#5f6b7a"
-        case .theme, .grafite: nil
+        case .theme: nil
         }
     }
 
@@ -59,9 +58,9 @@ enum AppIconColor: String, CaseIterable, Identifiable {
     }
 
     /// Il colore dell'icona per un colore d'accento: per i colori proposti in Aspetto il loro
-    /// (`themeAccent`); per un colore scelto a mano Grafite se è quasi grigio (croma HCT sotto 16),
+    /// (`themeAccent`); per un colore scelto a mano Ardesia se è quasi grigio (croma HCT sotto 16),
     /// altrimenti il colore con la tonalità più vicina. Solo la tonalità, non la distanza nel piano
-    /// tonalità-croma: un azzurro a metà tra Petrolio e Blu finiva su Grafite, che ha poco croma ma
+    /// tonalità-croma: un azzurro a metà tra Petrolio e Blu finiva sul grigio, che ha poco croma ma
     /// una tonalità blu.
     static func nearest(to accent: String) -> AppIconColor {
         let hex = ThemeStore.normalize(accent) ?? defaultAccent
@@ -79,11 +78,11 @@ enum AppIconColor: String, CaseIterable, Identifiable {
         guard let target = ColorEngine.shared.hueChroma(hex) else { return .mattone }
         var best = AppIconColor.mattone
         if target.chroma < 16 {
-            best = .grafite
+            best = .ardesia
         } else {
             var bestDistance = Double.infinity
-            for color in presets where color != .grafite && color != .ardesia {
-                guard let hue = color.tint.flatMap({ ColorEngine.shared.hueChroma($0.lightHex)?.hue }) else { continue }
+            for color in presets where color != .ardesia {
+                guard let hue = color.themeAccent.flatMap({ ColorEngine.shared.hueChroma($0)?.hue }) else { continue }
                 let difference = abs(hue - target.hue).truncatingRemainder(dividingBy: 360)
                 let distance = min(difference, 360 - difference)
                 if distance < bestDistance {
@@ -98,9 +97,10 @@ enum AppIconColor: String, CaseIterable, Identifiable {
     }
 
     /// Chiave del risultato salvato. Quelle delle versioni precedenti (`appIconNearestTint` con sei
-    /// colori, `appIconNearest` con dieci) davano colori che ora non sono più i più vicini.
-    private static let nearestKey = "appIconThemeTint"
-    static let oldNearestKeys = ["appIconNearestTint", "appIconNearest"]
+    /// colori, `appIconNearest` con dieci, `appIconThemeTint` con Grafite) davano colori che ora non
+    /// sono più i più vicini.
+    private static let nearestKey = "appIconThemeColor"
+    static let oldNearestKeys = ["appIconNearestTint", "appIconNearest", "appIconThemeTint"]
     private static var nearestCache: [String: AppIconColor] = [:]
 }
 
@@ -125,16 +125,18 @@ struct AppIconChoice: Hashable {
 
 // MARK: - Colori
 
-/// Tinte del cerchio di un colore: sullo sfondo chiaro e su quello scuro (più chiara, come le
-/// icone scure di iOS).
-struct AppIconTint: Hashable {
-    let light: Int
-    let dark: Int
+/// Colori di un'icona in una modalità: sfondo, scritta e barra. Lo sfondo scuro non si usa: con le
+/// icone scure lo sfondo è quello di iOS (richiesta dell'utente).
+struct AppIconScheme: Hashable {
+    let background: Int
+    let text: Int
+    let bar: Int
+}
 
-    var lightHex: String {
-        let digits = String(light, radix: 16)
-        return "#" + String(repeating: "0", count: max(0, 6 - digits.count)) + digits
-    }
+/// Colori dell'icona chiara e di quella scura.
+struct AppIconSchemes: Hashable {
+    let light: AppIconScheme
+    let dark: AppIconScheme
 }
 
 /// Sfondo dell'icona.
@@ -148,51 +150,67 @@ enum AppIconBackground: Equatable {
 /// Colori di un'immagine dell'icona.
 struct AppIconColors: Equatable {
     var background: AppIconBackground
-    var shape: Color
+    var text: Color
     var bar: Color
 }
 
 /// Colori delle icone, gli stessi per l'anteprima e per le icone di Icon Composer del generatore.
-/// Tinte piene e sature come quelle delle app di iOS (non i ruoli di Material: le icone stanno
-/// sulla Home, non nell'app), scelte guardando le icone sulla Home del simulatore.
+/// Sono i ruoli di Material 3 del tema di ogni colore d'accento proposto in Aspetto (stile Tonal
+/// Spot, contrasto standard, come li genera `bcw-theme.js`), colorati come il logo dell'introduzione
+/// (richiesta dell'utente, 3.3): sfondo nel contenitore primario, scritta nel colore del testo
+/// (`on-surface`), barra nel colore del marchio (`brand`), per il tema chiaro e per quello scuro; con
+/// le icone scure lo sfondo è quello scuro di iOS.
+/// Se cambiano i colori dei temi vanno ricalcolati (lo dice il generatore, `BCW-APPICONS`).
 enum AppIconPalette {
-    static let tints: [AppIconColor: AppIconTint] = [
-        .mattone: AppIconTint(light: 0xC4432B, dark: 0xEC6F55),
-        .arancio: AppIconTint(light: 0xFF8A1F, dark: 0xFF9632),
-        .oro: AppIconTint(light: 0xE5AA00, dark: 0xF6C12C),
-        .verde: AppIconTint(light: 0x22A55A, dark: 0x34C46E),
-        .petrolio: AppIconTint(light: 0x0E959E, dark: 0x27B5BE),
-        .blu: AppIconTint(light: 0x1F7AF0, dark: 0x3D8EFF),
-        .indaco: AppIconTint(light: 0x5856D6, dark: 0x7472F0),
-        .viola: AppIconTint(light: 0x9B4FE0, dark: 0xAE73F7),
-        .rosa: AppIconTint(light: 0xDE4479, dark: 0xF26892),
-        .ardesia: AppIconTint(light: 0x56677F, dark: 0x8193AB),
-        .grafite: AppIconTint(light: 0x5A6068, dark: 0x7F868F),
+    static let schemes: [AppIconColor: AppIconSchemes] = [
+        .mattone: AppIconSchemes(light: AppIconScheme(background: 0xFAAA9D, text: 0x3E2F2C, bar: 0xA23E2F),
+                                 dark: AppIconScheme(background: 0x76453D, text: 0xF9E0DC, bar: 0xE28070)),
+        .arancio: AppIconSchemes(light: AppIconScheme(background: 0xFEB788, text: 0x3D3027, bar: 0x964900),
+                                 dark: AppIconScheme(background: 0x73482B, text: 0xF8E1D5, bar: 0xD9884E)),
+        .oro: AppIconSchemes(light: AppIconScheme(background: 0xFEE090, text: 0x373225, bar: 0x745B00),
+                             dark: AppIconScheme(background: 0x62511F, text: 0xEFE4D1, bar: 0xB4984A)),
+        .verde: AppIconSchemes(light: AppIconScheme(background: 0xB5F0C9, text: 0x2C352E, bar: 0x196B45),
+                               dark: AppIconScheme(background: 0x335B43, text: 0xDEE8DE, bar: 0x6FA785)),
+        .petrolio: AppIconSchemes(light: AppIconScheme(background: 0xA8EFF4, text: 0x2A3435, bar: 0x00696F),
+                                  dark: AppIconScheme(background: 0x255A5E, text: 0xDDE8E8, bar: 0x6BA5A9)),
+        .blu: AppIconSchemes(light: AppIconScheme(background: 0xADCBFA, text: 0x2E333A, bar: 0x1B5FA7),
+                             dark: AppIconScheme(background: 0x3E5373, text: 0xE2E5EF, bar: 0x769DD6)),
+        .indaco: AppIconSchemes(light: AppIconScheme(background: 0xC2C1F9, text: 0x32313B, bar: 0x5555A9),
+                                dark: AppIconScheme(background: 0x4F4F74, text: 0xE7E4F0, bar: 0x9595D8)),
+        .viola: AppIconSchemes(light: AppIconScheme(background: 0xECC7FE, text: 0x373039, bar: 0x7E44A4),
+                               dark: AppIconScheme(background: 0x604A6D, text: 0xEDE2EE, bar: 0xB889D5)),
+        .rosa: AppIconSchemes(light: AppIconScheme(background: 0xFAAFC4, text: 0x3C2F32, bar: 0xA4355F),
+                              dark: AppIconScheme(background: 0x734552, text: 0xF6E0E4, bar: 0xE17C9C)),
+        .ardesia: AppIconSchemes(light: AppIconScheme(background: 0xADD2FE, text: 0x2E333A, bar: 0x535F6E),
+                                 dark: AppIconScheme(background: 0x395571, text: 0xE1E6EF, bar: 0x939CA8)),
     ]
-    /// Sfondo dell'icona chiara: un bianco caldo.
-    static let lightBackground = 0xFBF7F4
-    /// Barra: sempre bianca.
-    static let bar = 0xFFFFFF
-    /// Sfondo scuro delle icone di iOS (misurato sul simulatore con iOS 26): nelle icone vere lo
-    /// mette iOS (`automatic`, `system-dark`), qui serve per l'anteprima.
+    /// Sfondo scuro delle icone scure e colorate di iOS (misurato sul simulatore con iOS 26): nelle icone
+    /// vere lo mette iOS (`automatic`), qui serve per l'anteprima.
     static let systemDark = AppIconBackground.gradient(Color(platformColor: PlatformColor(hex: 0x2E2E30)),
                                                        Color(platformColor: PlatformColor(hex: 0x111112)))
-    /// Grigio del cerchio nelle icone colorate e trasparenti: la barra, bianca, resta il livello
-    /// più chiaro. iOS schiarisce i grigi tingendoli: con 0,45 il cerchio diventava quasi bianco e la
-    /// barra si vedeva appena (verificato sul simulatore), con 0,3 restano distinti.
-    static let tintedShapeWhite: CGFloat = 0.3
+    /// Grigi della scritta e della barra nelle icone colorate e trasparenti (iOS tinge la scala di
+    /// grigi): la scritta resta il livello più chiaro, la barra si vede ma resta distinta (con 0,3
+    /// spariva quasi, controllato con `ictool`).
+    static let tintedText: CGFloat = 1
+    static let tintedBar: CGFloat = 0.6
+
+    static func scheme(for color: AppIconColor, dark: Bool) -> AppIconScheme {
+        let schemes = color.palette ?? schemes[.mattone]!
+        return dark ? schemes.dark : schemes.light
+    }
 
     /// Colori dell'icona in una modalità delle icone di iOS.
     static func colors(for choice: AppIconChoice, mode: AppIconPreview.Mode) -> AppIconColors {
-        let tint = choice.color.tint ?? tints[.mattone]!
         func color(_ hex: Int) -> Color { Color(platformColor: PlatformColor(hex: hex)) }
         switch mode {
         case .light:
-            return AppIconColors(background: .solid(color(lightBackground)), shape: color(tint.light), bar: color(bar))
+            let scheme = scheme(for: choice.color, dark: false)
+            return AppIconColors(background: .solid(color(scheme.background)), text: color(scheme.text), bar: color(scheme.bar))
         case .dark:
-            return AppIconColors(background: systemDark, shape: color(tint.dark), bar: color(bar))
+            let scheme = scheme(for: choice.color, dark: true)
+            return AppIconColors(background: systemDark, text: color(scheme.text), bar: color(scheme.bar))
         case .tinted:
-            return AppIconColors(background: .clear, shape: Color(white: tintedShapeWhite), bar: color(bar))
+            return AppIconColors(background: .clear, text: Color(white: tintedText), bar: Color(white: tintedBar))
         }
     }
 }
@@ -202,17 +220,80 @@ enum AppIconPalette {
 /// Proporzioni dell'icona, in frazioni della tela (1024 punti per iOS). Le stesse per
 /// l'anteprima e per i livelli delle icone di Icon Composer.
 enum AppIconGeometry {
-    /// Lato del cerchio rispetto alla tela.
-    static let shape: CGFloat = 0.86
-    /// Larghezza della barra rispetto al cerchio.
-    static let bar: CGFloat = 0.77
-    /// Altezza della barra rispetto alla larghezza (rettangolo 64 × 8,73 del logo, a pillola).
-    static let barAspect: CGFloat = 8.73 / 64
+    /// Larghezza della scritta "BCW" rispetto alla tela.
+    static let text: CGFloat = 0.66
+    /// Spostamento verso il basso dell'insieme, rispetto alla tela: centrato a misura sembrava troppo in
+    /// alto (la scritta pesa più della barra sottile), così appare centrato (richiesta dell'utente).
+    static let opticalOffset: CGFloat = 0.022
+    /// Altezza della barra rispetto alla larghezza (come nel logo: 0,15 × 1,1 della misura del testo).
+    static let barAspect: CGFloat = 0.15 / 1.1
     /// Raggio degli angoli della maschera delle icone di iOS (solo per l'anteprima).
     static let mask: CGFloat = 0.2237
 }
 
-/// Disegno dell'icona a tutta tela (senza maschera) per l'anteprima: sfondo, cerchio e barra come
+/// Il logo dell'introduzione (`BCWLogo(stacked: true)`) come tracciati: la scritta "BCW" in Google
+/// Sans Flex (peso 800, arrotondata, con la stessa spaziatura) e sotto, centrata, la barra larga
+/// 1,1 volte la misura del testo e alta 0,15, a 0,3 dalla linea di base (misure prese
+/// dall'introduzione). In frazioni della tela, con il centro dell'insieme in (0, 0) e le y verso il
+/// basso (più `AppIconGeometry.opticalOffset`); gli stessi tracciati per l'anteprima e per gli SVG del
+/// generatore.
+enum AppIconLogo {
+    struct Shapes {
+        let text: CGPath
+        let bar: CGRect
+    }
+
+    static let shapes: Shapes = make()
+
+    private static func make() -> Shapes {
+        let size: CGFloat = 1000
+        let font = Typography.ctFont(size: size, weight: 800, rond: 100)
+        let attributes: [NSAttributedString.Key: Any] = [
+            NSAttributedString.Key(kCTFontAttributeName as String): font,
+            NSAttributedString.Key(kCTKernAttributeName as String): -size * 0.01,
+        ]
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "BCW", attributes: attributes))
+        let glyphs = CGMutablePath()
+        for run in CTLineGetGlyphRuns(line) as? [CTRun] ?? [] {
+            let count = CTRunGetGlyphCount(run)
+            var ids = [CGGlyph](repeating: 0, count: count)
+            var positions = [CGPoint](repeating: .zero, count: count)
+            CTRunGetGlyphs(run, CFRange(location: 0, length: 0), &ids)
+            CTRunGetPositions(run, CFRange(location: 0, length: 0), &positions)
+            for index in 0..<count {
+                // Core Text ha le y verso l'alto: si capovolgono, con la linea di base a 0.
+                var transform = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: positions[index].x, ty: -positions[index].y)
+                if let glyph = CTFontCreatePathForGlyph(font, ids[index], &transform) { glyphs.addPath(glyph) }
+            }
+        }
+        let box = glyphs.boundingBoxOfPath
+        let bar = CGRect(x: box.midX - size * 0.55, y: size * 0.3, width: size * 1.1, height: size * 0.15)
+        let top = box.minY, bottom = bar.maxY
+        let scale = AppIconGeometry.text / max(box.width, 1)
+        let transform = CGAffineTransform(scaleX: scale, y: scale).translatedBy(x: -box.midX, y: -(top + bottom) / 2)
+            .concatenating(CGAffineTransform(translationX: 0, y: AppIconGeometry.opticalOffset))
+        return Shapes(text: glyphs.copy(using: [transform]) ?? glyphs, bar: bar.applying(transform))
+    }
+
+    /// La scritta in una tela di lato `rect.width`, centrata nel rettangolo.
+    struct Text: Shape {
+        func path(in rect: CGRect) -> Path {
+            let transform = CGAffineTransform(translationX: rect.midX, y: rect.midY).scaledBy(x: rect.width, y: rect.width)
+            return Path(AppIconLogo.shapes.text).applying(transform)
+        }
+    }
+
+    /// La barra (una pillola) in una tela di lato `rect.width`, centrata nel rettangolo.
+    struct Bar: Shape {
+        func path(in rect: CGRect) -> Path {
+            let transform = CGAffineTransform(translationX: rect.midX, y: rect.midY).scaledBy(x: rect.width, y: rect.width)
+            let bar = AppIconLogo.shapes.bar.applying(transform)
+            return Path(roundedRect: bar, cornerRadius: bar.height / 2, style: .circular)
+        }
+    }
+}
+
+/// Disegno dell'icona a tutta tela (senza maschera) per l'anteprima: sfondo, scritta e barra come
 /// due lastre, con un riflesso in alto e un'ombra leggera, per somigliare al vetro che iOS dà alle
 /// icone di Icon Composer.
 struct AppIconArtwork: View {
@@ -222,41 +303,30 @@ struct AppIconArtwork: View {
     var glass = true
 
     var body: some View {
-        let circle = size * AppIconGeometry.shape
-        let barWidth = circle * AppIconGeometry.bar
         ZStack {
             switch colors.background {
             case .solid(let color): Rectangle().fill(color)
             case .gradient(let top, let bottom): Rectangle().fill(LinearGradient(colors: [top, bottom], startPoint: .top, endPoint: .bottom))
             case .clear: Color.clear
             }
-            Circle()
-                .fill(colors.shape)
-                .overlay {
-                    if glass {
-                        // Luce dall'alto e bordo chiaro, come le lastre di vetro di iOS.
-                        Circle().fill(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0), .black.opacity(0.06)],
-                                                     startPoint: .top, endPoint: .bottom))
-                        Circle().strokeBorder(LinearGradient(colors: [.white.opacity(0.55), .white.opacity(0.08), .white.opacity(0.25)],
-                                                             startPoint: .top, endPoint: .bottom),
-                                              lineWidth: max(0.5, size / 160))
-                    }
-                }
-                .frame(width: circle, height: circle)
-                .shadow(color: .black.opacity(glass ? 0.18 : 0), radius: size / 40, y: size / 80)
-            // Il rettangolo del logo ha raggio pari a metà altezza (archi di cerchio, come l'SVG).
-            Capsule(style: .circular)
-                .fill(colors.bar)
-                .overlay {
-                    if glass {
-                        Capsule(style: .circular)
-                            .fill(LinearGradient(colors: [.white.opacity(0), .black.opacity(0.08)], startPoint: .top, endPoint: .bottom))
-                    }
-                }
-                .frame(width: barWidth, height: barWidth * AppIconGeometry.barAspect)
-                .shadow(color: .black.opacity(glass ? 0.22 : 0), radius: size / 70, y: size / 120)
+            plate(AppIconLogo.Text(), colors.text)
+            plate(AppIconLogo.Bar(), colors.bar)
         }
         .frame(width: size, height: size)
+    }
+
+    /// Una lastra: la forma piena con la luce dall'alto e un'ombra leggera. Niente bordo: i glifi del
+    /// carattere variabile hanno contorni sovrapposti, che il tratto mostrerebbe dentro le lettere.
+    private func plate(_ shape: some Shape, _ color: Color) -> some View {
+        ZStack {
+            shape.fill(color)
+            if glass {
+                shape.fill(LinearGradient(colors: [.white.opacity(0.24), .white.opacity(0), .black.opacity(0.06)],
+                                          startPoint: .top, endPoint: .bottom))
+            }
+        }
+        .compositingGroup()
+        .shadow(color: .black.opacity(glass ? 0.2 : 0), radius: size / 60, y: size / 100)
     }
 }
 
@@ -278,7 +348,7 @@ struct AppIconPreview: View {
         ZStack {
             if mode == .tinted {
                 // iOS tinge la scala di grigi sul suo sfondo scuro.
-                AppIconArtwork(colors: AppIconColors(background: AppIconPalette.systemDark, shape: .clear, bar: .clear),
+                AppIconArtwork(colors: AppIconColors(background: AppIconPalette.systemDark, text: .clear, bar: .clear),
                                size: size, glass: false)
                 AppIconArtwork(colors: colors, size: size)
                     .colorMultiply(tint)
