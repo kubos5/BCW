@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 import UIKit
 
@@ -26,6 +27,11 @@ struct LoginView: View {
     /// Tastiera visibile (dalle notifiche di UIKit, non dal campo attivo: cambiando tra Classeviva e
     /// Account BCW il campo attivo cambia ma la tastiera resta).
     @State private var keyboardVisible = false
+    /// Altezza della tastiera, come margine in fondo animato con la stessa molla della disposizione.
+    @State private var keyboardHeight: CGFloat = 0
+    /// Larghezza dell'intestazione (cambia solo ruotando o ridimensionando la finestra): dice se il titolo
+    /// sta su una riga accanto al logo piccolo.
+    @State private var headerWidth: CGFloat = 0
     /// iPad largo con la pagina larga almeno 760 punti: accesso in una card a due colonne.
     @State private var wideCard = false
     @FocusState private var focused: Field?
@@ -60,6 +66,10 @@ struct LoginView: View {
     }
 
     private var title: String {
+        #if DEBUG
+        // Per provare i titoli lunghi: `-BCWLoginTitle testo`.
+        if let title = UserDefaults.standard.string(forKey: "BCWLoginTitle") { return title }
+        #endif
         if cloudOnly { return registering ? "Crea un account BCW" : "Accedi con un account BCW" }
         if isAddingAccount { return model.isCloud ? "Abbina un account Classeviva" : "Aggiungi un account" }
         if linkingFirst { return "Ciao, \(model.cloud?.user.username ?? "")" }
@@ -74,6 +84,11 @@ struct LoginView: View {
                 phoneLayout
             }
         }
+        // La tastiera non restringe lo scorrimento di colpo (il contenuto, centrato, saltava in alto
+        // prima che partisse l'animazione): lo spazio della tastiera è un margine in fondo animato con
+        // la molla della disposizione compatta. Nella card larga dell'iPad resta quello di sistema.
+        .safeAreaPadding(.bottom, wideCard ? 0 : keyboardHeight)
+        .ignoresSafeArea(wideCard ? [] : .keyboard, edges: .bottom)
         // Sull'iPad largo, da 760 punti, l'accesso è una card a due colonne (come la versione web).
         .widthAtLeast(760, isOn: $wideCard)
         .scrollBounceBehavior(.basedOnSize)
@@ -87,6 +102,13 @@ struct LoginView: View {
         // Script di prova (`-BCWScript`): cambia modulo o dà il fuoco al primo campo.
         .debugAction("loginmode") { mode = mode == .bcw ? .classeviva : .bcw }
         .debugAction("loginfocus") { focused = currentMode == .bcw ? .bcwUsername : .username }
+        // Come se la tastiera si aprisse o chiudesse (sul simulatore con la tastiera del Mac non compare).
+        .debugAction("loginkeyboard") {
+            withAnimation(Motion.spatial) {
+                keyboardVisible.toggle()
+                keyboardHeight = keyboardVisible ? 336 : 0
+            }
+        }
         #endif
         .onAppear {
             // Dopo una sessione BCW scaduta si riparte dall'accesso con l'account BCW.
@@ -107,11 +129,18 @@ struct LoginView: View {
             }
             DispatchQueue.main.async { focused = target }
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-            withAnimation(Motion.spatial) { keyboardVisible = true }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
+            let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+            withAnimation(Motion.spatial) {
+                keyboardVisible = true
+                keyboardHeight = frame?.height ?? 0
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            withAnimation(Motion.spatial) { keyboardVisible = false }
+            withAnimation(Motion.spatial) {
+                keyboardVisible = false
+                keyboardHeight = 0
+            }
         }
         .sheet(isPresented: Binding(get: { !choices.isEmpty }, set: { if !$0 { choices = [] } })) {
             ProfileChoiceSheet(choices: choices) { choice in
@@ -132,7 +161,7 @@ struct LoginView: View {
     /// Telefono (e iPad stretto o nei fogli): una colonna centrata.
     private var phoneLayout: some View {
         VStack(spacing: compact ? 20 : 24) {
-            if compact { compactHeader } else { header }
+            header
 
             if showsModePicker {
                 SegmentedButtons(selection: $mode, options: [(Mode.classeviva, "Classeviva", nil), (Mode.bcw, "Account BCW", nil)],
@@ -469,39 +498,57 @@ struct LoginView: View {
 
     // MARK: Intestazione e note
 
+    /// Intestazione: logo (con la barra sotto la scritta) e titolo uno sopra l'altro, con le forme che
+    /// ruotano; con la tastiera aperta logo piccolo con la barra a destra e titolo su una riga. È la stessa
+    /// vista nelle due disposizioni (`AnyLayout`), così il logo si rimpicciolisce e la barra si sposta con
+    /// la molla invece di sparire e ricomparire in dissolvenza (prima andava a scatti). Il logo è disegnato
+    /// sempre a 64 punti e rimpicciolito (`ScaledLogo`): un testo che cambia misura non si anima con
+    /// continuità.
+    ///
+    /// Titoli lunghi: sotto il logo vanno a capo, centrati; accanto al logo piccolo, se non stanno su una
+    /// riga, vanno a capo allineati a sinistra e il blocco è centrato sul logo. Un titolo che sta su una
+    /// riga resta a misura piena (`fixedSize`): durante la molla, con il logo ancora grande, andava a capo
+    /// o veniva troncato per un attimo.
     private var header: some View {
-        VStack(spacing: 10) {
-            BCWLogo(size: 64)
+        let font = Typography.platformFont(size: 16, weight: 500)
+        let titleWidth = ceil((title as NSString).size(withAttributes: [.font: font]).width)
+        let fitsBesideLogo = titleWidth <= headerWidth - ScaledLogo.sideWidth(scale: Self.compactLogoScale) - 14
+        let fitsBelowLogo = titleWidth <= headerWidth
+        let oneLine = compact ? fitsBesideLogo : fitsBelowLogo
+        let layout = compact ? AnyLayout(HStackLayout(alignment: .capCenter, spacing: 14)) : AnyLayout(VStackLayout(spacing: 10))
+        let showsArt = !compact && !isAddingAccount && !cloudOnly
+        return layout {
+            ScaledLogo(scale: compact ? Self.compactLogoScale : 1, stacked: !compact)
             Text(title)
                 .font(.m3(16, weight: 500))
                 .foregroundStyle(Theme.secondaryInk)
+                .multilineTextAlignment(compact ? .leading : .center)
+                .lineLimit(oneLine ? 1 : 3)
+                .fixedSize(horizontal: oneLine, vertical: true)
+                // Su una riga centrato sulle maiuscole del logo, poi 2 punti più in basso: a misura
+                // sembrava alto, accanto alla scritta pesante e alla barra (segnalato dall'utente). Su più
+                // righe il blocco intero sta al centro delle maiuscole.
+                .alignmentGuide(.capCenter) { dimensions in
+                    oneLine ? dimensions[.firstTextBaseline] - font.capHeight / 2 - 2 : dimensions.height / 2
+                }
+                // Il titolo non scorre da una posizione all'altra (passava sopra il logo e la barra): sparisce
+                // subito dove era e ricompare nel posto nuovo quando logo e barra sono quasi fermi, come la
+                // dissolvenza in sequenza di Material 3 (`fadeThrough`).
+                .id(compact)
+                .transition(.asymmetric(insertion: .opacity.animation(Motion.effects.delay(0.22)),
+                                        removal: .opacity.animation(Motion.effectsFast)))
         }
-        .frame(maxWidth: .infinity, minHeight: isAddingAccount || cloudOnly ? 0 : 200)
+        .frame(maxWidth: .infinity, minHeight: showsArt ? 200 : 0, alignment: compact ? .leading : .center)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { headerWidth = $0 }
+        .padding(.top, compact ? 8 : 0)
         .background {
-            if !isAddingAccount && !cloudOnly { LoginArt() }
+            if showsArt { LoginArt().transition(.opacity) }
         }
         .accessibilityElement(children: .combine)
     }
 
-    /// Intestazione con la tastiera aperta: logo piccolo e titolo su una riga, centrati tra loro
-    /// sulle maiuscole (con le linee di base allineate il titolo, più piccolo, stava in basso).
-    private var compactHeader: some View {
-        let logoCaps = Typography.platformFont(size: 30, weight: 800, rounded: true).capHeight
-        let titleCaps = Typography.platformFont(size: 16, weight: 500).capHeight
-        return HStack(alignment: .capCenter, spacing: 14) {
-            BCWLogo(size: 30)
-                .alignmentGuide(.capCenter) { $0[.firstTextBaseline] - logoCaps / 2 }
-            Text(title)
-                .font(.m3(16, weight: 500))
-                .foregroundStyle(Theme.secondaryInk)
-                .lineLimit(1)
-                .alignmentGuide(.capCenter) { $0[.firstTextBaseline] - titleCaps / 2 }
-            Spacer(minLength: 0)
-        }
-        .padding(.top, 8)
-        .transition(.opacity)
-        .accessibilityElement(children: .combine)
-    }
+    /// Il logo accanto al titolo, con la tastiera aperta: 30 punti invece di 64.
+    private static let compactLogoScale: CGFloat = 30 / 64
 
     /// Note in basso. Con il gruppo Classeviva/Account BCW occupano sempre l'altezza delle più lunghe
     /// e sono allineate in alto: cambiando scelta il resto della pagina (centrato) non si sposta.
@@ -668,6 +715,67 @@ struct LoginField<Content: View>: View {
         .frame(height: 56)
         .background(Theme.surfaceContainerHighest, in: shape)
         .overlay(shape.strokeBorder(Theme.primary, lineWidth: focused ? 2 : 0))
+    }
+}
+
+/// Il logo di 64 punti rimpicciolito di `scale` (dall'angolo in alto a sinistra), con la misura che
+/// occupa rimpicciolita anche lei. Scala e misura si animano insieme (`ScaledLayout`). La guida
+/// `capCenter` è il centro delle maiuscole della scritta, rimpicciolito.
+private struct ScaledLogo: View {
+    let scale: CGFloat
+    /// La barra sotto la scritta (altrimenti a destra), come `BCWLogo(stacked:)`.
+    var stacked = false
+
+    var body: some View {
+        let caps = Typography.platformFont(size: 64, weight: 800, rounded: true).capHeight
+        ScaledLayout(scale: scale) {
+            BCWLogo(size: 64, stacked: stacked)
+                .alignmentGuide(.capCenter) { $0[.firstTextBaseline] - caps / 2 }
+                .scaleEffect(scale, anchor: .topLeading)
+        }
+    }
+
+    /// Larghezza del logo con la barra a destra (scritta, spazio di 0,42 e barra di 1,1 volte la misura).
+    static func sideWidth(scale: CGFloat) -> CGFloat {
+        sideWidth64 * scale
+    }
+
+    /// Con l'arrotondamento scelto in Aspetto (cambia di poco la larghezza della scritta).
+    private static var sideWidth64: CGFloat {
+        let font = Typography.ctFont(size: 64, weight: 800, rond: ThemeStore.shared.rond)
+        let attributes: [NSAttributedString.Key: Any] = [
+            NSAttributedString.Key(kCTFontAttributeName as String): font,
+            NSAttributedString.Key(kCTKernAttributeName as String): -0.64,
+        ]
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "BCW", attributes: attributes))
+        return ceil(CTLineGetTypographicBounds(line, nil, nil, nil)) + 64 * (0.42 + 1.1)
+    }
+}
+
+/// Occupa la misura del figlio moltiplicata per `scale` (il figlio si rimpicciolisce da sé con
+/// `scaleEffect`) e ne riporta le guide verticali alla stessa scala.
+private struct ScaledLayout: Layout {
+    var scale: CGFloat
+
+    var animatableData: CGFloat {
+        get { scale }
+        set { scale = newValue }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let child = subviews.first else { return .zero }
+        let size = child.sizeThatFits(.unspecified)
+        return CGSize(width: size.width * scale, height: size.height * scale)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, anchor: .topLeading, proposal: .unspecified)
+    }
+
+    func explicitAlignment(of guide: VerticalAlignment, in bounds: CGRect, proposal: ProposedViewSize,
+                           subviews: Subviews, cache: inout ()) -> CGFloat? {
+        guard let child = subviews.first else { return nil }
+        return bounds.minY + child.dimensions(in: .unspecified)[guide] * scale
     }
 }
 

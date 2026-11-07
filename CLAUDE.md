@@ -715,8 +715,27 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   tastiera aperta il cursore passa al campo corrispondente (al giro dopo) e la tastiera resta. Un tocco nello spazio
   vuoto la chiude. Le note in basso occupano sempre l'altezza delle più lunghe tra i due moduli (copie nascoste in uno
   `ZStack` allineato in alto): cambiando Classeviva/Account BCW il resto, centrato, non si sposta.
-  Nella disposizione compatta logo e titolo sono centrati sulle maiuscole (allineamento `capCenter`, verificato
-  al pixel): con le linee di base allineate il titolo, più piccolo, stava in basso.
+  Nella disposizione compatta logo e titolo sono centrati sulle maiuscole (allineamento `capCenter`): con le linee di
+  base allineate il titolo, più piccolo, stava in basso; centrato a misura sembrava alto (segnalato dall'utente: accanto
+  alla scritta pesante e alla barra più in basso), quindi il titolo sta 2 punti più in basso (centro delle maiuscole
+  del titolo all'altezza del centro della barra, verificato al pixel).
+  Intestazione unica nelle due disposizioni (`header`, `AnyLayout` tra `VStackLayout` e `HStackLayout`): il logo è
+  sempre `BCWLogo(size: 64)` rimpicciolito da `ScaledLogo` (`scaleEffect` più `ScaledLayout`, che occupa la misura
+  rimpicciolita, riporta la guida `capCenter` alla stessa scala e anima la scala). Prima le due intestazioni si
+  scambiavano in dissolvenza e il logo andava a scatti (segnalato dall'utente). Con la tastiera chiusa la barra sta
+  sotto la scritta, come nell'introduzione e nell'icona; aperta, a destra (richiesta dell'utente): `BCWLogo(stacked:)`
+  usa anch'esso `AnyLayout`, quindi la barra si sposta con la molla. Il titolo non scorre (passava sopra logo e barra):
+  sparisce subito e ricompare nel posto nuovo dopo 0,22 s, a movimento quasi finito (`.id(compact)`, transizione
+  asimmetrica). Un titolo che sta su una riga resta a misura piena (`fixedSize`, con la larghezza misurata con UIKit e
+  quella dell'intestazione in `headerWidth`): durante la molla andava a capo o veniva troncato; uno più lungo va a capo
+  (fino a 3 righe), centrato sotto il logo, allineato a sinistra accanto al logo piccolo con il blocco centrato sulle
+  maiuscole. Provati sul simulatore con `-BCWLoginTitle testo` (solo DEBUG, sostituisce il titolo) e
+  `-BCWScript "12:action=loginkeyboard"` (solo DEBUG, fa come se la tastiera si aprisse o chiudesse: dopo un riavvio il
+  simulatore usava la tastiera del Mac e quella su schermo non compariva). La tastiera non
+  restringe lo `ScrollView` (`.ignoresSafeArea(.keyboard)`, non nella card larga dell'iPad): il suo spazio è un
+  `safeAreaPadding` in fondo animato con la stessa molla; prima il contenuto, centrato, saltava in alto di circa 100
+  punti in un fotogramma prima dell'animazione (visto nella registrazione). Sul simulatore la prima comparsa della
+  tastiera ferma lo schermo per circa 0,1 s (caricamento della tastiera).
 - Componenti propri di M3 Expressive (`Expressive.swift`): `SearchAppBar`, `AccountAvatarButton`, `FABMenu` (con
   Liquid Glass `GlassFABMenu`: pulsante di vetro tinto di 60 punti, come il pulsante di ricerca della barra delle
   schede e allineato sopra di esso, da cui escono le voci come pillole di vetro con `glassEffectID` nello stesso
@@ -848,6 +867,15 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 
 ## Introduzione (onboarding)
 - Richiesta dell'utente (3.3): alla prima apertura, poi da Impostazioni › Generale › Rivedi l'introduzione.
+- Introduzione a ogni riavvio del dispositivo (segnalato dall'utente sull'iPhone): dopo un riavvio iOS può avviare l'app in
+  background prima del primo sblocco (attività in diretta programmata, aggiornamento in background); fino ad allora
+  preferenze e Portachiavi non si leggono (`UserDefaults` risponde vuoto), quindi `isFirstRun` era vero e restava tale per
+  tutta la vita del processo. `ProtectedData.isAvailableAtLaunch` (in `Onboarding.swift`) prova ad aprire il file delle
+  preferenze, che ha la protezione "fino al primo sblocco" (se non esiste è davvero la prima apertura): senza dati
+  leggibili non è la prima volta. Avviata così, l'app avrebbe anche tema e preferenze vuoti: quando i dati diventano
+  leggibili (`protectedDataDidBecomeAvailableNotification`) e l'app è ancora in background il processo esce
+  (`restartWhenAvailableIfNeeded`, da `BCWApp.init`), così all'apertura riparte con i dati veri. Non riproducibile sul
+  simulatore (non ha il blocco dei dati): da provare sul telefono riavviandolo.
   `Features/Onboarding/Onboarding.swift` (stato, `isFirstRun`: nessun `onboardingCompleted`, niente account nel
   Portachiavi né demo, quindi chi aggiorna l'app non la vede) e `OnboardingView.swift` (passaggi `OnboardingStep`: accoglienza,
   colori, interfaccia, forme e movimento, vista della Dashboard, funzioni, Classeviva, account BCW, orario, fine). Sta in

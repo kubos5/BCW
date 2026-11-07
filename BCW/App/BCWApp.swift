@@ -7,6 +7,7 @@ struct BCWApp: App {
     @State private var model = AppModel()
 
     init() {
+        ProtectedData.restartWhenAvailableIfNeeded()
         Theme.configureAppearance()
         UNUserNotificationCenter.current().delegate = NotificationPresenter.shared
         #if DEBUG
