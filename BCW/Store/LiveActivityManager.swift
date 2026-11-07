@@ -17,6 +17,9 @@ import UIKit
 /// - Avvio automatico (Impostazioni › Orario): oggi dalla mezz'ora prima della prima lezione fino
 ///   alla fine dell'ultima; il prossimo giorno di scuola viene programmato in anticipo (iOS 26) e
 ///   parte da solo anche con l'app chiusa.
+/// - Ogni evento può seguire l'impostazione, mostrarsi sempre o mai (`LiveActivityChoice`, editor
+///   dell'evento): con "Mostra" l'attività parte anche con l'avvio automatico spento, gli eventi con
+///   "Non mostrare" restano fuori dal piano della giornata.
 /// - Fermata a mano (pulsante della card "Adesso") o tolta dalla schermata di blocco, per quel
 ///   giorno non riparte da sola; avviata a mano, quel giorno resta anche senza avvio automatico.
 /// - Tornando nell'app l'attività di oggi già in corso da un po' viene rifatta da capo
@@ -123,7 +126,7 @@ final class LiveActivityManager {
         if stopping { return ("Attività in diretta fermata per oggi", false) }
         if isRunningToday { return ("Attività in diretta avviata: la trovi nella schermata di blocco", false) }
         if let lastRequestError { return ("L'attività in diretta non è partita: \(lastRequestError)", true) }
-        return ("L'attività in diretta non è partita: oggi non ci sono più lezioni in orario", true)
+        return ("L'attività in diretta non è partita: oggi non ci sono più lezioni da mostrare in orario", true)
     }
 
     /// L'app è tornata in primo piano: l'attività di oggi, se è in corso da più di 10 minuti, viene
@@ -199,11 +202,15 @@ final class LiveActivityManager {
         let manual = defaults.string(forKey: Self.manualKey) == todayKey || (isDemo && stopped != todayKey)
         // Con "Prova la demo" niente avvio automatico (né programmato, con il suo avviso, per il
         // giorno dopo): l'orario è di prova e la demo resta aperta anche riaprendo l'app. A mano sì.
-        let automatic = model.preferences.liveActivities && !isDemo && !snapshot.isDemo
+        let allowsAutomatic = !isDemo && !snapshot.isDemo
+        // Gli eventi che seguono l'impostazione si vedono con l'avvio automatico acceso o con
+        // l'attività avviata a mano oggi; quelli con "Mostra" anche con l'avvio automatico spento (che
+        // allora parte solo per loro), quelli con "Non mostrare" mai (`LiveActivityChoice`).
+        let automatic = model.preferences.liveActivities
         let compactTime = model.preferences.liveActivityCompactTime
         var wishes: [Wish] = []
 
-        let todayPlan = plan(for: today, snapshot: snapshot)
+        let todayPlan = plan(for: today, snapshot: snapshot, showsByDefault: automatic || manual)
         #if DEBUG
         // `-BCWLiveActivityDemoStart N`: la prova parte da sola tra N secondi, anche con l'app chiusa.
         if let plan = todayPlan, let start = demoStart, now < start.addingTimeInterval(-5),
@@ -212,7 +219,7 @@ final class LiveActivityManager {
         }
         #endif
         let waiting = retryAfter.map { now < $0 } ?? false
-        if let plan = todayPlan, manual || (automatic && stopped != todayKey), !waiting,
+        if let plan = todayPlan, manual || (allowsAutomatic && stopped != todayKey), !waiting,
            let content = plan.content(at: now, theme: theme, compactTime: compactTime) {
             let running = TimetableActivity.activities.contains {
                 $0.attributes.dayKey == todayKey && ($0.activityState == .active || $0.activityState == .stale)
@@ -223,11 +230,11 @@ final class LiveActivityManager {
                 wishes.append(Wish(dayKey: todayKey, start: plan.autoStart, plan: plan, content: content))
             }
         }
-        // Il prossimo giorno di scuola parte da solo mezz'ora prima della prima lezione.
-        if automatic {
+        // Il prossimo giorno con lezioni da mostrare parte da solo mezz'ora prima della prima.
+        if allowsAutomatic {
             for offset in 1...TimetableDefaultDay.lookahead {
                 guard let day = calendar.date(byAdding: .day, value: offset, to: today),
-                      let plan = plan(for: day, snapshot: snapshot) else { continue }
+                      let plan = plan(for: day, snapshot: snapshot, showsByDefault: automatic) else { continue }
                 let key = BCWShared.dayKey(day)
                 if stopped != key, plan.autoStart > now.addingTimeInterval(60),
                    let content = plan.content(at: plan.autoStart, theme: theme, compactTime: compactTime) {
@@ -239,14 +246,14 @@ final class LiveActivityManager {
         return (wishes, todayPlan)
     }
 
-    private func plan(for day: Date, snapshot: WidgetSnapshot) -> TimetableActivityPlan? {
+    private func plan(for day: Date, snapshot: WidgetSnapshot, showsByDefault: Bool) -> TimetableActivityPlan? {
         #if DEBUG
         if let demoItems {
             return BCWShared.calendar.isDateInToday(day) ? TimetableActivityPlan(day: day, items: demoItems) : nil
         }
         #endif
         guard snapshot.hasTimetable, !snapshot.isHoliday(day) else { return nil }
-        return TimetableActivityPlan(snapshot: snapshot, day: day)
+        return TimetableActivityPlan(snapshot: snapshot, day: day, showsByDefault: showsByDefault)
     }
 
     private var isDemo: Bool {
@@ -270,9 +277,17 @@ final class LiveActivityManager {
             let state = activity.activityState
             guard state == .active || state == .stale || state == .pending else { continue }
             if let index = wishes.indices.first(where: { !satisfied.contains($0) && wishes[$0].matches(activity) }) {
+                let content = wishes[index].content
+                // La fase in corso finisce tra meno di 130 s: un aggiornamento (o un'attività nuova) adesso
+                // farebbe slittare il passaggio alla fase dopo fino a 120 s dopo l'aggiornamento, con "0:00"
+                // nel frattempo.
+                let endsSoon = (content.state.phases.first?.end.timeIntervalSince(now) ?? 0) < TimetableActivityPlan.staleFloor
                 // Non quella appena richiesta (il ritorno nell'app può arrivare durante la richiesta).
                 let recent = requestedAt[activity.id].map { now.timeIntervalSince($0) < Self.renewalInterval } ?? false
-                if renew, wishes[index].start == nil, state != .pending, !recent {
+                if renew, endsSoon, wishes[index].start == nil, state != .pending, !recent {
+                    // Rinnovo rimandato a dopo il passaggio (`changeTask`), se l'app è ancora aperta.
+                    renewalRequested = true
+                } else if renew, wishes[index].start == nil, state != .pending, !recent {
                     // Chiusa subito e richiesta di nuovo qui sotto, come spegnendo e riaccendendo.
                     endedByApp.insert(activity.id)
                     await activity.end(nil, dismissalPolicy: .immediate)
@@ -280,9 +295,7 @@ final class LiveActivityManager {
                     continue
                 }
                 satisfied.insert(index)
-                let content = wishes[index].content
                 // Solo per stringere l'isola non vale la pena rischiare il passaggio alla fase dopo.
-                let endsSoon = (content.state.phases.first?.end.timeIntervalSince(now) ?? 0) < TimetableActivityPlan.staleFloor
                 let skipped = endsSoon && content.state.differsOnlyInTimerStep(from: activity.content.state)
                     && activity.content.staleDate == content.staleDate
                 if !skipped, activity.content.state != content.state || activity.content.staleDate != content.staleDate {
@@ -334,11 +347,17 @@ final class LiveActivityManager {
     }
 
     /// Al prossimo cambio di contenuto: subito se l'app è in esecuzione, in background se iOS lo
-    /// concede.
+    /// concede. In background conta solo il prossimo passaggio di fase: lì iOS ridisegna da solo
+    /// (contenuto scaduto) e l'aggiornamento in background, se arriva dopo, prepara il passaggio
+    /// successivo. Con le soglie del conto alla rovescia (che stringono soltanto l'isola) si sprecava
+    /// un aggiornamento in background prima del passaggio, e iOS ne concede pochi.
     private func scheduleNextChange(wishes: [Wish], now: Date) {
         let next = wishes.compactMap { wish -> Date? in
             // In attesa: il contenuto preparato vale fino alla prima lezione.
             wish.plan.nextChange(after: max(now, wish.start ?? now))
+        }.min()
+        let nextPhase = wishes.compactMap { wish -> Date? in
+            wish.plan.nextPhaseStart(after: max(now, wish.start ?? now))
         }.min()
         changeTask?.cancel()
         changeTask = nil
@@ -349,11 +368,11 @@ final class LiveActivityManager {
                 self?.sync()
             }
         }
-        guard next != refreshDate else { return }
-        refreshDate = next
-        if let next {
+        guard nextPhase != refreshDate else { return }
+        refreshDate = nextPhase
+        if let nextPhase {
             let request = BGAppRefreshTaskRequest(identifier: Self.refreshTaskID)
-            request.earliestBeginDate = next
+            request.earliestBeginDate = nextPhase
             do {
                 try BGTaskScheduler.shared.submit(request)
             } catch {

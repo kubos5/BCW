@@ -99,18 +99,19 @@ struct TimetableEditBar: View {
 }
 
 /// Barra degli strumenti della modifica (vivace, in basso al posto della barra delle schede):
-/// allineamento, nuovo intervallo, colori della giornata e "Fine".
+/// allineamento, spostamento degli orari, nuovo intervallo e "Fine". I colori della giornata stanno nel
+/// menu dell'orario.
 struct TimetableEditToolbar: View {
+    let shift: () -> Void
     let addBreak: () -> Void
-    let colorDay: () -> Void
     let done: () -> Void
 
     var body: some View {
         FloatingToolbar(vibrant: true) {
             TimetableAlignmentPicker(inToolbar: true)
             ToolbarSeparator()
+            ToolbarIconButton("schedule", label: "Sposta gli orari", action: shift)
             ToolbarIconButton("coffee", label: "Nuovo intervallo", action: addBreak)
-            ToolbarIconButton("palette", label: "Colora la giornata", action: colorDay)
             ToolbarTextButton(title: "Fine", icon: "check", action: done)
                 .padding(.leading, 4)
         }

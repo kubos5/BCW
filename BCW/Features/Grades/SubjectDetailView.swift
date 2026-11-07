@@ -66,6 +66,7 @@ struct SubjectDetailView: View {
                         header(ringSize: 140)
                         periodPicker
                         GoalCalculator(grades: grades, weighted: book.weighted)
+                        GradeSimulator(book: book, period: period, subjectId: subjectId)
                     }
                 } main: {
                     VStack(alignment: .leading, spacing: 20) {
@@ -81,6 +82,7 @@ struct SubjectDetailView: View {
                         periodPicker
                         chart(height: 170)
                         GoalCalculator(grades: grades, weighted: book.weighted)
+                        GradeSimulator(book: book, period: period, subjectId: subjectId)
                         gradesSection
                     }
                     .pagePadding()

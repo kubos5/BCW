@@ -66,17 +66,6 @@ enum WidgetSelfTest {
             WidgetDates.offset(of: date, from: wednesday) == 7 ? [.init(start: 480, end: 540)] : []
         } == 7, "evento fra 7 giorni: quel giorno")
 
-        // Avanzamento della giornata: 5 ore di lezione, un'ora e mezza passata = 30%.
-        check(DayProgress(spans: [.init(start: 480, end: 780)], minute: 570)?.percent == 30, "avanzamento: 30%")
-        check(DayProgress(spans: [.init(start: 480, end: 600), .init(start: 540, end: 660)], minute: 900)?.total == 180,
-              "avanzamento: eventi sovrapposti contati una volta")
-        let gap = DayProgress(spans: [.init(start: 480, end: 540), .init(start: 600, end: 660)], minute: 570)
-        check(gap?.elapsed == 60 && gap?.percent == 50 && gap?.blocks.count == 2, "avanzamento fermo tra due eventi")
-        check(DayProgress(spans: [.init(start: 480, end: 540)], minute: 539)?.percent == 98
-              && DayProgress(spans: [.init(start: 480, end: 540)], minute: 540)?.isFinished == true, "100% solo alla fine")
-        check(DayProgress(spans: [], minute: 600) == nil && DayProgress(spans: [.init(start: 480, end: 540)], minute: 0)?.percent == 0,
-              "avanzamento senza eventi e prima dell'inizio")
-
         // Gli intervalli non contano: dopo l'ultima lezione resta solo un intervallo.
         var snapshot = WidgetSnapshot.sample(now: at(0, 9, 30))
         if let index = snapshot.days.firstIndex(where: { $0.key == BCWShared.dayKey(wednesday) }) {
@@ -111,9 +100,7 @@ enum WidgetSelfTest {
         check(beforeDouble.current == nil && beforeDouble.next?.end == 12 * 60 && beforeDouble.following.map(\.id) == ["sto"],
               "prossima lezione di due ore")
 
-        // Voci della linea temporale: adesso, ogni inizio e fine futuri, le mezzanotti; con la barra
-        // di avanzamento accesa anche ogni 5 minuti durante le lezioni.
-        snapshot.showsDayProgress = true
+        // Voci della linea temporale: adesso, ogni inizio e fine futuri, le mezzanotti.
         let now = at(0, 9, 30)
         let dates = BCWWidgetKind.timetable.timelineDates(snapshot: snapshot, now: now)
         check(dates.first == now, "la prima voce è adesso")
@@ -123,16 +110,6 @@ enum WidgetSelfTest {
             check(dates.contains(expected), "manca la voce \(BCWShared.dayKey(expected)) \(WidgetDates.time(expected))")
         }
         check(!dates.contains(at(0, 9)), "voce passata")
-        check(dates.contains(at(0, 9, 35)) && dates.contains(at(1, 8, 5)) && !dates.contains(at(0, 11, 5)),
-              "voci ogni 5 minuti durante le lezioni (non nell'intervallo)")
-        check(!BCWWidgetKind.now.timelineDates(snapshot: snapshot, now: now).contains(at(0, 9, 35)),
-              "lezione in corso senza le voci dell'avanzamento")
-        check(TimetableWidgetDay(snapshot: snapshot, now: now).progress?.elapsed == 90, "avanzamento del widget alle 9:30")
-        var noProgress = snapshot
-        noProgress.showsDayProgress = nil
-        check(TimetableWidgetDay(snapshot: noProgress, now: now).progress == nil
-              && !BCWWidgetKind.timetable.timelineDates(snapshot: noProgress, now: now).contains(at(0, 9, 35)),
-              "barra spenta: niente avanzamento né voci ogni 5 minuti")
         check(BCWWidgetKind.agenda.timelineDates(snapshot: snapshot, now: now) == [now, at(1, 0), at(2, 0)],
               "compiti: adesso e le mezzanotti")
         let signedOut = WidgetSnapshot(generatedAt: now, signedIn: false)
@@ -167,7 +144,9 @@ enum WidgetSelfTest {
             let lesson = plan.content(at: at(0, 9, 30), theme: theme)
             check(lesson?.state.phases.map(\.start) == [at(0, 9), at(0, 10), at(0, 11), at(0, 11, 10)]
                   && lesson?.staleDate == at(0, 10), "lezione in corso e successive")
-            check(lesson?.state.phase(isStale: false, now: at(0, 11, 5))?.start == at(0, 9), "non scaduta: la prima fase")
+            check(lesson?.state.phase(isStale: false, now: at(0, 9, 45))?.start == at(0, 9), "non scaduta: la fase in corso")
+            check(lesson?.state.phase(isStale: false, now: at(0, 10, 1))?.start == at(0, 10),
+                  "disegnata dopo la fine della fase ma non ancora scaduta: la fase in corso, non quella finita")
             check(lesson?.state.phase(isStale: true, now: at(0, 9, 59))?.start == at(0, 10), "scaduta: la fase successiva")
             check(lesson?.state.phase(isStale: true, now: at(0, 11, 5))?.kind == .pause,
                   "scaduta e ridisegnata più tardi: la fase in corso")
@@ -193,9 +172,42 @@ enum WidgetSelfTest {
             if let state = lesson?.state, let data = try? JSONEncoder().encode(state) {
                 check(data.count < 4096, "stato dell'attività troppo grande: \(data.count) byte")
             }
+            check(plan.nextPhaseStart(after: at(0, 9, 30)) == at(0, 10), "prossimo passaggio di fase (aggiornamento in background)")
         } else {
             failures.append("piano dell'attività mancante")
         }
+
+        // Attività in diretta per evento: "Non mostrare" toglie l'evento dal piano, "Mostra" lo tiene anche
+        // con l'avvio automatico spento (che allora segue solo quello).
+        func choosing(_ choices: [Int: LiveActivityChoice]) -> WidgetSnapshot {
+            var copy = snapshot
+            func apply(_ events: [WidgetSnapshot.Event]) -> [WidgetSnapshot.Event] {
+                events.map { event in
+                    var event = event
+                    if !event.isBreak, let choice = choices[event.start] { event.liveActivity = choice }
+                    return event
+                }
+            }
+            copy.days = copy.days.map { day in
+                var day = day
+                day.events = apply(day.events)
+                return day
+            }
+            copy.week = copy.week.map(apply)
+            return copy
+        }
+        let hiddenLast = TimetableActivityPlan(snapshot: choosing([12 * 60 + 10: .hide]), day: wednesday)
+        check(hiddenLast?.lessons.count == 4 && hiddenLast?.end == at(0, 12, 10), "ultima lezione nascosta: finisce prima")
+        let hiddenMiddle = TimetableActivityPlan(snapshot: choosing([9 * 60: .hide]), day: wednesday)
+        check(hiddenMiddle?.phases.map(\.kind) == [.before, .lesson, .pause, .lesson, .pause, .lesson, .lesson, .finished],
+              "lezione in mezzo nascosta: al suo posto l'attesa della successiva (\(hiddenMiddle?.phases.map(\.kind.rawValue) ?? []))")
+        let onlyShown = TimetableActivityPlan(snapshot: choosing([9 * 60: .show]), day: wednesday, showsByDefault: false)
+        check(onlyShown?.lessons.map(\.start) == [at(0, 9)] && onlyShown?.autoStart == at(0, 8, 30) && onlyShown?.end == at(0, 10),
+              "avvio automatico spento: solo la lezione con \"Mostra\"")
+        check(TimetableActivityPlan(snapshot: snapshot, day: wednesday, showsByDefault: false) == nil,
+              "avvio automatico spento e nessun evento con \"Mostra\": niente attività")
+        let defaults = TimetableActivityPlan(snapshot: choosing([8 * 60: .show]), day: wednesday)
+        check(defaults?.lessons.count == 5, "\"Mostra\" con l'avvio automatico acceso: come prima")
         let tint = WidgetSnapshot.Tint(light: 1, dark: 2)
         let merged = TimetableActivityPlan(day: wednesday, items: [
             .init(title: "Matematica", start: at(0, 8), end: at(0, 9), tint: tint),

@@ -7,7 +7,8 @@ import WidgetKit
 /// dell'istantanea che l'app scrive per i widget (o con quelli di esempio), in chiaro o scuro e
 /// nelle modalità di resa. Argomenti: `-BCWWidgetGalleryScheme light|dark`,
 /// `-BCWWidgetGalleryLook fullColor|accented|vibrant`, `-BCWWidgetGalleryKind timetable|now|…`,
-/// `-BCWWidgetGallerySource app|sample|signedOut|empty` (dati, esempio o stati vuoti);
+/// `-BCWWidgetGallerySource app|sample|signedOut|empty` (dati, esempio o stati vuoti),
+/// `-BCWWidgetGalleryBackground system|theme` (lo sfondo di "Modifica widget");
 /// `-BCWNowMinute N` sposta l'ora.
 struct WidgetGalleryView: View {
     @Environment(AppModel.self) private var model
@@ -19,6 +20,8 @@ struct WidgetGalleryView: View {
     @State private var look = WidgetGalleryView.argument("BCWWidgetGalleryLook").flatMap(WidgetLook.init(rawValue:)) ?? .fullColor
     @State private var source = WidgetGalleryView.argument("BCWWidgetGallerySource").flatMap(Source.init(rawValue:))
         ?? (UserDefaults.standard.bool(forKey: "BCWWidgetGallerySample") ? .sample : .app)
+    @State private var backgroundStyle = WidgetGalleryView.argument("BCWWidgetGalleryBackground")
+        .flatMap(WidgetBackgroundStyle.init(rawValue:)) ?? .system
     private let only = WidgetGalleryView.argument("BCWWidgetGalleryKind").flatMap(BCWWidgetKind.init(rawValue:))
     /// `-BCWWidgetGalleryKind live`: solo l'attività in diretta.
     private let liveOnly = WidgetGalleryView.argument("BCWWidgetGalleryKind") == "live"
@@ -38,11 +41,10 @@ struct WidgetGalleryView: View {
             }
         }
 
-        /// L'esempio, con le lezioni del lunedì anche se oggi è sabato o domenica: così la giornata
-        /// in corso (avanzamento, lezione in corso) si vede a qualsiasi giorno.
-        static func weekdaySample(now: Date, progress: Bool) -> WidgetSnapshot {
+        /// L'esempio, con le lezioni del lunedì anche se oggi è sabato o domenica: così la lezione in
+        /// corso si vede a qualsiasi giorno.
+        static func weekdaySample(now: Date) -> WidgetSnapshot {
             var snapshot = WidgetSnapshot.sample(now: now)
-            snapshot.showsDayProgress = progress ? true : nil
             let key = BCWShared.dayKey(now)
             if let index = snapshot.days.firstIndex(where: { $0.key == key }), snapshot.days[index].events.isEmpty {
                 snapshot.days[index].events = snapshot.week[0]
@@ -53,7 +55,7 @@ struct WidgetGalleryView: View {
         func snapshot(model: AppModel, now: Date) -> WidgetSnapshot {
             switch self {
             case .app: model.widgets.current ?? .sample(now: now)
-            case .sample: Self.weekdaySample(now: now, progress: model.preferences.showsDayProgress)
+            case .sample: Self.weekdaySample(now: now)
             case .signedOut: WidgetSnapshot(generatedAt: now, signedIn: false, theme: model.widgets.current?.theme ?? .init())
             case .empty:
                 // Con l'account ma senza orario, compiti, verifiche e voti.
@@ -106,6 +108,8 @@ struct WidgetGalleryView: View {
                                                           (WidgetLook.accented, "Colorate", nil),
                                                           (WidgetLook.vibrant, "Blocco", nil)])
             SegmentedButtons(selection: $source, options: Source.allCases.map { ($0, $0.title, nil) })
+            SegmentedButtons(selection: $backgroundStyle, options: [(WidgetBackgroundStyle.system, "Predefinito", nil),
+                                                                     (WidgetBackgroundStyle.theme, "Colore del tema", nil)])
         }
     }
 
@@ -132,7 +136,8 @@ struct WidgetGalleryView: View {
                     ForEach(families, id: \.self) { family in
                         WidgetFrame(kind: kind, family: family, snapshot: snapshot, now: now,
                                     palette: WidgetPalette(theme: snapshot.theme, colorScheme: colorScheme,
-                                                           look: family.isAccessory ? .vibrant : look, simulated: true))
+                                                           look: family.isAccessory ? .vibrant : look, simulated: true,
+                                                           background: backgroundStyle))
                     }
                 }
             }

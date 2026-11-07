@@ -498,6 +498,9 @@ struct CountBadge: View {
             .padding(.horizontal, 4)
             .frame(minWidth: 16, minHeight: 16)
             .background(Theme.error, in: .capsule)
+            // Spostandosi con un'animazione numero e cerchio restano insieme: senza, SwiftUI anima
+            // ciascuno per conto suo e il numero si staccava dal cerchio (barra di navigazione).
+            .geometryGroup()
     }
 }
 

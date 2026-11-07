@@ -296,6 +296,8 @@ struct SelectButton<Value: Hashable>: View {
     var minHeight: CGFloat = 36
     /// Occupa tutta la larghezza, con la freccia a destra (campi dei moduli, `.field .select-btn`).
     var expands = false
+    /// Righe del valore (con `expands`): i valori lunghi vanno a capo invece di essere troncati.
+    var lineLimit = 1
 
     var body: some View {
         let current = options.first { $0.value == selection }?.title ?? ""
@@ -304,7 +306,9 @@ struct SelectButton<Value: Hashable>: View {
         } label: {
             HStack(spacing: 4) {
                 Text(current)
-                    .lineLimit(1)
+                    .lineLimit(expands ? lineLimit : 1)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: expands && lineLimit > 1)
                     .foregroundStyle(Theme.ink)
                 if expands { Spacer(minLength: 0) }
                 Icon("chevronUpDown", size: 18)
@@ -313,6 +317,7 @@ struct SelectButton<Value: Hashable>: View {
             .font(.m3(expands ? 15 : 14, weight: 550))
             .padding(.leading, expands ? 12 : 14)
             .padding(.trailing, 8)
+            .padding(.vertical, expands && lineLimit > 1 ? 8 : 0)
             .frame(maxWidth: expands ? .infinity : nil, minHeight: minHeight)
             .background(fill ?? Theme.surfaceContainerHigh,
                         in: .rect(cornerRadius: expands ? Theme.radii.l : Theme.radii.m, style: .continuous))

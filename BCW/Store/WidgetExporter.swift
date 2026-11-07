@@ -137,8 +137,7 @@ final class WidgetExporter {
             week: week,
             agenda: agenda(model: model, from: today),
             grades: grades(model: model, now: now),
-            theme: theme,
-            showsDayProgress: model.preferences.showsDayProgress ? true : nil)
+            theme: theme)
     }
 
     /// Solo DEBUG, `-BCWWidgetNowLesson YES`: per provare i widget veri a qualsiasi ora, gli orari
@@ -180,7 +179,8 @@ final class WidgetExporter {
                              teacher: entry.teacher, start: entry.start, end: entry.end,
                              kind: entry.isBreak ? .breakTime : .lesson, isTest: isTest,
                              hasTest: hasTest == true ? true : nil,
-                             tint: tint(Theme.timetableColor(entry, store: store)))
+                             tint: tint(Theme.timetableColor(entry, store: store)),
+                             liveActivity: entry.liveActivity)
     }
 
     /// Compiti, verifiche ed eventi dei prossimi giorni (senza i compiti fatti, se nascosti).

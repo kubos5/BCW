@@ -346,6 +346,8 @@ struct SheetAction {
     static func confirm(_ title: String, disabled: Bool = false, action: @escaping () -> Void) -> SheetAction {
         SheetAction(title: title, role: .confirm, disabled: disabled, action: action)
     }
+
+    fileprivate var toolbarID: String { "\(title)-\(disabled)" }
 }
 
 extension View {
@@ -424,7 +426,10 @@ private struct SheetChrome: ViewModifier {
                             button(leading)
                         }
                     }
-                    ForEach(Array(trailing.enumerated()), id: \.offset) { _, action in
+                    // Con la barra di sistema un pulsante già nella barra non si riattiva più cambiando
+                    // `disabled` (verificato con "Salva" nell'editor, iOS 27): l'identità dipende anche da
+                    // `disabled`, così il sistema lo rifà.
+                    ForEach(Array(trailing.enumerated()), id: \.element.toolbarID) { _, action in
                         ToolbarItem(placement: action.role == .confirm ? .confirmationAction : .primaryAction) {
                             button(action)
                         }
@@ -654,6 +659,108 @@ private struct ScrollToTopOnReselect: ViewModifier {
             .onChange(of: reselection) {
                 withAnimation(Motion.spatialSlow) { position.scrollTo(edge: .top) }
             }
+    }
+}
+
+// MARK: - Nuovo tocco in una pila di navigazione
+
+extension View {
+    /// Senza Liquid Glass, scheda Tu (richiesta dell'utente): il nuovo tocco sulla scheda aperta porta in
+    /// cima la pagina in vista, anche una aperta dentro la pila (Bacheca, Impostazioni…); il successivo,
+    /// già in cima, torna alla pagina principale. Da mettere fuori dalla pila di navigazione della scheda.
+    /// Con Liquid Glass fa tutto il sistema (prima torna alla pagina principale, poi in cima).
+    func reselectsThroughStack() -> some View {
+        modifier(StackReselection())
+    }
+}
+
+private struct StackReselection: ViewModifier {
+    @Environment(\.tabReselection) private var reselection
+    @State private var anchor = StackAnchor()
+
+    func body(content: Content) -> some View {
+        content
+            .background { StackAnchorView(anchor: anchor).allowsHitTesting(false).accessibilityHidden(true) }
+            .onChange(of: reselection) { anchor.reselect() }
+    }
+}
+
+/// Le pagine di Tu sono scritte in SwiftUI senza un percorso comune, quindi in cima e indietro si va con
+/// UIKit: dalla vista accanto alla pila si risale al controller della scheda e si scende alla pila in
+/// vista (SwiftUI segue il ritorno alla pagina principale come con il gesto indietro). Prima la vista
+/// stava nella pagina principale, che con una pagina aperta all'avvio non entrava mai nella finestra.
+final class StackAnchor {
+    weak var view: UIView?
+
+    /// Al giro dopo: nello stesso giro SwiftUI aggiorna la pagina per il tocco (cambia `tabReselection`) e
+    /// interrompeva lo scorrimento di UIKit dopo pochi punti (visto sul simulatore).
+    func reselect() {
+        DispatchQueue.main.async { [weak self] in self?.perform() }
+    }
+
+    private func perform() {
+        guard let view, view.window != nil,
+              let host = sequence(first: view as UIResponder, next: { $0.next })
+                .lazy.compactMap({ $0 as? UIViewController }).first,
+              let navigation = Self.visibleNavigation(under: host),
+              let page = navigation.topViewController?.view else { return }
+        if let scroll = Self.mainScrollView(in: page), !Self.isAtTop(scroll) {
+            scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: -scroll.adjustedContentInset.top), animated: true)
+        } else if navigation.viewControllers.count > 1 {
+            navigation.popToRootViewController(animated: true)
+        }
+    }
+
+    /// La pila di navigazione in vista sotto il controller della scheda.
+    private static func visibleNavigation(under root: UIViewController) -> UINavigationController? {
+        var queue = [root]
+        while !queue.isEmpty {
+            let controller = queue.removeFirst()
+            if let navigation = controller as? UINavigationController, navigation.view.window != nil {
+                return navigation
+            }
+            queue.append(contentsOf: controller.children)
+        }
+        return nil
+    }
+
+    /// Lo scorrimento principale della pagina: il più grande in vista (gli altri sono file di chip o simili).
+    private static func mainScrollView(in root: UIView) -> UIScrollView? {
+        var best: UIScrollView?
+        var bestArea: CGFloat = 0
+        var queue = [root]
+        while !queue.isEmpty {
+            let view = queue.removeFirst()
+            if let scroll = view as? UIScrollView, !(scroll is UITextView), !scroll.isHidden, scroll.isScrollEnabled,
+               scroll.window != nil {
+                let area = scroll.bounds.width * scroll.bounds.height
+                if area > bestArea {
+                    best = scroll
+                    bestArea = area
+                }
+            }
+            queue.append(contentsOf: view.subviews)
+        }
+        return best
+    }
+
+    private static func isAtTop(_ scroll: UIScrollView) -> Bool {
+        scroll.contentOffset.y <= -scroll.adjustedContentInset.top + 1
+    }
+}
+
+private struct StackAnchorView: UIViewRepresentable {
+    let anchor: StackAnchor
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isUserInteractionEnabled = false
+        anchor.view = view
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        anchor.view = view
     }
 }
 

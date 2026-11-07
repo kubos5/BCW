@@ -64,6 +64,11 @@ final class AppIconController {
         retry(after: .seconds(1))
     }
 
+    /// Finita l'introduzione si applica l'icona del tema scelto, dopo il cerchio dei colori.
+    func onboardingFinished() {
+        retry(after: .seconds(1.2))
+    }
+
     /// L'app è tornata attiva: se l'icona non è quella scelta, la cambia.
     func sceneBecameActive() {
         guard started else { return }
@@ -113,6 +118,8 @@ final class AppIconController {
     private func apply() {
         let app = UIApplication.shared
         guard started, !isRequesting, app.supportsAlternateIcons, app.applicationState == .active else { return }
+        // Durante l'introduzione l'avviso di iOS coprirebbe il cambio di colori: si aspetta la fine.
+        guard !Onboarding.shared.isPresented else { return }
         let name = wantedName
         let current = currentName ?? app.alternateIconName
         currentName = .some(current)

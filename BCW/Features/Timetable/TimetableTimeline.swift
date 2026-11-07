@@ -305,8 +305,9 @@ private struct TimelineSegment: View {
     @State private var isLifted = false
 
     /// Angoli dei blocchi: ampi all'esterno, piccoli tra le ore di un gruppo (come le liste segmentate).
-    private var radius: CGFloat { entry.isBreak ? 10 : Theme.radii.m }
-    private var innerRadius: CGFloat { Theme.radii.xs }
+    /// In anteprima sono pillole morbide (anche tra le ore), che applicando si assestano con una molla.
+    private var radius: CGFloat { entry.isBreak ? 10 : (isDraft ? Theme.radii.xl : Theme.radii.m) }
+    private var innerRadius: CGFloat { isDraft && !entry.isBreak ? Theme.radii.l : Theme.radii.xs }
 
     private var step: Int { entry.isBreak ? 5 : model.timetable.alignment.dragStep }
     private var isAutomatic: Bool { !entry.isBreak && model.timetable.alignment == .automatic }
@@ -373,6 +374,7 @@ private struct TimelineSegment: View {
             .offset(x: x + CGFloat(preview.dayShift) * dayWidth,
                     y: CGFloat(preview.start) / 60 * hourHeight)
             .zIndex(dragging ? 10 : 0)
+            .transition(isDraft ? .draftBlock(index: entry.start / 60 % 12) : .opacity)
             .sensoryFeedback(.selection, trigger: preview.start)
             .sensoryFeedback(.impact(weight: .medium), trigger: isLifted) { _, lifted in lifted }
             .animation(Motion.spatialFast, value: preview.start)
@@ -396,14 +398,26 @@ private struct TimelineSegment: View {
                 DiagonalStripes(spacing: 10).stroke(tint.opacity(0.25), lineWidth: 3).clipShape(shape)
             } else {
                 // Blocco pieno nella tinta, come gli eventi di un calendario Material.
-                shape.fill(tint.mix(Theme.surface, isDraft ? 0.16 : 0.36))
+                shape.fill(tint.mix(Theme.surface, isDraft ? 0.3 : 0.36))
+                if isDraft {
+                    // L'onda di luce che scende lungo la giornata e l'onda sul bordo.
+                    DraftSheen()
+                        .clipShape(shape)
+                        .transition(.opacity)
+                    DraftWaveBar(amplitude: 2.5, color: tint)
+                        .frame(width: 10)
+                        .padding(.vertical, 8)
+                        .padding(.leading, 5)
+                        .frame(maxHeight: .infinity, alignment: .leading)
+                        .transition(.opacity)
+                }
             }
             // Nei blocchi troppo bassi per una riga (un intervallo di 10 minuti nella settimana
             // dell'iPad) niente testo: la forma prendeva l'altezza della scritta e copriva il blocco dopo.
             if height >= 15 {
                 HStack(alignment: .top, spacing: 0) {
                     label(start: start, end: end, height: height, tint: tint)
-                        .padding(.leading, entry.isBreak ? 8 : 10)
+                        .padding(.leading, entry.isBreak ? 8 : (isDraft ? 18 : 10))
                         .padding(.trailing, 4)
                         .padding(.top, height >= 26 ? 4 : 1)
                     Spacer(minLength: 0)
@@ -413,9 +427,7 @@ private struct TimelineSegment: View {
         }
         .frame(height: height, alignment: .topLeading)
         .overlay {
-            if isDraft {
-                shape.stroke(tint, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
-            } else if entry.isBreak {
+            if entry.isBreak {
                 shape.strokeBorder(tint.opacity(0.6), lineWidth: 0.75)
             }
         }

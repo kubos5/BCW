@@ -1,6 +1,26 @@
 import ActivityKit
 import Foundation
 
+// MARK: - Scelta per evento
+
+/// Attività in diretta per un evento dell'orario (editor dell'evento, richiesta dell'utente, 3.3): `nil`
+/// segue l'impostazione (Impostazioni › Orario › Attività in diretta, o l'avvio a mano di oggi).
+nonisolated enum LiveActivityChoice: String, Codable, Hashable, Sendable, CaseIterable {
+    /// L'attività segue l'evento anche con l'avvio automatico spento.
+    case show
+    /// L'attività salta l'evento, come se non fosse nell'orario.
+    case hide
+
+    /// L'evento entra nell'attività in diretta, con `showsByDefault` per chi segue l'impostazione.
+    static func includes(_ choice: LiveActivityChoice?, showsByDefault: Bool) -> Bool {
+        switch choice {
+        case .show?: true
+        case .hide?: false
+        case nil: showsByDefault
+        }
+    }
+}
+
 // MARK: - Attributi e stato
 
 /// Attività in diretta "Orario di oggi": la lezione in corso con il tempo che manca e
@@ -36,11 +56,14 @@ nonisolated struct TimetableActivityState: Codable, Hashable, Sendable {
     /// ridisegna solo se lo stato cambia: senza questo valore l'aggiornamento non partiva.
     var timerStep: Int?
 
-    /// La fase da mostrare. Scaduto il contenuto, almeno la seconda; se iOS ridisegna più tardi
-    /// (es. riaccendendo lo schermo), quella in corso in quel momento.
+    /// La fase da mostrare: quella in corso al momento del disegno, anche se il contenuto non è ancora
+    /// scaduto (iOS lo segna scaduto non prima di 120 s dall'ultimo aggiornamento: un disegno più tardi
+    /// del previsto mostrava la fase già finita, con "0:00"). Scaduto il contenuto, almeno la seconda
+    /// (iOS può disegnare un attimo prima del suo inizio).
     func phase(isStale: Bool, now: Date = Date()) -> TimetableActivityPhase? {
-        guard isStale, phases.count > 1 else { return phases.first }
-        return phases[phases.indices.dropFirst().last { phases[$0].start <= now } ?? 1]
+        guard !phases.isEmpty else { return nil }
+        let current = phases.indices.last { phases[$0].start <= now } ?? 0
+        return phases[isStale ? max(current, min(1, phases.count - 1)) : current]
     }
 
     /// Rispetto a `other` cambia solo il tratto del conto alla rovescia.
@@ -272,10 +295,16 @@ nonisolated struct TimetableActivityPlan {
         self.phases = phases
     }
 
-    /// Il piano di un giorno dall'istantanea dei widget (`nil` se quel giorno non ci sono lezioni).
-    init?(snapshot: WidgetSnapshot, day: Date) {
+    /// Il piano di un giorno dall'istantanea dei widget (`nil` se quel giorno non ci sono lezioni da
+    /// mostrare). Contano gli eventi con "Mostra" e, con `showsByDefault`, quelli che seguono
+    /// l'impostazione; quelli con "Non mostrare" mai: l'attività li salta come se non ci fossero (tra due
+    /// eventi mostrati, al loro posto c'è il tempo che manca al successivo).
+    init?(snapshot: WidgetSnapshot, day: Date, showsByDefault: Bool = true) {
         let start = BCWShared.calendar.startOfDay(for: day)
-        let items = snapshot.events(on: start).map { event in
+        let events = snapshot.events(on: start).filter {
+            LiveActivityChoice.includes($0.liveActivity, showsByDefault: showsByDefault)
+        }
+        let items = events.map { event in
             Item(title: event.title, room: event.room, teacher: event.teacher,
                  start: BCWShared.date(start, minute: event.start), end: BCWShared.date(start, minute: event.end),
                  tint: event.tint, isTest: event.isTest || event.hasTest == true, isBreak: event.isBreak)
@@ -319,6 +348,11 @@ nonisolated struct TimetableActivityPlan {
     /// conto alla rovescia che perde delle cifre (l'isola va ridisegnata per stringersi).
     func nextChange(after date: Date) -> Date? {
         (phases.map(\.start) + phases[phaseIndex(at: date)].timerChanges).filter { $0 > date }.min()
+    }
+
+    /// Il prossimo inizio di una fase (o la fine delle lezioni): gli unici cambi che contano davvero.
+    func nextPhaseStart(after date: Date) -> Date? {
+        phases.map(\.start).filter { $0 > date }.min()
     }
 }
 

@@ -100,10 +100,13 @@ nonisolated struct TimetableEntry: Codable, Identifiable, Hashable {
     var attachments: [TimetableAttachment]
     /// Verifica segnata a mano per ogni ricorrenza.
     var isWeeklyTest: Bool
+    /// Attività in diretta: `nil` segue l'impostazione, altrimenti sempre o mai per questo evento.
+    var liveActivity: LiveActivityChoice?
 
     init(id: UUID = UUID(), weekday: Int, start: Int, end: Int, kind: Kind = .lesson, title: String,
          subjectId: Int? = nil, teacher: String = "", room: String = "", color: EntryColor? = nil,
-         note: String = "", attachments: [TimetableAttachment] = [], isWeeklyTest: Bool = false) {
+         note: String = "", attachments: [TimetableAttachment] = [], isWeeklyTest: Bool = false,
+         liveActivity: LiveActivityChoice? = nil) {
         self.id = id
         self.weekday = weekday
         self.start = start
@@ -117,6 +120,7 @@ nonisolated struct TimetableEntry: Codable, Identifiable, Hashable {
         self.note = note
         self.attachments = attachments
         self.isWeeklyTest = isWeeklyTest
+        self.liveActivity = liveActivity
     }
 
     init(from decoder: Decoder) throws {
@@ -135,6 +139,8 @@ nonisolated struct TimetableEntry: Codable, Identifiable, Hashable {
         note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
         attachments = try c.decodeIfPresent([TimetableAttachment].self, forKey: .attachments) ?? []
         isWeeklyTest = try c.decodeIfPresent(Bool.self, forKey: .isWeeklyTest) ?? false
+        // Un valore sconosciuto (es. di una versione futura) vale come "segue l'impostazione".
+        liveActivity = (try? c.decodeIfPresent(LiveActivityChoice.self, forKey: .liveActivity)) ?? nil
     }
 
     var duration: Int { end - start }
@@ -158,6 +164,16 @@ nonisolated struct TimetableEntry: Codable, Identifiable, Hashable {
     /// Gli intervalli sono sempre liberi.
     var isAutoAligned: Bool {
         isBreak || (start % 30 == 0 && (duration == 30 || duration == 60))
+    }
+
+    /// L'evento spostato di `minutes` minuti (negativi = prima), con la stessa durata e senza uscire
+    /// dalla giornata.
+    func shifted(by minutes: Int) -> TimetableEntry {
+        var copy = self
+        let length = duration
+        copy.start = min(max(0, start + minutes), 24 * 60 - length)
+        copy.end = copy.start + length
+        return copy
     }
 
     /// L'evento con l'allineamento automatico: inizio e fine vanno all'ora o alla mezz'ora più

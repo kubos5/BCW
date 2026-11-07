@@ -11,19 +11,28 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   Mostra assenze/ritardi/uscite anticipate se presenti; per i **giorni passati** mostra anche le **lezioni**
   del giorno, in una sezione separata da compiti ed eventi.
 - **Voti**: media generale + medie dei singoli periodi (trimestre/pentamestre, quadrimestri…); sotto, lista
-  degli ultimi voti con info rilevanti, **espandibile** e **filtrabile per materia e periodo**.
+  degli ultimi voti con info rilevanti, **espandibile** e **filtrabile per materia e periodo**. Oltre al voto necessario
+  per un obiettivo (`GoalCalculator`), "E se prendessi…" (`GradeSimulator`, 3.3) mostra come cambierebbero media della
+  materia e generale con uno o più voti ipotetici (`HypotheticalGrade`, `GradeBook.adding`; non si salvano); nei Voti,
+  comprimibile, si sceglie la materia di ogni voto tra tutte quelle dell'anno (`model.subjects`, anche senza voti, più
+  quelle che compaiono solo nei voti; richiesta dell'utente). Il campo della materia prende il resto della riga e va a
+  capo su due righe (`SelectButton(expands:lineLimit:)`): prima l'etichetta "Materia" veniva schiacciata lettera per
+  lettera. Lo spazio tra intestazione e modulo sta dentro `CollapsibleContent`: da chiusa la card ha lo stesso margine
+  sopra e sotto (prima lo spazio del `VStack` restava sotto l'intestazione).
 - **Orario** (scheda tra Dashboard e Voti): orario settimanale dell'utente in tre viste (Lista, Calendario,
   Giorno), con note/file/verifiche per giorno o ricorrenza, verifiche automatiche da Classeviva (nascondibili),
   modifiche estese agli eventi con lo stesso nome, gruppi di eventi uguali accostati, eventi contemporanei
   affiancati, intervalli in primo piano, colori e
-  palette (anche su una serie di eventi di una giornata), bozza generata dalle lezioni con anteprima tratteggiata,
-  backup esportabile/importabile (due conferme) e sincronizzazione con l'account BCW. Accanto al giorno in grande la
-  barra di avanzamento della giornata (anche nei widget); la scheda si può nascondere (Impostazioni › Orario).
+  palette (anche su una serie di eventi di una giornata), bozza generata dalle lezioni con anteprima,
+  backup esportabile/importabile (due conferme) e sincronizzazione con l'account BCW. La scheda si può nascondere
+  (Impostazioni › Orario).
   "Modifica orario" (menu del pulsante d'azione flottante) apre la modifica grafica, sempre nella vista Giorno: spostare e
   ridimensionare gli eventi, doppio tocco per crearli, tocco per l'editor. Lì si sceglie l'allineamento, che vale
   per tutto l'orario (non solo per il trascinamento): automatico = eventi da 30/60 minuti alla mezz'ora (anche gli
   orari inseriti a mano), libero = qualsiasi orario. Passando a automatico con eventi non allineati serve una
-  conferma, poi vengono allineati (quelli più lunghi di un'ora divisi in eventi uguali di seguito).
+  conferma, poi vengono allineati (quelli più lunghi di un'ora divisi in eventi uguali di seguito). Nella barra degli
+  strumenti di quella modalità "Sposta gli orari" (`TimetableShiftSheet`) sposta insieme alcuni o tutti gli eventi di un
+  numero di minuti (vedi "Spostare gli orari").
 - **Tu**: overview account + tutte le altre funzioni: bacheca, scrutini, assenze e ritardi, note disciplinari e
   annotazioni, file docenti (cartelle, filtrabili per docente), anno precedente, funzioni minori.
 - **UI**: stile **Material 3 Expressive** come la versione web (https://kubos5.github.io/BCW-web, stesso layout,
@@ -55,8 +64,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Argomenti di avvio per le prove (solo DEBUG, con `simctl launch … <argomenti>`): `-BCWTab timetable|grades|you|search`
   apre una scheda, `-BCWLiquidGlass YES|NO` (resta salvato), `-BCWAccent #RRGGBB` (non salvato), `-BCWTimetableDemo YES` crea l'orario della demo
   dalle lezioni se è vuoto, `-BCWHideTests YES` aggiunge una regola e una verifica nascosta,
-  `-BCWTimetableSheet generator|hidden|date|editor|detail` apre il generatore (con `-BCWGeneratorBreaks N` intervalli), le verifiche
-  nascoste, il selettore della data, l'editor di un evento nuovo o il dettaglio del primo evento del giorno, `-BCWTimetableDraft YES` mostra la bozza in anteprima, `-BCWTimetableToday YES` (demo) dà a oggi gli eventi del lunedì se non ne ha (fine settimana: giornata in corso, barra di avanzamento, card "Adesso"), `-showsTimetableTab NO` nasconde la scheda Orario e `-showsDayProgress YES` accende la barra di avanzamento (non salvati), `-timetableMode list|day` sceglie la vista,
+  `-BCWTimetableSheet generator|shift|hidden|date|editor|detail` apre il generatore (con `-BCWGeneratorBreaks N` intervalli), lo spostamento degli orari, le verifiche
+  nascoste, il selettore della data, l'editor di un evento nuovo o il dettaglio del primo evento del giorno, `-BCWTimetableDraft YES` mostra la bozza in anteprima, `-BCWTimetableToday YES` (demo) dà a oggi gli eventi del lunedì se non ne ha (fine settimana: giornata in corso, card "Adesso"), `-showsTimetableTab NO` nasconde la scheda Orario (non salvato), `-timetableMode list|day` sceglie la vista,
   `-BCWTimetableEditing YES` apre la modifica, `-BCWTimetableDay N` apre l'orario N giorni dopo oggi (i valori negativi
   non passano come argomenti), `-BCWOpenSubject YES`, `-BCWDaysAgo N`, `-BCWKeychainService nome` (Portachiavi vuoto),
   `-BCWNowMinute N` (l'orario fa come se fosse il minuto N del giorno, per l'evento "In corso", `TimeOfDay.nowMinutes`),
@@ -67,11 +76,11 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `-BCWOrientation`, `-railCollapsed` e `-BCWScript` (vedi "iPad"). Le opzioni dell'icona si provano anche
   come argomenti (`-appIconColor verde -appIconAppearance auto|dark`), letti da `ThemeStore` senza salvarli.
 - Autotest dell'orario (solo DEBUG): `-BCWTimetableSelfTest YES` prova backup (esportazione, importazione, file,
-  rifiuto di file non validi, riapertura da disco), modifiche estese agli eventi con lo stesso nome, generazione e
-  passaggio dall'allineamento libero all'automatico;
+  rifiuto di file non validi, riapertura da disco), modifiche estese agli eventi con lo stesso nome, generazione,
+  spostamento degli orari e passaggio dall'allineamento libero all'automatico;
   stampa `BCW-SELFTEST PASS/FAIL` ed esce. Sul simulatore: `simctl launch --console-pty booted com.bcw-classeviva.app
   -demoMode YES -BCWTimetableSelfTest YES`.
-- Autotest dei widget (solo DEBUG): `-BCWWidgetSelfTest YES` prova la regola del giorno predefinito dell'orario, l'avanzamento della giornata (`DayProgress`), le voci
+- Autotest dei widget (solo DEBUG): `-BCWWidgetSelfTest YES` prova la regola del giorno predefinito dell'orario, le voci
   della linea temporale, lezione in corso e prossima, i collegamenti `bcw://`, la codifica dell'istantanea, l'App Group
   e le fasi dell'attività in diretta (ore unite, pause, contenuto scaduto, stato sotto i 4 KB); stampa
   `BCW-WIDGET-SELFTEST PASS/FAIL` ed esce.
@@ -138,8 +147,18 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - iOS, barra delle schede: tenendo premuta la scheda Tu (indice 3, dopo Dashboard, Orario, Voti) si apre il popup degli account (`TabBarItemLongPress`, un
   riconoscitore di pressione prolungata sulla `UITabBar` che risponde solo sopra quella scheda e, quando scatta,
   annulla i gesti della barra, altrimenti la scheda verrebbe selezionata). `Tab.contextMenu` su iPhone non fa nulla
-  (verificato). Toccando di nuovo Dashboard (`MainTabView.tabSelection` riconosce il secondo tocco) si torna in
-  cima, o a domani se si è già in cima (`DashboardView.reselection`).
+  (verificato). Nuovo tocco sulla scheda aperta (`MainTabView.tabSelection` lo riconosce; richiesta dell'utente,
+  novembre 2026): il primo porta in cima, il successivo (già in cima) fa l'azione della scheda. Dashboard: domani
+  (`DashboardView.reselection`). Orario: il giorno con il prossimo evento (`defaultDay`; nella vista Giorno subito,
+  `ListScrollTracking` sa se la Lista è in cima). Voti: la media dell'anno se era scelto un periodo
+  (`GradeBookView.reselection`; affiancati sull'iPad il periodo torna subito all'anno). Tu, senza Liquid Glass: in
+  cima alla pagina in vista, anche una aperta dentro Tu, poi indietro alla pagina principale
+  (`reselectsThroughStack` sulla pila, `StackAnchor`: con UIKit, perché le pagine di Tu non hanno un percorso comune;
+  dalla vista accanto alla pila si risale al controller della scheda e si scende alla `UINavigationController` in
+  vista; lo scorrimento parte al giro dopo, altrimenti l'aggiornamento di SwiftUI per il tocco lo fermava dopo pochi
+  punti. Verificato: Impostazioni › Orario in cima, poi Tu, e riaprendo le Impostazioni i collegamenti restano
+  giusti. Con una pagina aperta all'avvio da `-BCWOpenPage` lo stato di SwiftUI resta indietro: solo DEBUG). Con Liquid Glass in cima ci porta il sistema (il codice
+  non scorre di nuovo) e in Tu il sistema torna prima alla pagina principale e poi in cima.
   In tutte le schede il ritorno in cima è quello del sistema, che funziona solo con il titolo grande nella riga dei
   pulsanti (`.toolbarTitleDisplayMode(.inlineLarge)`, messo da `pageChrome`, come nella Dashboard). Con il
   titolo grande su una riga a parte (lo stile predefinito) il sistema si ferma sotto la barra con il titolo ancora
@@ -148,7 +167,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Account: su iOS il popup `AccountSwitcherSheet` (dal basso, in vetro, rilevamenti medio/grande) mostra la stessa
   `AccountsSection` della pagina Account; si apre dall'avatar nella barra di ricerca della Dashboard, dal pulsante
   "Cambia"/"Aggiungi" del profilo in Tu e tenendo premuta la scheda Tu, e
-  si chiude da solo quando comincia il cambio. La demo non è un
+  si chiude da solo quando comincia il cambio. Con l'account BCW sotto gli account c'è "Esci da BCW" (richiesta
+  dell'utente, con la stessa conferma di Impostazioni › Account; il dialogo va dentro il foglio, sotto il suo
+  `overlayHost`, altrimenti finirebbe dietro). Non provato con un account BCW vero: solo compilato. La demo non è un
   account: non entra nel conteggio (icona del pulsante, testi), si apre con "Prova la demo" anche con un account
   collegato (`activeAccountID` resta impostato e uscendo si torna a quello).
 - Cambio di sessione (altro account, demo, uscita dalla demo verso un account, rimozione dell'account attivo, account
@@ -156,9 +177,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   cambia i dati senza animazioni mentre non si vede e la fa riapparire quando ci sono i dati (subito con la cache,
   altrimenti a fine aggiornamento, al massimo 3 s). Così niente si ridimensiona davanti all'utente.
 - `project.yml` è un'alternativa per XcodeGen.
-- Icona: `Resources/AppIcon.icon` (Icon Composer, a livelli di vetro: sfondo, cerchio e barra, con varianti
+- Icona: `Resources/AppIcon.icon` (Icon Composer, a livelli di vetro: sfondo, scritta e barra, con varianti
   chiara/scura/colorata) è l'icona principale, il cui nome corrisponde a `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`;
-  le 11 alternative sono altre `.icon` in `Resources/AppIcons/`, elencate in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`
+  le 9 alternative sono altre `.icon` in `Resources/AppIcons/`, elencate in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`
   (vedi "Icona dell'app"). Nel catalogo `Assets.xcassets` non c'è più un `AppIcon.appiconset`: non aggiungerlo, andrebbe
   in conflitto.
 - Build settings: `SWIFT_VERSION = 5.0`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, approachable concurrency.
@@ -176,14 +197,21 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `Store/TimetableStore.swift` (in `AppModel.timetable`, un JSON per account in Application Support/Timetable/<account>,
   file allegati in `Files`, cancellati quando nessuno li usa; la demo si cancella uscendo), `Store/TimetableGenerator.swift`,
   `Features/Timetable/`. L'allineamento automatico è una regola sui dati (`setAlignment` allinea gli eventi,
-  `TimetableAlignmentPicker` chiede conferma); anche la bozza generata viene allineata. Fuori dalla modalità di
+  `TimetableAlignmentPicker` chiede conferma). La bozza generata tiene sempre gli orari esatti delle ore indicate:
+  se non stanno nell'allineamento automatico (es. dalle 8:10, ore da 50 minuti) `applyDraft` passa da sé
+  all'allineamento libero (`draftNeedsFreeAlignment`, detto nell'intestazione dell'anteprima e sotto le ore;
+  richiesta dell'utente, dal foglio e dall'introduzione; prima dal foglio le lezioni venivano spostate alla
+  mezz'ora più vicina). Fuori dalla modalità di
   modifica la vista Giorno è in sola lettura.
   Nelle viste Lista/Calendario gli intervalli sono separatori di sfondo (`BreakRow`, linea ondulata `WavyLine`, come
   "Libero · x min" ma con l'orario); le verifiche lì si vedono solo con `Preferences.timetableShowsTests` (spenta di
-  serie, in Impostazioni e nel menu dell'orario); nel dettaglio e nella vista Giorno si vedono sempre.
+  in Impostazioni e nel menu dell'orario); nel dettaglio e nella vista Giorno si vedono sempre.
   Gruppi di eventi uguali: `TimetableLayout(entries:splitAtBreaks:)`. Nelle viste Lista e Calendario
   (`splitAtBreaks: true`, righe da `listItems`) un intervallo sul passaggio tra due eventi uguali li separa e va tra
-  i due; nella vista Giorno il gruppo resta unito e l'intervallo sta sopra.
+  i due; nella vista Giorno il gruppo resta unito e l'intervallo sta sopra. Nella Lista le ore di un gruppo
+  (`EntryBlockCard`) non hanno più la linea tratteggiata (richiesta dell'utente, 3.3: più Material 3 Expressive): la
+  barretta della tinta è disegnata sotto la riga (`background`) e arriva al bordo tra un'ora e l'altra
+  (`joinsAbove`/`joinsBelow`), così le ore formano una barra a segmenti con 4 punti di stacco.
   Dentro `TimetableStore.mutate` non leggere `timetable` (accesso simultaneo → crash): calcolare prima ciò che serve.
   Nella vista Giorno `contentShape` e gesti vanno prima di `.offset` (dopo valgono per la posizione di partenza);
   su iPhone il trascinamento usa `LongPressDragRecognizer` (UIKit): quelli di SwiftUI perdevano contro lo scorrimento.
@@ -219,7 +247,7 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 
 ## Layout e comportamenti
 - Orario: solo viste Lista e Giorno (`TimetableMode.available`; il mese c'è nella Dashboard). Nella Lista: giorno in
-  grande con la barra di avanzamento a destra del nome, chip e il pulsante del giorno predefinito accanto (come
+  grande, chip e il pulsante del giorno predefinito accanto (come
   "Domani" nella Dashboard), `TimetableNowCard` per oggi (lezione in corso con avanzamento e la
   successiva, oppure la prossima), lezioni di seguito in una lista segmentata (`Row.run`), intervalli in una pillola.
   Vista Giorno: blocchi pieni nella tinta, ore di un gruppo separate da 2 punti con angoli piccoli; i blocchi più
@@ -270,6 +298,21 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (`Timetable.testRules`, `TestHidingRules`: docenti, materie, giorni, periodi, parole, senza lezione in orario);
   mostrandone a mano una nascosta da una regola finisce in `shownTests` (eccezione), nascondendola di nuovo l'eccezione
   si toglie. Il motivo viene da `TimetableStore.hiddenReason(for:unmatched:)`; la Dashboard non ne è toccata.
+- Spostare gli orari (richiesta dell'utente, 3.3; `TimetableShift.swift`, `TimetableStore.shift`, `TimetableEntry.shifted`):
+  in cima i minuti per tutti i giorni (scorciatoie da ±5 a ±15, o scritti a mano), sotto ogni giorno con i suoi minuti
+  (`minutes`: solo i giorni cambiati a mano, gli altri seguono il valore in cima); aprendo un giorno si tolgono i singoli
+  eventi e si vede l'orario nuovo; interruttore per gli intervalli. La durata non cambia e gli eventi restano nella
+  giornata. Con l'allineamento automatico, se una lezione non cadrebbe più su un'ora o una mezz'ora, un avviso dice che
+  l'orario passa all'allineamento libero (`freeAlignment`).
+- Anteprima della bozza (richiesta dell'utente, 3.3, al posto del bordo tratteggiato; `TimetableDraftStyle.swift`): gli
+  eventi sono pillole staccate nella loro tinta, con un'onda al posto della barretta (`DraftWaveBar`) e un'onda di luce
+  che scende lungo la giornata (`DraftSheen`, un `CAGradientLayer` con la fase che dipende dalla posizione sullo schermo).
+  Compaiono a scaglioni (`.draftBlock`). "Applica" le assesta con una molla negli angoli normali. In alto
+  `TimetableDraftHeader`, in basso `TimetableDraftToolbar` (barra vivace, modalità temporanea: niente barra delle schede).
+- Card "Adesso" (3.3): le ore uguali di seguito sono una lezione sola, come nell'attività in diretta e nei widget
+  (`TimetableLayout(entries:splitAtBreaks: true)`), con una barra sola fino alla fine dell'ultima. Si nasconde da
+  Impostazioni › Orario › Oggi (`Preferences.timetableShowsNowCard`, sincronizzata come impostazione; richiesta
+  dell'utente): l'attività in diretta si avvia comunque da sola, ma senza la card manca il pulsante per farlo a mano.
 - Elenchi in liste segmentate (`ListGroup`); filtri in `ChipRow` (scorrono in orizzontale). Chip su più righe:
   `FlowLayout`, che calcola le righe allo stesso modo nelle due fasi (larghezza proposta, mezzo punto di tolleranza):
   prima, con una fila piena al punto, l'ultimo chip sotto il giorno saltava tra la riga e una riga a capo.
@@ -303,30 +346,40 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   altrimenti oggi; contano gli eventi dell'utente, non intervalli né verifiche di Classeviva. Richiesta dell'utente
   (3.2.1): è il giorno predefinito dell'Orario ovunque, non solo all'apertura (`adjustInitialDay`): il pulsante accanto
   al giorno in grande (o nella barra, con Liquid Glass e nella settimana dell'iPad) porta lì e si chiama come quel
-  giorno ("Oggi", "Domani", "Lunedì", `jumpTitle`), e un nuovo tocco sulla scheda Orario (`reselection`) ci torna. Il
+  giorno ("Oggi", "Domani", "Lunedì", `jumpTitle`), e un nuovo tocco sulla scheda Orario (`reselection`, dopo
+  quello che porta in cima la Lista) ci torna. Il
   giorno mostrato non cambia da solo quando finisce l'ultimo evento, ma il pulsante sì (`defaultDayTick`, una `task`
   che aspetta la fine dell'ultimo evento di oggi). Il selettore della data ha ancora "Oggi" (è un calendario).
-- Avanzamento della giornata (`DayProgress` in `Shared/BCWShared.swift`, richiesta dell'utente 3.2.1; si vede solo con
-  Impostazioni › Orario › "Barra di avanzamento della giornata", `Preferences.showsDayProgress`, spenta di serie e
-  sincronizzata, passata ai widget con `WidgetSnapshot.showsDayProgress`, facoltativo): la parte passata
-  della durata complessiva degli eventi (senza intervalli, sovrapposizioni unite; fermo negli spazi tra un evento e
-  l'altro), percentuale per difetto (100% solo a giornata finita). Giorni passati 100%, futuri 0%. Nell'Orario
-  `TimetableDayProgress` a destra del nome del giorno (percentuale e `WavyProgress`, piatta a 0% e a 100%, aggiornata
-  ogni minuto con `TimelineView(.everyMinute)`; senza spazio resta la percentuale).
 - Widget: Orario (piccolo, medio, grande), Lezione in corso (piccolo e accessori rettangolare, circolare, in linea),
   Compiti e verifiche (medio, grande), Prossima verifica (piccolo, rettangolare, in linea), Media (piccolo, circolare, in
   linea). Linea temporale: adesso, ogni inizio e fine degli eventi da oggi a dopodomani e le due mezzanotti
-  (`.atEnd`); per l'Orario, con la barra di avanzamento accesa, anche ogni 5 minuti durante le lezioni di oggi e
-  domani (`progressStep`, al massimo 240 voci); tempo che manca e avanzamento della lezione con `Text(timerInterval:)` e `ProgressView(timerInterval:)`.
-- Widget Orario (layout dal disegno dell'utente, 3.2.1): in alto il giorno con percentuale e barra della giornata
-  (`TimetableWidgetHeader`, `WidgetLinearProgress`: indicatore lineare di M3 disegnato a mano, parte passata ondulata e
-  ferma, spazio, traccia con il punto finale), sotto le lezioni in una lista segmentata: ora, tinta, materia e aula su
+  (`.atEnd`); tempo che manca e avanzamento della lezione con `Text(timerInterval:)` e `ProgressView(timerInterval:)`.
+- Widget Orario (layout dal disegno dell'utente, 3.2.1): in alto il giorno con lezioni e orario della giornata
+  (`TimetableWidgetHeader`; la barra di avanzamento che c'era è stata tolta su richiesta dell'utente, 3.3, anche nell'app), sotto le lezioni in una lista segmentata: ora, tinta, materia e aula su
   una riga; quella in corso più alta nel contenitore primario, con fine, aula e docente e il chip pieno "In corso".
   Niente righe per gli intervalli (richiesta dell'utente): dove c'era un intervallo, o più di 5 minuti liberi, la
   lista si divide in gruppi con 5 punti di stacco; angoli esterni dei gruppi piccoli (`radii.s`, quelli ampi
   sembravano pillole), 2 punti e `radii.xs` tra le righe. Le varianti (`TimetableRowList`) tolgono prima lo spazio in
   più e la seconda riga della lezione in corso, poi le ultime lezioni. Medio: dalla lezione in corso, senza "+N altre lezioni" (una riga in più vale di più).
-  Piccolo: giorno e percentuale, barra a tutta larghezza, la lezione in corso o la prossima e quelle dopo.
+  Piccolo: il giorno, la lezione in corso o la prossima e quelle dopo.
+- Sfondo (richiesta dell'utente, 3.3): tieni premuto il widget › Modifica widget › Sfondo, Predefinito o Colore del tema
+  (`BCWWidgetIntent`, `WidgetBackgroundOption` in `BCWWidgets.swift`, `AppIntentConfiguration`). In chiaro il colore del tema
+  è il contenitore secondario, cioè il tono di "Tonale" in Aspetto (scelta dell'utente: il contenitore primario era troppo
+  acceso). In scuro il colore del tema deve sembrare lo sfondo dell'app (richiesta dell'utente: i contenitori di Material 3,
+  tono 30, e anche il contenitore primario mescolato al 42% con la superficie erano troppo chiari). Sulla Home iOS 26/27
+  schiarisce lo sfondo dei widget scuri come una luce dall'alto (misurato sul simulatore: il nero diventa #0D0D0D in basso e
+  #1F1E1F in alto, la superficie #130D0B diventa #201A18–#302A28; visto anche negli screenshot dell'utente) e non si può
+  spegnere (`widgetTexture` è solo visionOS): con "Colore del tema" le superfici scure sono scurite di 13 livelli per canale
+  (`homeScreenLift`, `compensatingHomeScreenLift`), così in basso il widget ha il colore dell'app (verificato: #130D0D).
+  "Predefinito" in scuro resta la superficie senza compenso (quindi un po' più chiaro). La galleria nell'app non ha la luce
+  di iOS: lì il colore del tema in scuro sembra più scuro dell'app. `WidgetPalette.themed` in chiaro sposta i ruoli della
+  superficie, le card sono veli del colore del testo, primario e contenitore primario restano per la lezione in corso. Anche
+  "Lezione in corso" e "Prossima verifica", che in chiaro stanno in un contenitore (`containerBackground`), in scuro hanno la
+  superficie. Il colore del tema in chiaro è provato sull'iPhone 15 (iOS 27.0.1). In prova:
+  `-BCWWidgetGalleryBackground theme`. Una compilazione incrementale per il dispositivo può lasciare l'estensione senza
+  `Metadata.appintents` (visto una volta, dopo la prima compilazione con le intenzioni; le compilazioni pulite ce l'hanno):
+  controllare la cartella in `BCWWidgets.appex` o toccare `BCWWidgets.swift` e ricompilare. Dopo molte ricariche iOS le ignora per
+  ore (`-BCWWidgetProbe` con i contatori fermi): non vuol dire che l'estensione non funziona.
 - Colori: `WidgetPalette` legge i ruoli dell'istantanea secondo `colorScheme`; con le icone colorate o trasparenti
   (`accented`) e nella schermata di blocco (`vibrant`) tutto è bianco con opacità diverse e le parti in evidenza
   (tinte, icone, anelli) sono `widgetAccentable`, senza grandi riempimenti. Verificati sulla Home (anche "Tinted") e
@@ -411,6 +464,16 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   alla rovescia resta a 0:00. `liveactivitiesd` segna scaduta un'attività non prima di 120 s dall'ultimo aggiornamento
   (visto nei log): nelle prove servono fasi più lunghe di 2 minuti. L'attività finisce solo se l'app gira dopo
   l'ultima lezione (altrimenti la chiude iOS dopo 8 ore).
+- "0:00" con l'evento finito (segnalato dall'utente, novembre 2026): è quel limite. Senza server l'unico ridisegno
+  senza l'app è quello alla scadenza; il passaggio successivo arriva solo se l'app gira (aperta, aggiornamento in
+  background). Provato e scartato (sul simulatore, iOS 27.2, app chiusa): far cambiare la vista da sola con maschere
+  fatte da `ProgressView(timerInterval:)`, che senza maschera si aggiorna da sola; dentro `.mask` resta ferma a com'era
+  al disegno (anche con `luminanceToAlpha`). Non c'è un'API per programmare un aggiornamento in locale; un'attività
+  programmata (`request(…start:)`) sveglia l'app, ma con un avviso obbligatorio (schermo acceso) a ogni passaggio.
+  Fatto: la vista mostra sempre la fase in corso al momento del disegno, anche non scaduta (un disegno in ritardo
+  mostrava la fase finita); il rinnovo al ritorno nell'app aspetta il passaggio se la fase finisce entro 130 s;
+  l'aggiornamento in background si chiede al prossimo passaggio di fase (`nextPhaseStart`), non alle soglie del conto
+  alla rovescia, che ne sprecavano uno; anche l'aggiornamento in background delle notifiche riallinea l'attività.
 - Avvio programmato (iOS 26, `request(…start:)` con `alertConfiguration` obbligatoria): il prossimo giorno di scuola
   (e oggi, prima della finestra) resta `pending` e parte da solo all'ora indicata anche con l'app chiusa, con un avviso
   (materia, ora, aula). Verificato: parte con ~2 s di ritardo e iOS apre l'app in background ("Activity started"),
@@ -454,6 +517,15 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   dalla schermata di blocco, quel giorno non riparte da sola (`liveActivityStoppedDay`); avviata a mano resta anche
   senza avvio automatico. Senza permesso (`areActivitiesEnabled`) l'interruttore è spento e c'è il collegamento alle
   Impostazioni di iOS, il pulsante della card sparisce.
+- Scelta per evento (richiesta dell'utente, 3.3; `LiveActivityChoice`, `TimetableEntry.liveActivity`, nell'istantanea
+  `WidgetSnapshot.Event.liveActivity`): nell'editor (anche per gli intervalli) "Segui default" (`nil`), "Mostra",
+  "Non mostrare", una voce con il menu (in un gruppo di pulsanti a tre "Segui default" veniva troncato). Salvando
+  vale come gli altri dettagli: con eventi dello stesso nome si sceglie se applicarla a tutti (`SharedFields`).
+  `TimetableActivityPlan(snapshot:day:showsByDefault:)` tiene gli eventi con "Mostra" e, se `showsByDefault`
+  (avvio automatico acceso o attività avviata a mano oggi), quelli che seguono l'impostazione; quelli con "Non
+  mostrare" mai, come se non ci fossero (tra due eventi mostrati al loro posto c'è l'attesa del successivo, come
+  un'ora libera). Con l'avvio automatico spento l'attività parte da sola solo per gli eventi con "Mostra" (non nella
+  demo). Autotest in `WidgetSelfTest`. Il web non conosce il campo: se il web salva l'orario lo perde.
 - Viste: schermata di blocco = scheda sul contenitore della superficie con il colore della materia come accento
   (forma con la sigla, etichetta, titolo, aula e docente, tempo, barra con gli orari, pillola della successiva);
   Dynamic Island sempre con i ruoli scuri: compatta = forma con l'iniziale e tempo, minima = anello di avanzamento con
@@ -686,10 +758,37 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   riga, il gruppo Classeviva/Account BCW, campi e "Accedi"; "Prova la demo" e le note tornano chiudendo la tastiera.
   La disposizione segue la tastiera visibile (notifiche di UIKit), non il campo attivo: cambiando modulo con la
   tastiera aperta il cursore passa al campo corrispondente (al giro dopo) e la tastiera resta. Un tocco nello spazio
-  vuoto la chiude. Le note in basso occupano sempre l'altezza delle più lunghe tra i due moduli (copie nascoste in uno
-  `ZStack` allineato in alto): cambiando Classeviva/Account BCW il resto, centrato, non si sposta.
-  Nella disposizione compatta logo e titolo sono centrati sulle maiuscole (allineamento `capCenter`, verificato
-  al pixel): con le linee di base allineate il titolo, più piccolo, stava in basso.
+  vuoto la chiude. Note in basso ridotte (richiesta dell'utente, novembre 2026): con un accesso già fatto
+  (`alreadySignedIn`: aggiunta di un account, account BCW dalle Impostazioni, primo account da abbinare) nessuna; con
+  Classeviva solo l'affiliazione; con l'account BCW anche "Usa un altro server BCW" (senza l'indirizzo). La spiegazione
+  di ogni modulo (`footerText`) resta solo nella card larga dell'iPad. Le note occupano sempre l'altezza delle più
+  lunghe tra i due moduli (copie nascoste in uno `ZStack` allineato in alto): cambiando Classeviva/Account BCW il
+  resto, centrato, non si sposta.
+  Nella disposizione compatta logo e titolo sono centrati sulle maiuscole (allineamento `capCenter`): con le linee di
+  base allineate il titolo, più piccolo, stava in basso; centrato a misura sembrava alto (segnalato dall'utente: accanto
+  alla scritta pesante e alla barra più in basso), quindi il titolo sta 2 punti più in basso (centro delle maiuscole
+  del titolo all'altezza del centro della barra, verificato al pixel).
+  Con la tastiera chiusa tra la barra e le maiuscole del titolo c'è lo stesso vuoto che tra la scritta e la barra
+  (`titleSpacing`, dalle misure dei due caratteri; segnalato dall'utente: con 10 punti la barra sembrava più vicina al
+  titolo). Verificato al pixel sull'iPhone 17: 20 punti sopra e sotto la barra.
+  Intestazione unica nelle due disposizioni (`header`, `AnyLayout` tra `VStackLayout` e `HStackLayout`): il logo è
+  sempre `BCWLogo(size: 64)` rimpicciolito da `ScaledLogo` (`scaleEffect` più `ScaledLayout`, che occupa la misura
+  rimpicciolita, riporta la guida `capCenter` alla stessa scala e anima la scala). Prima le due intestazioni si
+  scambiavano in dissolvenza e il logo andava a scatti (segnalato dall'utente). Con la tastiera chiusa la barra sta
+  sotto la scritta, come nell'introduzione e nell'icona; aperta, a destra (richiesta dell'utente): `BCWLogo(stacked:)`
+  usa anch'esso `AnyLayout`, quindi la barra si sposta con la molla. Un titolo che va a capo in almeno una delle due
+  disposizioni (quindi cambia allineamento, `reflows`) non scorre: sparisce subito e ricompare nel posto nuovo dopo
+  0,22 s, a movimento quasi finito (`.id(compact)`, transizione asimmetrica). Uno che sta su una riga in tutte e due
+  si sposta con la molla, senza dissolvenza (richiesta dell'utente: la dissolvenza solo quando cambia allineamento). Un titolo che sta su una riga resta a misura piena (`fixedSize`, con la larghezza misurata con UIKit e
+  quella dell'intestazione in `headerWidth`): durante la molla andava a capo o veniva troncato; uno più lungo va a capo
+  (fino a 3 righe), centrato sotto il logo, allineato a sinistra accanto al logo piccolo con il blocco centrato sulle
+  maiuscole. Provati sul simulatore con `-BCWLoginTitle testo` (solo DEBUG, sostituisce il titolo) e
+  `-BCWScript "12:action=loginkeyboard"` (solo DEBUG, fa come se la tastiera si aprisse o chiudesse: dopo un riavvio il
+  simulatore usava la tastiera del Mac e quella su schermo non compariva). La tastiera non
+  restringe lo `ScrollView` (`.ignoresSafeArea(.keyboard)`, non nella card larga dell'iPad): il suo spazio è un
+  `safeAreaPadding` in fondo animato con la stessa molla; prima il contenuto, centrato, saltava in alto di circa 100
+  punti in un fotogramma prima dell'animazione (visto nella registrazione). Sul simulatore la prima comparsa della
+  tastiera ferma lo schermo per circa 0,1 s (caricamento della tastiera).
 - Componenti propri di M3 Expressive (`Expressive.swift`): `SearchAppBar`, `AccountAvatarButton`, `FABMenu` (con
   Liquid Glass `GlassFABMenu`: pulsante di vetro tinto di 60 punti, come il pulsante di ricerca della barra delle
   schede e allineato sopra di esso, da cui escono le voci come pillole di vetro con `glassEffectID` nello stesso
@@ -705,8 +804,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Pagine: `pageChrome(title, …) { azioni }`. Con Liquid Glass usa titolo e barra di sistema (`.inlineLarge` per le
   pagine principali, `isRootPage`); con Material nasconde la barra e mette `TopAppBar` + titolo grande nel contenuto.
   Fogli: `sheetChrome` + `.m3Sheet()`, con gli angoli del sistema: `presentationCornerRadius` vale anche per gli
-  angoli in basso, che così non seguivano più la curva dello schermo. `MainTabView`: con Material la `M3NavigationBar` è sovrapposta (TabView e
-  NavigationStack non propagano `safeAreaInset`), lo spazio in fondo arriva con `bottomBarInset`.
+  angoli in basso, che così non seguivano più la curva dello schermo. Con Liquid Glass un pulsante di `sheetChrome` già nella barra non si riattiva cambiando `disabled` (era "Salva" nell'editor, iOS 27, verificato): `toolbarID` lo fa rifare. `MainTabView`: con Material la `M3NavigationBar` è sovrapposta (TabView e
+  NavigationStack non propagano `safeAreaInset`), lo spazio in fondo arriva con `bottomBarInset`. È flottante (richiesta dell'utente, 3.3, come l'app Passi di Google nello screenshot): una pillola di 56 punti con i nomi delle schede; quella aperta è piena nel primario con l'icona e la pillola scivola con `matchedGeometryEffect`. `CountBadge` ha `geometryGroup()`: senza, spostandosi con un'animazione il numero si staccava dal cerchio (visto dall'utente sull'iPhone).
 - `ListGroup`: prima e ultima voce con angoli ampi (`li`), quelle in mezzo stretti (`xs`). Gli angoli vanno passati
   anche direttamente allo sfondo della voce: un modificatore applicato a un `Subview` fuori da `.environment` legge
   ancora i valori dell'ambiente esterno (prima tutte le voci avevano gli angoli ampi).
@@ -731,43 +830,50 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   come nelle app di iOS, colori più adatti a iOS, meno opzioni (prima: 8 forme, 10 colori dei ruoli di Tonal Spot, 5
   varianti, 404 icone piatte). Terza richiesta (3.2.1, ottobre 2026): niente più "Sempre scuro" (lo sfondo segue
   sempre le icone di iOS) e un colore per ogni tema proposto in Aspetto, predefinito per quel tema, tenendo i sei di
-  prima.
-- Disegno: la barra del logo (pillola 64 × 8,73, come `bcw-linea.svg`) al centro di un cerchio largo l'86% della tela;
-  la barra è larga il 77% del cerchio (`AppIconGeometry`). Ogni icona è una `.icon` di Icon Composer con lo sfondo e
-  due gruppi con `glass: true`, la barra (sopra) e il cerchio: iOS li disegna come due lastre, con ombra e riflessi per
-  gruppo (verificato sulla Home).
-- 11 colori (`AppIconColor`, tinte sRGB fisse in `AppIconPalette.tints`, sature come le icone di iOS), nell'ordine dei
-  colori d'accento: Mattone #C4432B, Arancio #FF8A1F, Oro #E5AA00, Verde #22A55A, Petrolio #0E959E, Blu #1F7AF0,
-  Indaco #5856D6, Viola #9B4FE0, Rosa #DE4479, Ardesia #56677F, Grafite #5A6068; con le icone scure di iOS il cerchio è
-  più chiaro (#EC6F55, #FF9632, #F6C12C, #34C46E, #27B5BE, #3D8EFF, #7472F0, #AE73F7, #F26892, #8193AB, #7F868F). Barra
-  sempre bianca, sfondo chiaro #FBF7F4 e con le icone scure lo sfondo `automatic` (lo scuro di iOS), cerchio delle
-  icone colorate grigio 0,3 (con 0,45 iOS lo schiariva quasi al bianco). Valori di `fill` accettati da actool:
+  prima. Quarta richiesta (3.3, novembre 2026, con uno schizzo): il logo dell'introduzione al posto del cerchio, scritta
+  "BCW" e barra come due lastre di vetro, un colore per ogni tema dell'app (niente più Grafite) con i colori di Material.
+- Disegno: il logo di `BCWLogo(stacked: true)` (`AppIconLogo`): la scritta "BCW" in Google Sans Flex (peso 800, ROND
+  100, spaziatura −0,01) larga il 66% della tela (`AppIconGeometry.text`) e sotto, centrata, la barra larga 1,1 volte la
+  misura del testo e alta 0,15, a 0,3 dalla linea di base (misurato sull'introduzione); l'insieme centrato e poi
+  spostato in basso del 2,2% della tela (`opticalOffset`): centrato a misura sembrava troppo in alto (scelta dell'utente). I tracciati
+  vengono dai glifi (`CTFontCreatePathForGlyph`), gli stessi per l'anteprima e per gli SVG. Ogni icona è una `.icon` di
+  Icon Composer con lo sfondo e due gruppi con `glass: true`, la barra (sopra) e la scritta: iOS li disegna come due
+  lastre, con ombra e riflessi per gruppo. Gli SVG sono in punti della tela con un margine di 2 e `scale` 1; Icon Composer
+  mette il centro dell'immagine al centro della tela più `translation-in-points` (y verso il basso, verificato con
+  `ictool`). I glifi del carattere variabile hanno contorni sovrapposti: si riempiono (non zero), ma un tratto li mostra
+  dentro le lettere (per questo l'anteprima non ha il bordo chiaro).
+- 10 colori (`AppIconColor`, `AppIconPalette.schemes`), uno per colore d'accento proposto, con i ruoli di Material 3 del
+  suo tema (Tonal Spot, contrasto standard, calcolati con `bcw-theme.js`; se cambiano i temi vanno ricalcolati, anche con
+  `jsc` di JavaScriptCore sui due script, togliendo l'`export` come fa `ColorEngine`) come il logo dell'introduzione:
+  sfondo `primary-container`, scritta `on-surface`, barra `brand` (es. Mattone #FAAA9D/#3E2F2C/#A23E2F); con le icone
+  scure lo sfondo scuro di iOS (`automatic`, scelta dell'utente) con scritta e barra del tema scuro (#F9E0DC/#E28070). Con le icone colorate scritta bianca e barra grigia 0,6 (con 0,3 spariva quasi).
+  Grafite (3.2.1) è tolta: non corrisponde a un tema; un valore salvato sconosciuto torna al tema. Valori di `fill` accettati da actool:
   `automatic`, `system-dark` e i dizionari `solid`, `linear-gradient`, `automatic-gradient`, `orientation`; un valore
   sconosciuto fa fallire la compilazione.
 - Nomi: `AppIcon-<colore>` (`AppIconChoice.assetName`). Mattone è `AppIcon.icon` e si applica con
-  `setAlternateIconName(nil)`; le altre 10 stanno in `Resources/AppIcons/` (cartella sincronizzata, Xcode passa le
+  `setAlternateIconName(nil)`; le altre 9 stanno in `Resources/AppIcons/` (cartella sincronizzata, Xcode passa le
   `.icon` ad actool da sole) e i loro nomi vanno in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES` (pbxproj del target
   BCW, Debug e Release, e `project.yml`): senza, actool non le mette nell'Info.plist.
 - Tema dell'app (di serie): `AppIconColor.nearest(to:)` dà a ogni colore d'accento proposto il suo colore
-  (`themeAccent`, Mattone (BCW) → Mattone … Ardesia → Ardesia); per un colore scelto a mano Grafite se è quasi grigio
-  (croma HCT sotto 16), altrimenti il colore con la tonalità HCT più vicina (senza Grafite e Ardesia). Solo la
-  tonalità: con la distanza nel piano tonalità-croma un azzurro finiva su Grafite. Il risultato per i colori a mano
-  resta in UserDefaults (`appIconThemeTint`; le chiavi vecchie `appIconNearestTint` e `appIconNearest` si tolgono
-  all'avvio): calcolarlo carica JavaScriptCore, che all'avvio con un accento qualsiasi altrimenti non serve.
+  (`themeAccent`, Mattone (BCW) → Mattone … Ardesia → Ardesia); per un colore scelto a mano Ardesia se è quasi grigio
+  (croma HCT sotto 16), altrimenti il colore con la tonalità HCT (del suo accento) più vicina, senza Ardesia. Solo la
+  tonalità: con la distanza nel piano tonalità-croma un azzurro finiva sul grigio. Il risultato per i colori a mano
+  resta in UserDefaults (`appIconThemeColor`; le chiavi vecchie `appIconNearestTint`, `appIconNearest` e
+  `appIconThemeTint` si tolgono all'avvio): calcolarlo carica JavaScriptCore, che all'avvio con un accento qualsiasi altrimenti non serve.
 - Valori vecchi: i nomi dei colori della 3.1 (oro, petrolio, indaco, rosa, ardesia) sono di nuovo colori; all'avvio si
   tolgono `appIconAppearance` (3.2), `appIconShape` e `appIconDarkBackground` (3.1); un colore sconosciuto torna al
   tema. Chi aveva "Sempre scuro" passa all'icona normale (iOS mostra un avviso al primo avvio).
 - Rigenerare dopo aver cambiato colori o disegno: compilare, installare e lanciare
   `xcrun simctl launch --console-pty <udid> com.bcw-classeviva.app -BCWGenerateAppIcons <percorso assoluto di BCW/Resources>`
-  (solo DEBUG, `AppIconGenerator`): riscrive da capo `AppIcons/` e `AppIcon.icon` (SVG del cerchio e della barra,
+  (solo DEBUG, `AppIconGenerator`): riscrive da capo `AppIcons/` e `AppIcon.icon` (SVG della scritta e della barra,
   `icon.json` con `JSONSerialization`, numeri come `NSDecimalNumber`: con i Double scriveva 0.29999999999999999) e
-  stampa `BCW-APPICONS OK 11`; poi ricompilare. Il generatore è deterministico: le icone già presenti escono identiche.
+  stampa `BCW-APPICONS OK 10`; poi ricompilare. Il generatore è deterministico: le icone già presenti escono identiche.
   Per vedere le icone senza simulatore:
   `"/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool" X.icon --export-image
   --output-file X.png --platform iOS --rendition Default|Dark|TintedLight|TintedDark|ClearLight|ClearDark --width 256
   --height 256 --scale 1`.
 - Anteprima (pagina, campioni, voce di Aspetto): `AppIconPreview`/`AppIconArtwork` disegnano in SwiftUI sfondo,
-  cerchio e barra con un riflesso in alto e un'ombra leggera, per somigliare al vetro; non sono identiche alla Home.
+  scritta e barra (`AppIconLogo.Text`/`.Bar`) con un riflesso in alto e un'ombra leggera, per somigliare al vetro; non sono identiche alla Home.
 - `AppIconController` (avviato in `RootView`, riscritto su richiesta dell'utente, novembre 2026): chiede a iOS l'icona
   appena cambia la scelta (tocco nella pagina, accento in Aspetto con "Tema dell'app", sincronizzazione; solo con l'app
   attiva, altrimenti al ritorno), senza attese. Prima c'erano 0,4 s per le scelte, 2 s per l'accento e l'attesa
@@ -800,7 +906,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   2,3 MB, poco comprimibili) più i livelli: con 11 icone il peso è circa quello di prima (non rimisurato).
 - Verificato sulla Home del simulatore (iOS 26.3), con le 12 icone della 3.2: Default, Dark, Clear e Tinted (cerchio e
   barra lastre separate); con "Tema dell'app" provando quattro accenti in Aspetto l'icona cambia una volta sola. Le 11
-  della 3.2.1 controllate con `ictool` (Default e Dark) e cambiando icona dalla pagina.
+  della 3.2.1 controllate con `ictool` (Default e Dark) e cambiando icona dalla pagina. Le 10 della 3.3 (logo) controllate
+  con `ictool` (Default, Dark, TintedDark), sulla Home del simulatore (iOS 27.2, icone chiare) e cambiando icona con
+  `-BCWIconTest blu` (l'avviso di iOS mostra la nuova icona); non provate sull'iPhone.
 - Limiti verificati: con le icone colorate e trasparenti iOS tinge sempre l'icona: non si può forzare. Sul simulatore di
   iOS 26.3 l'avviso del cambio non si apre ("couldn't load upcall bundle principal class"): l'icona cambia ma
   `setAlternateIconName` risponde con un errore di I/O (il controllore lo riconosce da `alternateIconName`) e i cambi
@@ -809,6 +917,47 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   pressione lunga, Modifica, Personalizza. Le preferenze dell'app sul simulatore si cambiano con
   `xcrun simctl spawn <udid> defaults write <container>/Library/Preferences/com.bcw-classeviva.app …`: modificando il
   plist a mano cfprefsd tiene i valori vecchi.
+
+## Introduzione (onboarding)
+- Richiesta dell'utente (3.3): alla prima apertura, poi da Impostazioni › Generale › Rivedi l'introduzione.
+- Introduzione a ogni riavvio del dispositivo (segnalato dall'utente sull'iPhone): dopo un riavvio iOS può avviare l'app in
+  background prima del primo sblocco (attività in diretta programmata, aggiornamento in background); fino ad allora
+  preferenze e Portachiavi non si leggono (`UserDefaults` risponde vuoto), quindi `isFirstRun` era vero e restava tale per
+  tutta la vita del processo. `ProtectedData.isAvailableAtLaunch` (in `Onboarding.swift`) prova ad aprire il file delle
+  preferenze, che ha la protezione "fino al primo sblocco" (se non esiste è davvero la prima apertura): senza dati
+  leggibili non è la prima volta. Avviata così, l'app avrebbe anche tema e preferenze vuoti: quando i dati diventano
+  leggibili (`protectedDataDidBecomeAvailableNotification`) e l'app è ancora in background il processo esce
+  (`restartWhenAvailableIfNeeded`, da `BCWApp.init`), così all'apertura riparte con i dati veri. Non riproducibile sul
+  simulatore (non ha il blocco dei dati): da provare sul telefono riavviandolo.
+  `Features/Onboarding/Onboarding.swift` (stato, `isFirstRun`: nessun `onboardingCompleted`, niente account nel
+  Portachiavi né demo, quindi chi aggiorna l'app non la vede) e `OnboardingView.swift` (passaggi `OnboardingStep`: accoglienza,
+  colori, interfaccia, forme e movimento, vista della Dashboard, funzioni, Classeviva, account BCW, orario, fine). Sta in
+  `RootView` sopra tutto ma sotto `overlayHost`, quindi i dialoghi (abbinare gli account) ci vanno sopra.
+- Le scelte a due (Material 3 o Liquid Glass, Lista o Calendario) sono card grandi con un'anteprima stilizzata
+  (`PreviewChoice`), con titolo e sottotitolo centrati sotto l'anteprima (richiesta dell'utente). Sottotitoli scelti
+  dall'utente: "Espressivo", "Vetro nativo", "Vista compatta", "Vista estesa".
+- Orario dalle lezioni (`OnboardingTimetablePage`): si vede solo con la scheda Orario accesa e con un account da cui leggere
+  le lezioni (`OnboardingView.steps`). Prima quando cominciano le ore (`TimetableGenerationFields`, gli stessi campi del
+  foglio del generatore), poi l'anteprima della settimana (`DraftWeekGlance`), poi applica; la bozza resta nella pagina,
+  non in `store.draft`, così sotto l'Orario non va in anteprima. Con ore fuori dalle mezz'ore tiene gli orari esatti
+  e applicando passa all'allineamento libero (`applyDraft`, come dal foglio). La generazione è comune al foglio:
+  `AppModel.makeTimetableDraft`.
+- Bianco e nero: `ThemeStore.isMonochrome` (non salvato, deciso in `init` da `Onboarding.isFirstRun`: già al primo
+  fotogramma). Cambia solo `colors`; `values` resta il tema vero, quindi i widget non diventano grigi. I campioni dei colori
+  sono l'unica cosa colorata.
+- Cerchio dei colori: `Design/ThemeReveal.swift`. Una fotografia della finestra (`snapshotView`) resta sopra con un foro
+  circolare che cresce (`CAShapeLayer` con `fillRule` even-odd), sotto c'è già l'app coi colori nuovi; un anello del nuovo
+  primario fa da fronte. Si usa anche per chiaro/scuro nell'introduzione, per riaprirla e per chiuderla (così "Salta" porta
+  all'accesso o all'app con i colori veri). Con le animazioni ridotte è una dissolvenza.
+- Forme: `Design/MorphShape.swift`: ogni `MaterialShapeName` campionata in 180 punti, stesso verso e stesso punto di
+  partenza; `MorphPoints` è un `VectorArithmetic`, quindi `withAnimation` le trasforma l'una nell'altra.
+- Icona dell'app: durante l'introduzione `AppIconController.apply` aspetta (l'avviso di iOS coprirebbe il cerchio);
+  `onboardingFinished` la applica dopo.
+- Sul simulatore: `-BCWOnboarding YES|NO` la forza, `-BCWOnboardingStep N` parte da un passaggio (il numero in `OnboardingStep`). Ripartire davvero da zero:
+  `xcrun simctl spawn <udid> defaults delete <container>/Library/Preferences/com.bcw-classeviva.app` con `-BCWKeychainService vuoto`.
+  Provato sull'iPhone 17 (iOS 27.2): prima apertura con demo fino in fondo, "Salta introduzione" (porta all'accesso, non torna
+  al riavvio), riapertura dalle Impostazioni e "Salta" (si torna lì con i colori di prima), chiaro e scuro, orario dalle lezioni con la demo (30 eventi applicati) e pagina saltata con la scheda Orario spenta; sull'iPad la
+  disposizione; sull'iPhone 15 il cerchio dei colori riaprendola dalle Impostazioni, fluido per l'utente. Non provati con un account vero: accesso a Classeviva e account BCW dall'introduzione (stesse chiamate di `LoginView`).
 
 ## Convenzioni
 - Testi UI e commenti in italiano. Stile: liste segmentate, `StatusChip`, `FilterChip`, `StatTile` (anche in griglie

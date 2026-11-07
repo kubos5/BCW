@@ -69,8 +69,9 @@ struct EntryFill: ViewModifier {
 
     func body(content: Content) -> some View {
         content.background {
-            // Come `.tt-block` della versione web: la tinta al 18% (9% in bozza) sul contenitore basso.
-            tint.mix(Theme.surfaceContainerLow, isDraft ? 0.09 : 0.18)
+            // Come `.tt-block` della versione web: la tinta al 18% sul contenitore basso (in anteprima
+            // di più, con l'onda di luce sopra).
+            tint.mix(Theme.surfaceContainerLow, isDraft ? 0.28 : 0.18)
         }
     }
 }

@@ -60,22 +60,25 @@ struct TimetableDayList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
-            if content.day.isToday && !content.isDraft {
+            if content.day.isToday && !content.isDraft && model.preferences.timetableShowsNowCard {
                 TimetableNowCard(content: content, actions: actions)
                     .padding(.bottom, 6)
             }
-            if showsTests && !content.unmatchedTests.isEmpty {
+            if showsTests && !content.unmatchedTests.isEmpty && !content.isDraft {
                 unmatchedTests
             }
             if content.entries.isEmpty {
                 emptyState
             } else {
                 ForEach(rows) { row in
-                    switch row {
-                    case let .run(clusters): runView(clusters)
-                    case let .pause(entry): BreakRow(entry: entry, day: content.day, isDraft: content.isDraft, actions: actions)
-                    case let .gap(start, end): gapRow(start: start, end: end)
+                    Group {
+                        switch row {
+                        case let .run(clusters): runView(clusters)
+                        case let .pause(entry): BreakRow(entry: entry, day: content.day, isDraft: content.isDraft, actions: actions)
+                        case let .gap(start, end): gapRow(start: start, end: end)
+                        }
                     }
+                    .transition(content.isDraft ? .draftBlock(index: 0) : .opacity)
                 }
             }
         }
@@ -83,11 +86,14 @@ struct TimetableDayList: View {
 
     /// Lezioni di seguito: angoli ampi solo in cima e in fondo, 2 punti tra l'una e l'altra.
     private func runView(_ clusters: [TimetableLayout.Cluster]) -> some View {
-        VStack(spacing: 2) {
+        // In anteprima le righe sono pillole staccate, che applicando si uniscono in una lista.
+        let draft = content.isDraft
+        return VStack(spacing: draft ? 6 : 2) {
             ForEach(Array(clusters.enumerated()), id: \.element.id) { index, cluster in
                 clusterView(cluster, corners: ListCellCorners(
-                    top: index == 0 ? Theme.radii.li : Theme.radii.xs,
-                    bottom: index == clusters.count - 1 ? Theme.radii.li : Theme.radii.xs))
+                    top: draft || index == 0 ? Theme.radii.xl : Theme.radii.xs,
+                    bottom: draft || index == clusters.count - 1 ? Theme.radii.xl : Theme.radii.xs))
+                    .transition(draft ? .draftBlock(index: index) : .opacity)
             }
         }
     }
@@ -100,26 +106,17 @@ struct TimetableDayList: View {
             // Come il giorno in grande della Dashboard.
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 0) {
-                    // A destra del nome del giorno, a che punto è la giornata.
-                    HStack(alignment: .center, spacing: 16) {
-                        Text(relative ? day.relativeDayName : day.it("EEEE").capitalizedFirst)
-                            .font(.m3(40, weight: 500, rounded: true))
-                            .tracking(-0.5)
-                            .foregroundStyle(Theme.ink)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                            .accessibilityAddTraits(.isHeader)
-                            .layoutPriority(1)
-                        if model.preferences.showsDayProgress, !content.isDraft, !progressSpans.isEmpty {
-                            TimetableDayProgress(day: day, spans: progressSpans)
-                                .frame(maxWidth: 240, alignment: .leading)
-                        }
-                    }
+                    Text(relative ? day.relativeDayName : day.it("EEEE").capitalizedFirst)
+                        .font(.m3(40, weight: 500, rounded: true))
+                        .tracking(-0.5)
+                        .foregroundStyle(Theme.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .accessibilityAddTraits(.isHeader)
                     Text(relative ? day.longDay : day.it("dMMMMyyyy"))
                         .font(.m3(16, weight: 500))
                         .foregroundStyle(Theme.secondaryInk)
                 }
-                // Tutto lo spazio fino al pulsante: la barra di avanzamento si allunga fin lì.
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if let jumpTitle, !ThemeStore.shared.liquidGlass || windowClass == .regular {
                     Button(action: jump) {
@@ -139,11 +136,6 @@ struct TimetableDayList: View {
         .padding(.horizontal, 4)
         .padding(.top, 4)
         .padding(.bottom, 8)
-    }
-
-    /// Gli eventi del giorno per la barra di avanzamento (senza intervalli).
-    private var progressSpans: [TimetableDefaultDay.Span] {
-        content.entries.filter { !$0.isBreak }.map { TimetableDefaultDay.Span(start: $0.start, end: $0.end) }
     }
 
     private var statusChips: [StatusChip] {
@@ -241,7 +233,10 @@ extension TimetableDayList: Equatable {
     }
 }
 
-/// Uno o più eventi uguali accostati: una card unica, divisa in righe.
+/// Uno o più eventi uguali accostati: una card unica, divisa in righe. Le ore di un gruppo non hanno
+/// un separatore (prima una linea tratteggiata): la barretta della tinta prosegue da un'ora all'altra
+/// come una barra a segmenti, con uno stacco di 4 punti a ogni cambio d'ora (come i gruppi collegati
+/// di Material 3 Expressive), e ogni ora ha il suo orario a sinistra.
 struct EntryBlockCard: View {
     @Environment(AppModel.self) private var model
     let block: TimetableLayout.Block
@@ -267,17 +262,8 @@ struct EntryBlockCard: View {
                 let tint = Theme.timetableColor(entry, store: model.timetable)
                 EntryRow(entry: entry, badges: badges(for: entry), compact: compact,
                          showsTitle: index == 0 || !compact, tint: tint, isDraft: content.isDraft,
-                         isToday: content.day.isToday)
+                         isToday: content.day.isToday, joinsAbove: index > 0, joinsBelow: index < entries.count - 1)
                     .modifier(EntryFill(tint: tint, isDraft: content.isDraft))
-                    .overlay(alignment: .top) {
-                        if index > 0 {
-                            // Separatore tra le ore di un gruppo.
-                            Line()
-                                .stroke(tint.opacity(0.55), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                                .frame(height: 1)
-                                .padding(.leading, compact ? 10 : 70)
-                        }
-                    }
                     .contentShape(.rect)
                     .onTapGesture { actions.open(entry, content.day) }
                     .contextMenu { EntryContextMenu(entry: entry, isDraft: content.isDraft, actions: actions) }
@@ -285,14 +271,14 @@ struct EntryBlockCard: View {
                     .accessibilityAddTraits(.isButton)
             }
         }
-        .clipShape(corners.shape)
         .overlay {
             if content.isDraft {
-                corners.shape
-                    .strokeBorder(Theme.timetableColor(block.entries[0], store: model.timetable),
-                                  style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+                DraftSheen()
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
             }
         }
+        .clipShape(corners.shape)
     }
 }
 
@@ -304,8 +290,20 @@ struct EntryRow: View {
     var showsTitle = true
     let tint: Color
     var isDraft = false
-    /// L'evento è di oggi: mentre è in corso mostra quanto manca e una barra di avanzamento.
+    /// L'evento è di oggi: mentre è in corso mostra "In corso".
     var isToday = false
+    /// Nel gruppo c'è un'ora sopra / sotto: la barretta arriva fino al bordo della riga (meno metà
+    /// dello stacco), così le barrette delle ore formano una barra a segmenti.
+    var joinsAbove = false
+    var joinsBelow = false
+
+    /// Metà dello stacco tra i segmenti della barretta in un gruppo.
+    private static let joint: CGFloat = 2
+
+    private var barWidth: CGFloat { isDraft ? 10 : 4 }
+    private var verticalPadding: CGFloat { compact ? 10 : 12 }
+    /// Distanza della barretta dal bordo sinistro: margine e, se c'è, la colonna degli orari.
+    private var barLeading: CGFloat { compact ? 10 : 12 + 46 + 12 }
 
     var body: some View {
         if isToday && !isDraft {
@@ -333,9 +331,9 @@ struct EntryRow: View {
                 .padding(.top, 1)
                 .frame(width: 46, alignment: .trailing)
             }
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(tint.opacity(isDraft ? 0.6 : 1))
-                .frame(width: 4)
+            // Il posto della barretta, disegnata sotto (`background`) per poter arrivare al bordo.
+            Color.clear
+                .frame(width: barWidth, height: 1)
             VStack(alignment: .leading, spacing: 2) {
                 if compact {
                     Text(entry.timeRange)
@@ -382,10 +380,18 @@ struct EntryRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, compact ? 10 : 12)
+        .padding(.vertical, verticalPadding)
         .padding(.leading, compact ? 10 : 12)
         .padding(.trailing, compact ? 10 : 14)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(alignment: .topLeading) {
+            // In anteprima un'onda, che applicando si raddrizza.
+            DraftWaveBar(amplitude: isDraft ? 2.5 : 0, color: tint)
+                .frame(width: barWidth)
+                .padding(.top, joinsAbove ? Self.joint : verticalPadding)
+                .padding(.bottom, joinsBelow ? Self.joint : verticalPadding)
+                .padding(.leading, barLeading)
+        }
     }
 }
 
@@ -497,12 +503,3 @@ struct RegisterTestRow: View {
     }
 }
 
-/// Linea orizzontale (per i separatori tratteggiati).
-struct Line: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-        return path
-    }
-}

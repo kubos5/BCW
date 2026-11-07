@@ -29,9 +29,6 @@ nonisolated struct WidgetSnapshot: Codable, Equatable, Sendable {
     var agenda: [AgendaItem] = []
     var grades: Grades?
     var theme = ThemeSnapshot()
-    /// Barra di avanzamento della giornata nei widget "Orario" (Impostazioni › Orario, spenta di
-    /// serie; facoltativa perché le istantanee scritte prima non ce l'hanno).
-    var showsDayProgress: Bool?
 
     // MARK: Tipi
 
@@ -66,6 +63,9 @@ nonisolated struct WidgetSnapshot: Codable, Equatable, Sendable {
         var hasTest: Bool?
         /// Colore della materia o scelto dall'utente.
         var tint: Tint
+        /// Scelta dell'evento per l'attività in diretta (`nil`: segue l'impostazione). Facoltativo: le
+        /// istantanee precedenti non ce l'hanno.
+        var liveActivity: LiveActivityChoice?
 
         var isBreak: Bool { kind == .breakTime }
         var duration: Int { end - start }
