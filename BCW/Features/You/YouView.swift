@@ -34,7 +34,6 @@ struct YouView: View {
             // Sull'iPad largo, da 792 punti di pagina: profilo accanto alle statistiche.
             .widthAtLeast(SplitMetrics.threshold, isOn: $isSplit)
             .tracksPageScroll()
-            .scrollsToTopOnReselect()
             .themedBackground()
             .refreshable { await model.refreshAll() }
             .pageChrome("Tu", style: .inline) {
@@ -78,6 +77,8 @@ struct YouView: View {
                 AccountSwitcherSheet()
             }
         }
+        // Nuovo tocco sulla scheda Tu: in cima alla pagina in vista, poi alla pagina principale.
+        .reselectsThroughStack()
     }
 
     private var profile: some View {

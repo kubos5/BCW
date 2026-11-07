@@ -309,7 +309,7 @@ struct MainTabView: View {
             // Impostazioni › Orario › Mostra la scheda Orario.
             .hidden(!model.preferences.showsTimetableTab)
             Tab(value: AppTab.grades) {
-                GradesView()
+                GradesView(reselection: reselections[.grades, default: 0])
                     .modifier(MaterialTab(reselection: reselections[.grades, default: 0]))
             } label: {
                 tabLabel(.grades)

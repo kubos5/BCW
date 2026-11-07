@@ -32,20 +32,20 @@ BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 - puoi segnare i compiti come fatti e, opzionalmente, nasconderli
 - puoi ricevere promemoria la sera prima di compiti o verifiche a un orario specificato
 - dato un obiettivo di media, puoi calcolare il voto necessario nelle prossime 1-5 prove
-- puoi vedere come cambierebbe la media (della materia e generale) se prendessi uno o più voti, a tua scelta: "E se prendessi…" nei Voti e nella pagina di ogni materia
+- puoi vedere come cambierebbe la media (della materia e generale) se prendessi uno o più voti, a tua scelta: "E se prendessi…" nei Voti (con tutte le materie, anche quelle ancora senza voti) e nella pagina di ogni materia
 - puoi vedere l'effetto di ogni voto sulla media della materia (▲/▼) e grafici dell'andamento (toccando il grafico si legge la media di quel giorno)
 - puoi scegliere se calcolare la media come media di tutti i voti o media delle medie, con o senza pesi
 - integrazione con il Calendario di iOS per compiti, verifiche ed eventi
 - puoi bloccare l'app con FaceID / TouchID
 - puoi consultare l'app anche offline, visualizzando i dati dell'ultima volta che era stata aperta
 - supporto agli account genitore con più figli
-- puoi aggiungere più account e passare dall'uno all'altro (dall'avatar in Dashboard o tenendo premuta la scheda Tu), con una dissolvenza tra i dati di un account e quelli dell'altro
+- puoi aggiungere più account e passare dall'uno all'altro (dall'avatar in Dashboard o tenendo premuta la scheda Tu), con una dissolvenza tra i dati di un account e quelli dell'altro; con un account BCW lì c'è anche "Esci da BCW"
 - account BCW: abbini uno o più account Classeviva ed entri in tutti con un solo accesso, su ogni dispositivo e anche nella versione web; impostazioni, aspetto e orario (con i file allegati) si sincronizzano, e in Impostazioni › Account scegli cosa sincronizzare
 - ricerca in compiti, voti, comunicazioni, materiale e note dalla barra in cima alla Dashboard
 - in Tu una sezione "Da vedere" raccoglie comunicazioni e note da leggere e assenze da giustificare
 - bacheca con adesione, firma e risposta alle comunicazioni e apertura degli allegati con Quick Look
 - modalità Demo con dati di esempio, per provare l'app senza un account o anche con un account già collegato (uscendo si torna all'account)
-- toccando di nuovo la scheda Dashboard si torna in cima alla pagina e, se si è già in cima, alla giornata di domani
+- toccando di nuovo la scheda aperta si torna in cima alla pagina; se si è già in cima, la Dashboard va a domani, l'Orario al giorno con il prossimo evento, i Voti tornano alla media dell'anno e Tu torna alla pagina principale (senza Liquid Glass: con Liquid Glass Tu fa come le app di sistema)
 - riepilogo per periodo con le insufficienze
 - conto alla rovescia alle prossime vacanze
 - notifiche per nuovi voti, comunicazioni, note, assenze e compiti, da attivare in Impostazioni › Notifiche (anche con l'app chiusa)
@@ -61,12 +61,12 @@ La scheda Orario contiene l'orario settimanale, che si compila a mano o si gener
 - in cima la settimana è una fila di pulsanti, uno per giorno; le frecce cambiano settimana, toccando le date si sceglie un giorno qualsiasi dal calendario e scorrendo di lato sugli eventi si passa al giorno prima o dopo, come nella Dashboard
 - aprendo l'Orario si vede oggi finché c'è una lezione da finire, poi il primo giorno successivo con lezioni (come il widget Orario); a quel giorno riportano anche il pulsante accanto al giorno in grande ("Oggi", "Domani" o il giorno della settimana) e un nuovo tocco sulla scheda Orario
 - la scheda Orario si può nascondere da Impostazioni › Orario (widget e attività in diretta continuano a funzionare e aprono la Dashboard)
-- oggi una scheda in cima mostra la lezione in corso (quanto manca, con le ore uguali di seguito contate come una sola) e quella dopo, oppure la prossima lezione; il pulsante con il lucchetto la porta nella schermata di blocco come attività in diretta, o la toglie
+- oggi una scheda in cima mostra la lezione in corso (quanto manca, con le ore uguali di seguito contate come una sola) e quella dopo, oppure la prossima lezione; il pulsante con il lucchetto la porta nella schermata di blocco come attività in diretta, o la toglie. Si può nascondere da Impostazioni › Orario
 - toccando un evento si vedono i dettagli e si aggiungono note, file e foto, per un solo giorno o per ogni settimana
 - le verifiche segnate dai docenti su Classeviva compaiono da sole sulla lezione della materia e si possono nascondere; altre verifiche si segnano a mano, per un giorno o per ogni settimana
 - Verifiche nascoste (dal menu dell'orario): l'elenco delle verifiche nascoste, con il motivo, da cui si possono mostrare di nuovo, e le regole per nasconderle in automatico (per docente, materia, giorno della settimana, periodo, parole nel testo o materie che quel giorno non sono in orario)
 - modificando un evento si può applicare la modifica a tutti quelli con lo stesso nome
-- gli eventi uguali di seguito (es. due ore di matematica) sono uniti in un gruppo, quelli contemporanei sono affiancati
+- gli eventi uguali di seguito (es. due ore di matematica) sono uniti in un gruppo, con la barretta del colore divisa in segmenti, uno per ora; quelli contemporanei sono affiancati
 - intervalli che nella vista Giorno stanno sopra le lezioni senza cambiarne la durata e nella vista Lista sono un separatore ondulato con l'orario
 - le verifiche nella vista Lista si possono togliere spegnendo "Mostra le verifiche" (Impostazioni o menu dell'orario)
 - il pulsante + apre un menu con nuovo evento, nuovo intervallo, Modifica orario e generazione dalle lezioni
@@ -74,7 +74,7 @@ La scheda Orario contiene l'orario settimanale, che si compila a mano o si gener
 - spostamento degli orari, in Modifica orario: alcuni o tutti gli eventi, con o senza intervalli, di un numero di minuti a tua scelta, uguale per tutti o diverso per ogni giorno della settimana (per esempio tutto avanti di 5 minuti), vedendo prima i nuovi orari
 - allineamento dell'orario, scelto in Modifica orario: automatico (eventi da 30 minuti o un'ora, alla mezz'ora, anche inserendo gli orari a mano) o libero (qualsiasi orario e durata); passando all'automatico gli eventi non allineati vengono allineati dopo una conferma; gli intervalli si posizionano sempre liberamente
 - colori: quelli delle lezioni, colori personalizzati salvati, colori presi dalle palette (anche personalizzate) oppure una palette a sfumatura applicata a una serie di eventi di una giornata
-- generazione automatica di una bozza dell'orario dalle lezioni registrate, mostrata in anteprima prima di applicarla: pillole morbide con un'onda di luce che attraversa la giornata, che applicando si assestano nell'orario
+- generazione automatica di una bozza dell'orario dalle lezioni registrate, mostrata in anteprima prima di applicarla: pillole morbide con un'onda di luce che attraversa la giornata, che applicando si assestano nell'orario; con ore che non iniziano all'ora o alla mezz'ora (es. dalle 8:10, o da 50 minuti) gli orari restano esatti e applicando l'orario passa da solo all'allineamento libero
 - backup dell'orario da esportare e reimportare dalle Impostazioni (con file allegati)
 - con un account BCW l'orario di ogni account abbinato, con i file allegati, si sincronizza tra i dispositivi
 
@@ -103,6 +103,8 @@ Su iPhone la lezione in corso resta nella schermata di blocco e nella Dynamic Is
 - le verifiche del giorno sono segnate sulla loro lezione, anche con "Mostra le verifiche" spenta
 - in Impostazioni › Orario si sceglie se farla partire da sola nei giorni di lezione: compare mezz'ora prima della prima lezione e sparisce dopo l'ultima, e il giorno di scuola successivo viene preparato in anticipo, così parte anche con l'app chiusa
 - dalla scheda in cima all'orario di oggi si avvia o si ferma a mano; fermata o tolta dalla schermata di blocco, quel giorno non riparte da sola
+- ogni evento, intervalli compresi, può seguire l'impostazione o fare eccezione (modifica dell'evento › Attività in diretta): Mostra lo fa comparire anche con l'avvio automatico spento, Non mostrare lo salta; come gli altri dettagli si applica a un solo evento o a tutti quelli con lo stesso nome
+- senza server iOS aggiorna l'attività solo quando BCW è in esecuzione (aperta o in un aggiornamento in background concesso da iOS) e, da sola, una volta alla fine della fase in corso: per questo ogni aggiornamento in background, anche quello delle notifiche, la riallinea all'ora attuale
 - il conto alla rovescia usa il carattere di sistema arrotondato e gli altri testi le istanze normali di Google Sans Flex, senza l'arrotondamento dell'app: su iOS 27 con il carattere variabile l'estensione andava in crash, l'attività veniva chiusa appena avviata o mostrava una rotella
 - tornando nell'app l'attività già in corso viene rifatta da capo (senza che si veda); se iOS non la accetta o la chiude appena avviata, un avviso lo dice
 

@@ -14,7 +14,11 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   degli ultimi voti con info rilevanti, **espandibile** e **filtrabile per materia e periodo**. Oltre al voto necessario
   per un obiettivo (`GoalCalculator`), "E se prendessi…" (`GradeSimulator`, 3.3) mostra come cambierebbero media della
   materia e generale con uno o più voti ipotetici (`HypotheticalGrade`, `GradeBook.adding`; non si salvano); nei Voti,
-  comprimibile, si sceglie la materia di ogni voto.
+  comprimibile, si sceglie la materia di ogni voto tra tutte quelle dell'anno (`model.subjects`, anche senza voti, più
+  quelle che compaiono solo nei voti; richiesta dell'utente). Il campo della materia prende il resto della riga e va a
+  capo su due righe (`SelectButton(expands:lineLimit:)`): prima l'etichetta "Materia" veniva schiacciata lettera per
+  lettera. Lo spazio tra intestazione e modulo sta dentro `CollapsibleContent`: da chiusa la card ha lo stesso margine
+  sopra e sotto (prima lo spazio del `VStack` restava sotto l'intestazione).
 - **Orario** (scheda tra Dashboard e Voti): orario settimanale dell'utente in tre viste (Lista, Calendario,
   Giorno), con note/file/verifiche per giorno o ricorrenza, verifiche automatiche da Classeviva (nascondibili),
   modifiche estese agli eventi con lo stesso nome, gruppi di eventi uguali accostati, eventi contemporanei
@@ -143,8 +147,18 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - iOS, barra delle schede: tenendo premuta la scheda Tu (indice 3, dopo Dashboard, Orario, Voti) si apre il popup degli account (`TabBarItemLongPress`, un
   riconoscitore di pressione prolungata sulla `UITabBar` che risponde solo sopra quella scheda e, quando scatta,
   annulla i gesti della barra, altrimenti la scheda verrebbe selezionata). `Tab.contextMenu` su iPhone non fa nulla
-  (verificato). Toccando di nuovo Dashboard (`MainTabView.tabSelection` riconosce il secondo tocco) si torna in
-  cima, o a domani se si è già in cima (`DashboardView.reselection`).
+  (verificato). Nuovo tocco sulla scheda aperta (`MainTabView.tabSelection` lo riconosce; richiesta dell'utente,
+  novembre 2026): il primo porta in cima, il successivo (già in cima) fa l'azione della scheda. Dashboard: domani
+  (`DashboardView.reselection`). Orario: il giorno con il prossimo evento (`defaultDay`; nella vista Giorno subito,
+  `ListScrollTracking` sa se la Lista è in cima). Voti: la media dell'anno se era scelto un periodo
+  (`GradeBookView.reselection`; affiancati sull'iPad il periodo torna subito all'anno). Tu, senza Liquid Glass: in
+  cima alla pagina in vista, anche una aperta dentro Tu, poi indietro alla pagina principale
+  (`reselectsThroughStack` sulla pila, `StackAnchor`: con UIKit, perché le pagine di Tu non hanno un percorso comune;
+  dalla vista accanto alla pila si risale al controller della scheda e si scende alla `UINavigationController` in
+  vista; lo scorrimento parte al giro dopo, altrimenti l'aggiornamento di SwiftUI per il tocco lo fermava dopo pochi
+  punti. Verificato: Impostazioni › Orario in cima, poi Tu, e riaprendo le Impostazioni i collegamenti restano
+  giusti. Con una pagina aperta all'avvio da `-BCWOpenPage` lo stato di SwiftUI resta indietro: solo DEBUG). Con Liquid Glass in cima ci porta il sistema (il codice
+  non scorre di nuovo) e in Tu il sistema torna prima alla pagina principale e poi in cima.
   In tutte le schede il ritorno in cima è quello del sistema, che funziona solo con il titolo grande nella riga dei
   pulsanti (`.toolbarTitleDisplayMode(.inlineLarge)`, messo da `pageChrome`, come nella Dashboard). Con il
   titolo grande su una riga a parte (lo stile predefinito) il sistema si ferma sotto la barra con il titolo ancora
@@ -153,7 +167,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Account: su iOS il popup `AccountSwitcherSheet` (dal basso, in vetro, rilevamenti medio/grande) mostra la stessa
   `AccountsSection` della pagina Account; si apre dall'avatar nella barra di ricerca della Dashboard, dal pulsante
   "Cambia"/"Aggiungi" del profilo in Tu e tenendo premuta la scheda Tu, e
-  si chiude da solo quando comincia il cambio. La demo non è un
+  si chiude da solo quando comincia il cambio. Con l'account BCW sotto gli account c'è "Esci da BCW" (richiesta
+  dell'utente, con la stessa conferma di Impostazioni › Account; il dialogo va dentro il foglio, sotto il suo
+  `overlayHost`, altrimenti finirebbe dietro). Non provato con un account BCW vero: solo compilato. La demo non è un
   account: non entra nel conteggio (icona del pulsante, testi), si apre con "Prova la demo" anche con un account
   collegato (`activeAccountID` resta impostato e uscendo si torna a quello).
 - Cambio di sessione (altro account, demo, uscita dalla demo verso un account, rimozione dell'account attivo, account
@@ -181,14 +197,21 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `Store/TimetableStore.swift` (in `AppModel.timetable`, un JSON per account in Application Support/Timetable/<account>,
   file allegati in `Files`, cancellati quando nessuno li usa; la demo si cancella uscendo), `Store/TimetableGenerator.swift`,
   `Features/Timetable/`. L'allineamento automatico è una regola sui dati (`setAlignment` allinea gli eventi,
-  `TimetableAlignmentPicker` chiede conferma); anche la bozza generata viene allineata. Fuori dalla modalità di
+  `TimetableAlignmentPicker` chiede conferma). La bozza generata tiene sempre gli orari esatti delle ore indicate:
+  se non stanno nell'allineamento automatico (es. dalle 8:10, ore da 50 minuti) `applyDraft` passa da sé
+  all'allineamento libero (`draftNeedsFreeAlignment`, detto nell'intestazione dell'anteprima e sotto le ore;
+  richiesta dell'utente, dal foglio e dall'introduzione; prima dal foglio le lezioni venivano spostate alla
+  mezz'ora più vicina). Fuori dalla modalità di
   modifica la vista Giorno è in sola lettura.
   Nelle viste Lista/Calendario gli intervalli sono separatori di sfondo (`BreakRow`, linea ondulata `WavyLine`, come
   "Libero · x min" ma con l'orario); le verifiche lì si vedono solo con `Preferences.timetableShowsTests` (spenta di
   in Impostazioni e nel menu dell'orario); nel dettaglio e nella vista Giorno si vedono sempre.
   Gruppi di eventi uguali: `TimetableLayout(entries:splitAtBreaks:)`. Nelle viste Lista e Calendario
   (`splitAtBreaks: true`, righe da `listItems`) un intervallo sul passaggio tra due eventi uguali li separa e va tra
-  i due; nella vista Giorno il gruppo resta unito e l'intervallo sta sopra.
+  i due; nella vista Giorno il gruppo resta unito e l'intervallo sta sopra. Nella Lista le ore di un gruppo
+  (`EntryBlockCard`) non hanno più la linea tratteggiata (richiesta dell'utente, 3.3: più Material 3 Expressive): la
+  barretta della tinta è disegnata sotto la riga (`background`) e arriva al bordo tra un'ora e l'altra
+  (`joinsAbove`/`joinsBelow`), così le ore formano una barra a segmenti con 4 punti di stacco.
   Dentro `TimetableStore.mutate` non leggere `timetable` (accesso simultaneo → crash): calcolare prima ciò che serve.
   Nella vista Giorno `contentShape` e gesti vanno prima di `.offset` (dopo valgono per la posizione di partenza);
   su iPhone il trascinamento usa `LongPressDragRecognizer` (UIKit): quelli di SwiftUI perdevano contro lo scorrimento.
@@ -287,7 +310,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   Compaiono a scaglioni (`.draftBlock`). "Applica" le assesta con una molla negli angoli normali. In alto
   `TimetableDraftHeader`, in basso `TimetableDraftToolbar` (barra vivace, modalità temporanea: niente barra delle schede).
 - Card "Adesso" (3.3): le ore uguali di seguito sono una lezione sola, come nell'attività in diretta e nei widget
-  (`TimetableLayout(entries:splitAtBreaks: true)`), con una barra sola fino alla fine dell'ultima.
+  (`TimetableLayout(entries:splitAtBreaks: true)`), con una barra sola fino alla fine dell'ultima. Si nasconde da
+  Impostazioni › Orario › Oggi (`Preferences.timetableShowsNowCard`, sincronizzata come impostazione; richiesta
+  dell'utente): l'attività in diretta si avvia comunque da sola, ma senza la card manca il pulsante per farlo a mano.
 - Elenchi in liste segmentate (`ListGroup`); filtri in `ChipRow` (scorrono in orizzontale). Chip su più righe:
   `FlowLayout`, che calcola le righe allo stesso modo nelle due fasi (larghezza proposta, mezzo punto di tolleranza):
   prima, con una fila piena al punto, l'ultimo chip sotto il giorno saltava tra la riga e una riga a capo.
@@ -321,7 +346,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   altrimenti oggi; contano gli eventi dell'utente, non intervalli né verifiche di Classeviva. Richiesta dell'utente
   (3.2.1): è il giorno predefinito dell'Orario ovunque, non solo all'apertura (`adjustInitialDay`): il pulsante accanto
   al giorno in grande (o nella barra, con Liquid Glass e nella settimana dell'iPad) porta lì e si chiama come quel
-  giorno ("Oggi", "Domani", "Lunedì", `jumpTitle`), e un nuovo tocco sulla scheda Orario (`reselection`) ci torna. Il
+  giorno ("Oggi", "Domani", "Lunedì", `jumpTitle`), e un nuovo tocco sulla scheda Orario (`reselection`, dopo
+  quello che porta in cima la Lista) ci torna. Il
   giorno mostrato non cambia da solo quando finisce l'ultimo evento, ma il pulsante sì (`defaultDayTick`, una `task`
   che aspetta la fine dell'ultimo evento di oggi). Il selettore della data ha ancora "Oggi" (è un calendario).
 - Widget: Orario (piccolo, medio, grande), Lezione in corso (piccolo e accessori rettangolare, circolare, in linea),
@@ -438,6 +464,16 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   alla rovescia resta a 0:00. `liveactivitiesd` segna scaduta un'attività non prima di 120 s dall'ultimo aggiornamento
   (visto nei log): nelle prove servono fasi più lunghe di 2 minuti. L'attività finisce solo se l'app gira dopo
   l'ultima lezione (altrimenti la chiude iOS dopo 8 ore).
+- "0:00" con l'evento finito (segnalato dall'utente, novembre 2026): è quel limite. Senza server l'unico ridisegno
+  senza l'app è quello alla scadenza; il passaggio successivo arriva solo se l'app gira (aperta, aggiornamento in
+  background). Provato e scartato (sul simulatore, iOS 27.2, app chiusa): far cambiare la vista da sola con maschere
+  fatte da `ProgressView(timerInterval:)`, che senza maschera si aggiorna da sola; dentro `.mask` resta ferma a com'era
+  al disegno (anche con `luminanceToAlpha`). Non c'è un'API per programmare un aggiornamento in locale; un'attività
+  programmata (`request(…start:)`) sveglia l'app, ma con un avviso obbligatorio (schermo acceso) a ogni passaggio.
+  Fatto: la vista mostra sempre la fase in corso al momento del disegno, anche non scaduta (un disegno in ritardo
+  mostrava la fase finita); il rinnovo al ritorno nell'app aspetta il passaggio se la fase finisce entro 130 s;
+  l'aggiornamento in background si chiede al prossimo passaggio di fase (`nextPhaseStart`), non alle soglie del conto
+  alla rovescia, che ne sprecavano uno; anche l'aggiornamento in background delle notifiche riallinea l'attività.
 - Avvio programmato (iOS 26, `request(…start:)` con `alertConfiguration` obbligatoria): il prossimo giorno di scuola
   (e oggi, prima della finestra) resta `pending` e parte da solo all'ora indicata anche con l'app chiusa, con un avviso
   (materia, ora, aula). Verificato: parte con ~2 s di ritardo e iOS apre l'app in background ("Activity started"),
@@ -481,6 +517,15 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   dalla schermata di blocco, quel giorno non riparte da sola (`liveActivityStoppedDay`); avviata a mano resta anche
   senza avvio automatico. Senza permesso (`areActivitiesEnabled`) l'interruttore è spento e c'è il collegamento alle
   Impostazioni di iOS, il pulsante della card sparisce.
+- Scelta per evento (richiesta dell'utente, 3.3; `LiveActivityChoice`, `TimetableEntry.liveActivity`, nell'istantanea
+  `WidgetSnapshot.Event.liveActivity`): nell'editor (anche per gli intervalli) "Segui default" (`nil`), "Mostra",
+  "Non mostrare", una voce con il menu (in un gruppo di pulsanti a tre "Segui default" veniva troncato). Salvando
+  vale come gli altri dettagli: con eventi dello stesso nome si sceglie se applicarla a tutti (`SharedFields`).
+  `TimetableActivityPlan(snapshot:day:showsByDefault:)` tiene gli eventi con "Mostra" e, se `showsByDefault`
+  (avvio automatico acceso o attività avviata a mano oggi), quelli che seguono l'impostazione; quelli con "Non
+  mostrare" mai, come se non ci fossero (tra due eventi mostrati al loro posto c'è l'attesa del successivo, come
+  un'ora libera). Con l'avvio automatico spento l'attività parte da sola solo per gli eventi con "Mostra" (non nella
+  demo). Autotest in `WidgetSelfTest`. Il web non conosce il campo: se il web salva l'orario lo perde.
 - Viste: schermata di blocco = scheda sul contenitore della superficie con il colore della materia come accento
   (forma con la sigla, etichetta, titolo, aula e docente, tempo, barra con gli orari, pillola della successiva);
   Dynamic Island sempre con i ruoli scuri: compatta = forma con l'iniziale e tempo, minima = anello di avanzamento con
@@ -713,20 +758,28 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   riga, il gruppo Classeviva/Account BCW, campi e "Accedi"; "Prova la demo" e le note tornano chiudendo la tastiera.
   La disposizione segue la tastiera visibile (notifiche di UIKit), non il campo attivo: cambiando modulo con la
   tastiera aperta il cursore passa al campo corrispondente (al giro dopo) e la tastiera resta. Un tocco nello spazio
-  vuoto la chiude. Le note in basso occupano sempre l'altezza delle più lunghe tra i due moduli (copie nascoste in uno
-  `ZStack` allineato in alto): cambiando Classeviva/Account BCW il resto, centrato, non si sposta.
+  vuoto la chiude. Note in basso ridotte (richiesta dell'utente, novembre 2026): con un accesso già fatto
+  (`alreadySignedIn`: aggiunta di un account, account BCW dalle Impostazioni, primo account da abbinare) nessuna; con
+  Classeviva solo l'affiliazione; con l'account BCW anche "Usa un altro server BCW" (senza l'indirizzo). La spiegazione
+  di ogni modulo (`footerText`) resta solo nella card larga dell'iPad. Le note occupano sempre l'altezza delle più
+  lunghe tra i due moduli (copie nascoste in uno `ZStack` allineato in alto): cambiando Classeviva/Account BCW il
+  resto, centrato, non si sposta.
   Nella disposizione compatta logo e titolo sono centrati sulle maiuscole (allineamento `capCenter`): con le linee di
   base allineate il titolo, più piccolo, stava in basso; centrato a misura sembrava alto (segnalato dall'utente: accanto
   alla scritta pesante e alla barra più in basso), quindi il titolo sta 2 punti più in basso (centro delle maiuscole
   del titolo all'altezza del centro della barra, verificato al pixel).
+  Con la tastiera chiusa tra la barra e le maiuscole del titolo c'è lo stesso vuoto che tra la scritta e la barra
+  (`titleSpacing`, dalle misure dei due caratteri; segnalato dall'utente: con 10 punti la barra sembrava più vicina al
+  titolo). Verificato al pixel sull'iPhone 17: 20 punti sopra e sotto la barra.
   Intestazione unica nelle due disposizioni (`header`, `AnyLayout` tra `VStackLayout` e `HStackLayout`): il logo è
   sempre `BCWLogo(size: 64)` rimpicciolito da `ScaledLogo` (`scaleEffect` più `ScaledLayout`, che occupa la misura
   rimpicciolita, riporta la guida `capCenter` alla stessa scala e anima la scala). Prima le due intestazioni si
   scambiavano in dissolvenza e il logo andava a scatti (segnalato dall'utente). Con la tastiera chiusa la barra sta
   sotto la scritta, come nell'introduzione e nell'icona; aperta, a destra (richiesta dell'utente): `BCWLogo(stacked:)`
-  usa anch'esso `AnyLayout`, quindi la barra si sposta con la molla. Il titolo non scorre (passava sopra logo e barra):
-  sparisce subito e ricompare nel posto nuovo dopo 0,22 s, a movimento quasi finito (`.id(compact)`, transizione
-  asimmetrica). Un titolo che sta su una riga resta a misura piena (`fixedSize`, con la larghezza misurata con UIKit e
+  usa anch'esso `AnyLayout`, quindi la barra si sposta con la molla. Un titolo che va a capo in almeno una delle due
+  disposizioni (quindi cambia allineamento, `reflows`) non scorre: sparisce subito e ricompare nel posto nuovo dopo
+  0,22 s, a movimento quasi finito (`.id(compact)`, transizione asimmetrica). Uno che sta su una riga in tutte e due
+  si sposta con la molla, senza dissolvenza (richiesta dell'utente: la dissolvenza solo quando cambia allineamento). Un titolo che sta su una riga resta a misura piena (`fixedSize`, con la larghezza misurata con UIKit e
   quella dell'intestazione in `headerWidth`): durante la molla andava a capo o veniva troncato; uno più lungo va a capo
   (fino a 3 righe), centrato sotto il logo, allineato a sinistra accanto al logo piccolo con il blocco centrato sulle
   maiuscole. Provati sul simulatore con `-BCWLoginTitle testo` (solo DEBUG, sostituisce il titolo) e
@@ -881,12 +934,13 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   colori, interfaccia, forme e movimento, vista della Dashboard, funzioni, Classeviva, account BCW, orario, fine). Sta in
   `RootView` sopra tutto ma sotto `overlayHost`, quindi i dialoghi (abbinare gli account) ci vanno sopra.
 - Le scelte a due (Material 3 o Liquid Glass, Lista o Calendario) sono card grandi con un'anteprima stilizzata
-  (`PreviewChoice`). Sottotitoli scelti dall'utente: "Espressivo", "Vetro nativo", "Vista compatta", "Vista estesa".
+  (`PreviewChoice`), con titolo e sottotitolo centrati sotto l'anteprima (richiesta dell'utente). Sottotitoli scelti
+  dall'utente: "Espressivo", "Vetro nativo", "Vista compatta", "Vista estesa".
 - Orario dalle lezioni (`OnboardingTimetablePage`): si vede solo con la scheda Orario accesa e con un account da cui leggere
   le lezioni (`OnboardingView.steps`). Prima quando cominciano le ore (`TimetableGenerationFields`, gli stessi campi del
   foglio del generatore), poi l'anteprima della settimana (`DraftWeekGlance`), poi applica; la bozza resta nella pagina,
   non in `store.draft`, così sotto l'Orario non va in anteprima. Con ore fuori dalle mezz'ore tiene gli orari esatti
-  (`makeTimetableDraft(keepsExactTimes:)`) e applicando passa all'allineamento libero. La generazione è comune al foglio:
+  e applicando passa all'allineamento libero (`applyDraft`, come dal foglio). La generazione è comune al foglio:
   `AppModel.makeTimetableDraft`.
 - Bianco e nero: `ThemeStore.isMonochrome` (non salvato, deciso in `init` da `Onboarding.isFirstRun`: già al primo
   fotogramma). Cambia solo `colors`; `values` resta il tema vero, quindi i widget non diventano grigi. I campioni dei colori

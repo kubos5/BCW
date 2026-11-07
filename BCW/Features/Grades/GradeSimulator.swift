@@ -19,12 +19,20 @@ struct GradeSimulator: View {
     @State private var value = 7.0
     @State private var weight = 1.0
     @State private var chosenSubject: Int?
+    @Environment(AppModel.self) private var model
 
+    /// Tutte le materie dell'anno (anche quelle ancora senza voti), più quelle che compaiono solo
+    /// nei voti (es. un anno con l'elenco delle materie non ancora scaricato).
     private var subjects: [(id: Int, name: String)] {
-        let pairs = Dictionary(grouping: book.grades, by: \.subjectId).compactMap { id, list in
-            list.first.map { (id: id, name: $0.subjectName) }
+        var names: [Int: String] = [:]
+        for subject in model.subjects where subject.id != 0 && !subject.name.isEmpty {
+            names[subject.id] = subject.name
         }
-        return pairs.sorted { $0.name < $1.name }
+        for grade in book.grades where names[grade.subjectId] == nil {
+            names[grade.subjectId] = grade.subjectName
+        }
+        return names.map { (id: $0.key, name: $0.value) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     private var targetSubject: Int? {
@@ -32,7 +40,8 @@ struct GradeSimulator: View {
     }
 
     private func name(of subject: Int) -> String {
-        book.grades.first { $0.subjectId == subject }?.subjectName ?? "Materia"
+        model.subjects.first { $0.id == subject && !$0.name.isEmpty }?.name
+            ?? book.grades.first { $0.subjectId == subject }?.subjectName ?? "Materia"
     }
 
     /// In che periodo cade un voto ipotetico: quello scelto o, con tutto l'anno, l'ultimo.
@@ -45,7 +54,9 @@ struct GradeSimulator: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        // Lo spazio tra intestazione e modulo sta dentro la parte che si comprime: da chiusa la card
+        // ha lo stesso margine sopra e sotto l'intestazione.
+        VStack(alignment: .leading, spacing: 0) {
             if collapsible {
                 Button {
                     withAnimation(Motion.spatial) { isExpanded.toggle() }
@@ -62,7 +73,7 @@ struct GradeSimulator: View {
             } else {
                 heading
             }
-            CollapsibleContent(isExpanded: !collapsible || isExpanded, spacing: 0) {
+            CollapsibleContent(isExpanded: !collapsible || isExpanded, spacing: 14) {
                 VStack(alignment: .leading, spacing: 14) {
                     form
                     if !grades.isEmpty {
@@ -101,12 +112,15 @@ struct GradeSimulator: View {
     @ViewBuilder
     private var form: some View {
         if subjectId == nil, !subjects.isEmpty {
-            HStack {
+            // Il nome della materia può essere lungo ("Lingua e cultura straniera 1 - inglese"): l'etichetta
+            // resta intera e il campo prende il resto della riga, andando a capo (prima l'etichetta veniva
+            // schiacciata e spezzata lettera per lettera).
+            HStack(spacing: 12) {
                 Text("Materia")
-                Spacer(minLength: 12)
+                    .fixedSize()
                 SelectButton(selection: Binding { targetSubject ?? subjects[0].id } set: { chosenSubject = $0 },
                              options: subjects.map { ($0.id, $0.name, nil) }, label: "Materia",
-                             fill: Theme.surfaceContainerHighest, minHeight: 40)
+                             fill: Theme.surfaceContainerHighest, minHeight: 40, expands: true, lineLimit: 2)
             }
             .frame(minHeight: 40)
         }

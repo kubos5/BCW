@@ -60,7 +60,7 @@ struct TimetableDayList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
-            if content.day.isToday && !content.isDraft {
+            if content.day.isToday && !content.isDraft && model.preferences.timetableShowsNowCard {
                 TimetableNowCard(content: content, actions: actions)
                     .padding(.bottom, 6)
             }
@@ -233,7 +233,10 @@ extension TimetableDayList: Equatable {
     }
 }
 
-/// Uno o più eventi uguali accostati: una card unica, divisa in righe.
+/// Uno o più eventi uguali accostati: una card unica, divisa in righe. Le ore di un gruppo non hanno
+/// un separatore (prima una linea tratteggiata): la barretta della tinta prosegue da un'ora all'altra
+/// come una barra a segmenti, con uno stacco di 4 punti a ogni cambio d'ora (come i gruppi collegati
+/// di Material 3 Expressive), e ogni ora ha il suo orario a sinistra.
 struct EntryBlockCard: View {
     @Environment(AppModel.self) private var model
     let block: TimetableLayout.Block
@@ -259,17 +262,8 @@ struct EntryBlockCard: View {
                 let tint = Theme.timetableColor(entry, store: model.timetable)
                 EntryRow(entry: entry, badges: badges(for: entry), compact: compact,
                          showsTitle: index == 0 || !compact, tint: tint, isDraft: content.isDraft,
-                         isToday: content.day.isToday)
+                         isToday: content.day.isToday, joinsAbove: index > 0, joinsBelow: index < entries.count - 1)
                     .modifier(EntryFill(tint: tint, isDraft: content.isDraft))
-                    .overlay(alignment: .top) {
-                        if index > 0 {
-                            // Separatore tra le ore di un gruppo.
-                            Line()
-                                .stroke(tint.opacity(0.55), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                                .frame(height: 1)
-                                .padding(.leading, compact ? 10 : 70)
-                        }
-                    }
                     .contentShape(.rect)
                     .onTapGesture { actions.open(entry, content.day) }
                     .contextMenu { EntryContextMenu(entry: entry, isDraft: content.isDraft, actions: actions) }
@@ -298,6 +292,18 @@ struct EntryRow: View {
     var isDraft = false
     /// L'evento è di oggi: mentre è in corso mostra "In corso".
     var isToday = false
+    /// Nel gruppo c'è un'ora sopra / sotto: la barretta arriva fino al bordo della riga (meno metà
+    /// dello stacco), così le barrette delle ore formano una barra a segmenti.
+    var joinsAbove = false
+    var joinsBelow = false
+
+    /// Metà dello stacco tra i segmenti della barretta in un gruppo.
+    private static let joint: CGFloat = 2
+
+    private var barWidth: CGFloat { isDraft ? 10 : 4 }
+    private var verticalPadding: CGFloat { compact ? 10 : 12 }
+    /// Distanza della barretta dal bordo sinistro: margine e, se c'è, la colonna degli orari.
+    private var barLeading: CGFloat { compact ? 10 : 12 + 46 + 12 }
 
     var body: some View {
         if isToday && !isDraft {
@@ -325,9 +331,9 @@ struct EntryRow: View {
                 .padding(.top, 1)
                 .frame(width: 46, alignment: .trailing)
             }
-            // In anteprima un'onda, che applicando si raddrizza.
-            DraftWaveBar(amplitude: isDraft ? 2.5 : 0, color: tint)
-                .frame(width: isDraft ? 10 : 4)
+            // Il posto della barretta, disegnata sotto (`background`) per poter arrivare al bordo.
+            Color.clear
+                .frame(width: barWidth, height: 1)
             VStack(alignment: .leading, spacing: 2) {
                 if compact {
                     Text(entry.timeRange)
@@ -374,10 +380,18 @@ struct EntryRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, compact ? 10 : 12)
+        .padding(.vertical, verticalPadding)
         .padding(.leading, compact ? 10 : 12)
         .padding(.trailing, compact ? 10 : 14)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(alignment: .topLeading) {
+            // In anteprima un'onda, che applicando si raddrizza.
+            DraftWaveBar(amplitude: isDraft ? 2.5 : 0, color: tint)
+                .frame(width: barWidth)
+                .padding(.top, joinsAbove ? Self.joint : verticalPadding)
+                .padding(.bottom, joinsBelow ? Self.joint : verticalPadding)
+                .padding(.leading, barLeading)
+        }
     }
 }
 
@@ -489,12 +503,3 @@ struct RegisterTestRow: View {
     }
 }
 
-/// Linea orizzontale (per i separatori tratteggiati).
-struct Line: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-        return path
-    }
-}

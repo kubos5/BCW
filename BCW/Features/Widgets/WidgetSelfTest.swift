@@ -144,7 +144,9 @@ enum WidgetSelfTest {
             let lesson = plan.content(at: at(0, 9, 30), theme: theme)
             check(lesson?.state.phases.map(\.start) == [at(0, 9), at(0, 10), at(0, 11), at(0, 11, 10)]
                   && lesson?.staleDate == at(0, 10), "lezione in corso e successive")
-            check(lesson?.state.phase(isStale: false, now: at(0, 11, 5))?.start == at(0, 9), "non scaduta: la prima fase")
+            check(lesson?.state.phase(isStale: false, now: at(0, 9, 45))?.start == at(0, 9), "non scaduta: la fase in corso")
+            check(lesson?.state.phase(isStale: false, now: at(0, 10, 1))?.start == at(0, 10),
+                  "disegnata dopo la fine della fase ma non ancora scaduta: la fase in corso, non quella finita")
             check(lesson?.state.phase(isStale: true, now: at(0, 9, 59))?.start == at(0, 10), "scaduta: la fase successiva")
             check(lesson?.state.phase(isStale: true, now: at(0, 11, 5))?.kind == .pause,
                   "scaduta e ridisegnata più tardi: la fase in corso")
@@ -170,9 +172,42 @@ enum WidgetSelfTest {
             if let state = lesson?.state, let data = try? JSONEncoder().encode(state) {
                 check(data.count < 4096, "stato dell'attività troppo grande: \(data.count) byte")
             }
+            check(plan.nextPhaseStart(after: at(0, 9, 30)) == at(0, 10), "prossimo passaggio di fase (aggiornamento in background)")
         } else {
             failures.append("piano dell'attività mancante")
         }
+
+        // Attività in diretta per evento: "Non mostrare" toglie l'evento dal piano, "Mostra" lo tiene anche
+        // con l'avvio automatico spento (che allora segue solo quello).
+        func choosing(_ choices: [Int: LiveActivityChoice]) -> WidgetSnapshot {
+            var copy = snapshot
+            func apply(_ events: [WidgetSnapshot.Event]) -> [WidgetSnapshot.Event] {
+                events.map { event in
+                    var event = event
+                    if !event.isBreak, let choice = choices[event.start] { event.liveActivity = choice }
+                    return event
+                }
+            }
+            copy.days = copy.days.map { day in
+                var day = day
+                day.events = apply(day.events)
+                return day
+            }
+            copy.week = copy.week.map(apply)
+            return copy
+        }
+        let hiddenLast = TimetableActivityPlan(snapshot: choosing([12 * 60 + 10: .hide]), day: wednesday)
+        check(hiddenLast?.lessons.count == 4 && hiddenLast?.end == at(0, 12, 10), "ultima lezione nascosta: finisce prima")
+        let hiddenMiddle = TimetableActivityPlan(snapshot: choosing([9 * 60: .hide]), day: wednesday)
+        check(hiddenMiddle?.phases.map(\.kind) == [.before, .lesson, .pause, .lesson, .pause, .lesson, .lesson, .finished],
+              "lezione in mezzo nascosta: al suo posto l'attesa della successiva (\(hiddenMiddle?.phases.map(\.kind.rawValue) ?? []))")
+        let onlyShown = TimetableActivityPlan(snapshot: choosing([9 * 60: .show]), day: wednesday, showsByDefault: false)
+        check(onlyShown?.lessons.map(\.start) == [at(0, 9)] && onlyShown?.autoStart == at(0, 8, 30) && onlyShown?.end == at(0, 10),
+              "avvio automatico spento: solo la lezione con \"Mostra\"")
+        check(TimetableActivityPlan(snapshot: snapshot, day: wednesday, showsByDefault: false) == nil,
+              "avvio automatico spento e nessun evento con \"Mostra\": niente attività")
+        let defaults = TimetableActivityPlan(snapshot: choosing([8 * 60: .show]), day: wednesday)
+        check(defaults?.lessons.count == 5, "\"Mostra\" con l'avvio automatico acceso: come prima")
         let tint = WidgetSnapshot.Tint(light: 1, dark: 2)
         let merged = TimetableActivityPlan(day: wednesday, items: [
             .init(title: "Matematica", start: at(0, 8), end: at(0, 9), tint: tint),

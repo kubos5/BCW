@@ -211,6 +211,7 @@ final class TimetableStore {
         var room: String
         var color: EntryColor?
         var note: String
+        var liveActivity: LiveActivityChoice?
 
         init(_ entry: TimetableEntry) {
             title = entry.title
@@ -220,12 +221,14 @@ final class TimetableStore {
             // Il colore di una serie vale solo per quel giorno: non si propaga.
             color = entry.color?.paletteID == nil ? entry.color : nil
             note = entry.note
+            liveActivity = entry.liveActivity
         }
 
         static func differences(_ old: TimetableEntry, _ new: TimetableEntry) -> Bool {
             let a = SharedFields(old), b = SharedFields(new)
             return a.title != b.title || a.subjectId != b.subjectId || a.teacher != b.teacher
-                || a.room != b.room || a.note != b.note || (old.color != new.color && new.color?.paletteID == nil)
+                || a.room != b.room || a.note != b.note || a.liveActivity != b.liveActivity
+                || (old.color != new.color && new.color?.paletteID == nil)
         }
     }
 
@@ -244,6 +247,7 @@ final class TimetableStore {
                     if original.teacher != entry.teacher { other.teacher = entry.teacher }
                     if original.room != entry.room { other.room = entry.room }
                     if original.note != entry.note { other.note = entry.note }
+                    if original.liveActivity != entry.liveActivity { other.liveActivity = entry.liveActivity }
                     if original.color != entry.color, entry.color?.paletteID == nil { other.color = entry.color }
                     table.entries[index] = other
                 }
@@ -614,12 +618,16 @@ final class TimetableStore {
 
     // MARK: Bozza generata
 
-    /// Applica la bozza: sostituisce l'orario o aggiunge solo gli eventi che non si sovrappongono.
+    /// Applica la bozza: sostituisce l'orario o aggiunge solo gli eventi che non si sovrappongono. Con
+    /// ore fuori dalle mezz'ore (es. dalle 8:10, o da 50 minuti) l'orario passa all'allineamento libero,
+    /// che le tiene esatte (`draftNeedsFreeAlignment`).
     func applyDraft(replacing: Bool) {
         guard let draft else { return }
         let generated = draft.entries
         let generatedSettings = draft.settings
+        let needsFree = draftNeedsFreeAlignment
         mutate { table in
+            if needsFree { table.alignment = .free }
             if replacing {
                 table.entries = generated
                 table.occurrences = [:]
@@ -635,6 +643,12 @@ final class TimetableStore {
         }
         self.draft = nil
         removeUnreferencedFiles()
+    }
+
+    /// La bozza ha lezioni che l'allineamento automatico sposterebbe (gli intervalli sono sempre liberi).
+    var draftNeedsFreeAlignment: Bool {
+        guard alignment == .automatic, let draft else { return false }
+        return draft.entries.contains { !$0.isAutoAligned }
     }
 
     func deleteAll() {

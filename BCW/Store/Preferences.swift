@@ -153,6 +153,10 @@ final class Preferences {
     var dashboardMode: DashboardMode { didSet { defaults.set(dashboardMode.rawValue, forKey: "dashboardMode"); syncedChanged() } }
     /// Verifiche nella vista Lista dell'orario (accese di serie: si nascondono solo su richiesta).
     var timetableShowsTests: Bool { didSet { defaults.set(timetableShowsTests, forKey: "timetableShowsTests"); syncedChanged() } }
+    /// Card "Adesso" (evento in corso o prossimo) in cima all'orario di oggi (accesa di serie).
+    var timetableShowsNowCard: Bool {
+        didSet { defaults.set(timetableShowsNowCard, forKey: "timetableShowsNowCard"); syncedChanged() }
+    }
     var timetableMode: TimetableMode { didSet { defaults.set(timetableMode.rawValue, forKey: "timetableMode"); syncedChanged() } }
     var appearance: AppearanceMode { didSet { defaults.set(appearance.rawValue, forKey: "appearance"); syncedChanged() } }
     var hideCompletedHomework: Bool { didSet { defaults.set(hideCompletedHomework, forKey: "hideCompletedHomework"); syncedChanged() } }
@@ -200,6 +204,7 @@ final class Preferences {
         reminderHour = hour == 0 ? 18 : hour
         dashboardMode = DashboardMode(rawValue: defaults.string(forKey: "dashboardMode") ?? "") ?? .list
         timetableShowsTests = defaults.object(forKey: "timetableShowsTests") == nil || defaults.bool(forKey: "timetableShowsTests")
+        timetableShowsNowCard = defaults.object(forKey: "timetableShowsNowCard") == nil || defaults.bool(forKey: "timetableShowsNowCard")
         timetableMode = TimetableMode(rawValue: defaults.string(forKey: "timetableMode") ?? "") ?? .list
         appearance = AppearanceMode(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
         hideCompletedHomework = defaults.bool(forKey: "hideCompletedHomework")
@@ -245,6 +250,7 @@ final class Preferences {
             "collapsedSections": .array(collapsedSections.sorted().map { .string($0) }),
             "timetableMode": .string(timetableMode.rawValue),
             "timetableShowsTests": .bool(timetableShowsTests),
+            "timetableShowsNowCard": .bool(timetableShowsNowCard),
             "titleAbbreviation": .string(titleAbbreviation.rawValue),
             "appearance": .string(appearance.rawValue),
             "showsTimetableTab": .bool(showsTimetableTab),
@@ -280,6 +286,7 @@ final class Preferences {
             timetableMode = value
         }
         if let value = values["timetableShowsTests"]?.bool, value != timetableShowsTests { timetableShowsTests = value }
+        if let value = values["timetableShowsNowCard"]?.bool, value != timetableShowsNowCard { timetableShowsNowCard = value }
         if let value = values["titleAbbreviation"]?.string.flatMap(TitleAbbreviation.init(rawValue:)), value != titleAbbreviation {
             titleAbbreviation = value
         }

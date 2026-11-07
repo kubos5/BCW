@@ -295,33 +295,38 @@ struct LoginView: View {
         .frame(maxWidth: 440, alignment: .leading)
     }
 
-    /// Note sotto la card: affiliazione, account BCW e server.
+    /// Note sotto la card: affiliazione e, con l'account BCW, il server. Con un accesso già fatto niente.
+    @ViewBuilder
     private var wideLegal: some View {
-        HStack(spacing: 24) {
-            Text("BCW non è affiliata a Gruppo Spaggiari Parma.")
-            if linkingFirst, let username = model.cloud?.user.username {
-                Text("Account BCW: \(username)")
+        if !alreadySignedIn {
+            HStack(spacing: 24) {
+                Text("BCW non è affiliata a Gruppo Spaggiari Parma.")
+                Spacer(minLength: 0)
+                if currentMode == .bcw {
+                    serverLine
+                }
             }
-            Spacer(minLength: 0)
-            if currentMode == .bcw || linkingFirst {
-                serverLine
-            }
+            .font(.m3(12))
+            .foregroundStyle(Theme.secondaryInk)
         }
-        .font(.m3(12))
-        .foregroundStyle(Theme.secondaryInk)
     }
 
+    /// Il collegamento per cambiare il server BCW, senza l'indirizzo (richiesta dell'utente).
     private var serverLine: some View {
-        HStack(spacing: 6) {
-            Icon("cloud", size: 16)
-            Text("Server BCW: \(BCWServer.host)")
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text("·")
-            Button("Modifica") { editingServer = true }
-                .buttonStyle(LinkButtonStyle())
+        Button {
+            editingServer = true
+        } label: {
+            HStack(spacing: 6) {
+                Icon("cloud", size: 16)
+                Text("Usa un altro server BCW")
+            }
         }
+        .buttonStyle(LinkButtonStyle())
     }
+
+    /// Già entrati con Classeviva o con l'account BCW (aggiunta di un account, accesso all'account BCW
+    /// dalle Impostazioni, primo account da abbinare): le note in basso non servono.
+    private var alreadySignedIn: Bool { isAddingAccount || cloudOnly || linkingFirst }
 
     /// Spiegazione di un modulo (note del telefono, titolo della card dell'iPad).
     private func footerText(for mode: Mode) -> String {
@@ -515,7 +520,13 @@ struct LoginView: View {
         let fitsBesideLogo = titleWidth <= headerWidth - ScaledLogo.sideWidth(scale: Self.compactLogoScale) - 14
         let fitsBelowLogo = titleWidth <= headerWidth
         let oneLine = compact ? fitsBesideLogo : fitsBelowLogo
-        let layout = compact ? AnyLayout(HStackLayout(alignment: .capCenter, spacing: 14)) : AnyLayout(VStackLayout(spacing: 10))
+        // Va a capo in almeno una delle due disposizioni: lì l'allineamento cambia (centrato sotto il logo,
+        // a sinistra accanto) e il testo si ricompone, quindi cambia con una dissolvenza. Su una riga in
+        // tutte e due resta lo stesso testo e si sposta con la molla, senza dissolvenza (richiesta
+        // dell'utente).
+        let reflows = !(fitsBesideLogo && fitsBelowLogo)
+        let layout = compact ? AnyLayout(HStackLayout(alignment: .capCenter, spacing: 14))
+            : AnyLayout(VStackLayout(spacing: Self.titleSpacing(titleFont: font)))
         let showsArt = !compact && !isAddingAccount && !cloudOnly
         return layout {
             ScaledLogo(scale: compact ? Self.compactLogoScale : 1, stacked: !compact)
@@ -531,10 +542,10 @@ struct LoginView: View {
                 .alignmentGuide(.capCenter) { dimensions in
                     oneLine ? dimensions[.firstTextBaseline] - font.capHeight / 2 - 2 : dimensions.height / 2
                 }
-                // Il titolo non scorre da una posizione all'altra (passava sopra il logo e la barra): sparisce
-                // subito dove era e ricompare nel posto nuovo quando logo e barra sono quasi fermi, come la
-                // dissolvenza in sequenza di Material 3 (`fadeThrough`).
-                .id(compact)
+                // Quando si ricompone non scorre da una posizione all'altra: sparisce subito dove era e
+                // ricompare nel posto nuovo quando logo e barra sono quasi fermi, come la dissolvenza in
+                // sequenza di Material 3 (`fadeThrough`).
+                .id(reflows ? compact : false)
                 .transition(.asymmetric(insertion: .opacity.animation(Motion.effects.delay(0.22)),
                                         removal: .opacity.animation(Motion.effectsFast)))
         }
@@ -550,11 +561,26 @@ struct LoginView: View {
     /// Il logo accanto al titolo, con la tastiera aperta: 30 punti invece di 64.
     private static let compactLogoScale: CGFloat = 30 / 64
 
-    /// Note in basso. Con il gruppo Classeviva/Account BCW occupano sempre l'altezza delle più lunghe
-    /// e sono allineate in alto: cambiando scelta il resto della pagina (centrato) non si sposta.
+    /// Spazio tra il logo (con la barra sotto) e il titolo: tra la barra e le maiuscole del titolo lo
+    /// stesso vuoto che c'è tra la scritta e la barra (segnalato dall'utente: con 10 punti la barra
+    /// sembrava più vicina al titolo che alla scritta). Sopra la barra: la discesa del carattere e lo
+    /// spazio di `BCWLogo`; sopra le maiuscole del titolo: la salita meno l'altezza delle maiuscole.
+    private static func titleSpacing(titleFont: PlatformFont) -> CGFloat {
+        let logo = Typography.platformFont(size: 64, weight: 800, rounded: true)
+        let aboveBar = -logo.descender + 64 * 0.02
+        let aboveCaps = titleFont.ascender - titleFont.capHeight
+        return max(10, (aboveBar - aboveCaps).rounded())
+    }
+
+    /// Note in basso, ridotte al minimo (richiesta dell'utente): con un accesso già fatto nessuna; con
+    /// Classeviva l'affiliazione; con l'account BCW anche il collegamento per cambiare server. Occupano
+    /// sempre l'altezza delle più lunghe e sono allineate in alto: cambiando tra Classeviva e Account BCW
+    /// il resto della pagina (centrato) non si sposta.
     @ViewBuilder
     private var footerArea: some View {
-        if showsModePicker {
+        if alreadySignedIn {
+            EmptyView()
+        } else if showsModePicker {
             ZStack(alignment: .top) {
                 footer(for: .classeviva).hidden()
                 footer(for: .bcw).hidden()
@@ -567,15 +593,9 @@ struct LoginView: View {
 
     private func footer(for mode: Mode) -> some View {
         VStack(spacing: 8) {
-            Text(footerText(for: mode))
-            if !isAddingAccount {
-                Text("BCW non è affiliata a Gruppo Spaggiari Parma.")
-            }
-            if mode == .bcw || linkingFirst {
+            Text("BCW non è affiliata a Gruppo Spaggiari Parma.")
+            if mode == .bcw {
                 serverLine
-                if linkingFirst, let username = model.cloud?.user.username {
-                    Text("Account BCW: \(username)")
-                }
             }
         }
         .font(.m3(12))

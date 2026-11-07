@@ -154,6 +154,12 @@ struct TimetableDraftHeader: View {
                         .opacity(0.85)
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
+                    if model.timetable.draftNeedsFreeAlignment {
+                        Text("Orari esatti: applicando, l'orario passa all'allineamento libero.")
+                            .font(.m3(12, weight: 600))
+                            .lineLimit(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Spacer(minLength: 0)
             }

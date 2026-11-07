@@ -3,6 +3,8 @@ import SwiftUI
 
 struct GradesView: View {
     @Environment(AppModel.self) private var model
+    /// Cambia quando si tocca di nuovo la scheda Voti (`GradeBookView.reselection`).
+    var reselection = 0
     #if DEBUG
     /// Per gli screenshot di sviluppo: `-BCWOpenSubject YES` apre la materia con il nome più
     /// lungo (il caso peggiore per la barra della finestra).
@@ -11,7 +13,7 @@ struct GradesView: View {
 
     var body: some View {
         PlatformNavigationStack {
-            GradeBookView(book: model.gradeBook, subjects: model.subjects, allowsRefresh: true)
+            GradeBookView(book: model.gradeBook, subjects: model.subjects, allowsRefresh: true, reselection: reselection)
                 .navigationDestination(for: SubjectSummary.self) { summary in
                     SubjectDetailView(subjectId: summary.subjectId, book: model.gradeBook, subjects: model.subjects)
                 }
@@ -34,6 +36,10 @@ struct GradeBookView: View {
     let book: GradeBook
     var subjects: [Subject] = []
     var allowsRefresh = false
+    /// Nuovo tocco sulla scheda Voti (richiesta dell'utente): il primo torna in cima, il successivo (già
+    /// in cima) riporta alla media dell'anno se era scelto un periodo. Con Liquid Glass in cima ci porta
+    /// il sistema.
+    var reselection = 0
 
     enum Section: String, CaseIterable, Identifiable {
         case recent, subjects
@@ -49,6 +55,9 @@ struct GradeBookView: View {
     @State private var isSplit = false
     /// iPad largo in colonna (es. verticale con la barra di navigazione): media e andamento affiancati.
     @State private var heroBesideTrend = false
+    @State private var scrollPosition = ScrollPosition(edge: .top)
+    /// Lo scorrimento della colonna è in cima (solo un `Bool`: cambia di rado).
+    @State private var isAtTop = true
     @Environment(\.pageGutter) private var gutter
 
     private var filteredGrades: [Grade] {
@@ -113,6 +122,19 @@ struct GradeBookView: View {
         // (come la versione web). Filtri, scheda e voti espansi stanno qui, sopra il ramo.
         .widthAtLeast(SplitMetrics.threshold, isOn: $isSplit)
         .themedBackground()
+        .onChange(of: reselection) { reselected() }
+    }
+
+    /// Nuovo tocco sulla scheda: in cima, poi la media dell'anno. Affiancati (iPad largo) in cima ci porta
+    /// la colonna dei voti (`SplitPage`) e il periodo torna subito all'anno.
+    private func reselected() {
+        if !isSplit && !isAtTop {
+            guard !ThemeStore.shared.liquidGlass else { return }
+            withAnimation(Motion.spatialSlow) { scrollPosition.scrollTo(edge: .top) }
+        } else if period != nil {
+            Haptics.selection()
+            withAnimation(Motion.spatial) { period = nil }
+        }
     }
 
     /// Telefono (e iPad stretto o in colonna): tutto in una colonna.
@@ -146,7 +168,12 @@ struct GradeBookView: View {
             .widthAtLeast(640, isOn: $heroBesideTrend)
         }
         .tracksPageScroll()
-        .scrollsToTopOnReselect()
+        .scrollPosition($scrollPosition)
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentOffset.y + geometry.contentInsets.top <= 1
+        } action: { _, atTop in
+            isAtTop = atTop
+        }
         .refreshable {
             if allowsRefresh { await model.loadGrades() }
         }

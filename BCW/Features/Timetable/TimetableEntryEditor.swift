@@ -102,6 +102,8 @@ struct TimetableEntryEditor: View {
                         NoteField(text: $draft.note, prompt: "Nota per ogni settimana")
                     }
 
+                    liveActivityField
+
                     if !isNew {
                         ListGroup {
                             ButtonRow("Elimina evento", icon: "trash", destructive: true) {
@@ -129,7 +131,7 @@ struct TimetableEntryEditor: View {
                          trailing: [.confirm("Salva", disabled: !isValid) { save() }])
             .m3Dialog("Applicare le modifiche anche agli altri eventi «\(request.entry?.displayTitle ?? "")»?",
                       isPresented: $askingPropagation,
-                      message: "Nome, materia, docente, aula, colore e nota verranno aggiornati in tutti gli eventi con lo stesso nome. Orari, giorni e colori delle palette applicate a una giornata restano invariati.",
+                      message: "Nome, materia, docente, aula, colore, nota e attività in diretta verranno aggiornati in tutti gli eventi con lo stesso nome. Orari, giorni e colori delle palette applicate a una giornata restano invariati.",
                       stacked: true) {
                 [DialogAction(title: "Applica a tutti (\(sameName.count + 1))", style: .strong) { commit(propagate: true) },
                  DialogAction(title: "Solo a questo evento") { commit(propagate: false) },
@@ -283,6 +285,33 @@ struct TimetableEntryEditor: View {
                     FormFieldValue(draft.end > draft.start ? TimeOfDay.duration(draft.duration) : "—")
                 }
             }
+        }
+    }
+
+    /// Attività in diretta per questo evento: segue l'impostazione, sempre o mai. Salvando, come gli
+    /// altri dettagli, si sceglie se applicarla anche agli eventi con lo stesso nome.
+    /// Una voce con il menu, come "Allineamento" nelle Impostazioni: in un gruppo di pulsanti a tre
+    /// "Segui default" veniva troncato accanto al segno di spunta.
+    private var liveActivityField: some View {
+        ListGroup(footer: liveActivityFooter) {
+            SelectRow("Attività in diretta", icon: "lockClock", selection: $draft.liveActivity,
+                      options: [(nil, "Segui default", nil), (.show, "Mostra", nil), (.hide, "Non mostrare", nil)])
+        }
+    }
+
+    private var liveActivityFooter: String {
+        let setting = model.preferences.liveActivities ? "attiva" : "spenta"
+        switch draft.liveActivity {
+        case nil:
+            return "Come in Impostazioni › Orario › Attività in diretta (ora \(setting)): con l'avvio automatico \(draft.isBreak ? "l'intervallo compare" : "l'evento compare") nella schermata di blocco e nella Dynamic Island."
+        case .show?:
+            return draft.isBreak
+                ? "L'intervallo compare nell'attività in diretta anche con l'avvio automatico spento."
+                : "L'attività in diretta segue questo evento anche con l'avvio automatico spento: parte mezz'ora prima."
+        case .hide?:
+            return draft.isBreak
+                ? "L'attività in diretta salta l'intervallo: al suo posto resta la lezione o il tempo che manca alla successiva."
+                : "L'attività in diretta salta questo evento: se è tra altri eventi, al suo posto mostra il tempo che manca al successivo."
         }
     }
 

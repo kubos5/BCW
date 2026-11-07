@@ -13,8 +13,13 @@ struct TimetableView: View {
     @Environment(\.tabChrome) private var tabChrome
     @Environment(\.windowClass) private var windowClass
     @Environment(\.pageGutter) private var gutter
-    /// Cambia quando si tocca di nuovo la scheda Orario (iOS): si torna al giorno predefinito.
+    /// Cambia quando si tocca di nuovo la scheda Orario (richiesta dell'utente): il primo tocco porta in
+    /// cima la Lista, il successivo (già in cima) al giorno con il prossimo evento (`defaultDay`). Nella
+    /// vista Giorno, che parte già scorsa alla prima ora, subito al giorno.
     var reselection = 0
+    /// Lo scorrimento della Lista e se è in cima (solo un `Bool`: cambia di rado).
+    @State private var listScroll = ScrollPosition(edge: .top)
+    @State private var listAtTop = true
 
     @State private var selectedDay = Date().startOfDay
     @State private var adjustedInitialDay = false
@@ -158,7 +163,13 @@ struct TimetableView: View {
                     withAnimation(Motion.spatial) { showsJump = visible }
                 }
                 .onChange(of: reselection) {
-                    select(defaultDay)
+                    if mode != .day && !listAtTop {
+                        // Con Liquid Glass in cima ci porta il sistema.
+                        guard !ThemeStore.shared.liquidGlass else { return }
+                        withAnimation(Motion.spatialSlow) { listScroll.scrollTo(edge: .top) }
+                    } else {
+                        select(defaultDay)
+                    }
                 }
                 // Finito l'ultimo evento di oggi il giorno predefinito diventa il successivo.
                 .task(id: defaultDayTick) { await waitForDefaultDayChange() }
@@ -396,6 +407,7 @@ struct TimetableView: View {
                         .padding(.bottom, Theme.bottomInset + 56)
                         .background { DaySwipeGesture(swipe: swipe) }
                 }
+                .modifier(ListScrollTracking(position: $listScroll, isAtTop: $listAtTop))
                 .scrollDismissesKeyboard(.immediately)
                 .transition(.fadeThrough)
             case .day:
@@ -451,6 +463,7 @@ struct TimetableView: View {
                             .splitMainPadding(maxWidth: 760, bottom: Theme.bottomInset + 56)
                             .background { DaySwipeGesture(swipe: swipe) }
                     }
+                    .modifier(ListScrollTracking(position: $listScroll, isAtTop: $listAtTop))
                     .scrollDismissesKeyboard(.immediately)
                 }
             }
@@ -796,6 +809,30 @@ enum TimetableSelfTest {
             failures.append("lezioni di prova non decodificate")
         }
 
+        // Bozza con ore da 50 minuti dalle 8:10: applicandola l'orario passa all'allineamento libero e tiene
+        // gli orari esatti; con ore allineate resta automatico.
+        if let data = try? JSONSerialization.data(withJSONObject: ["lessons": lessonsJSON]),
+           let lessons = try? JSONDecoder().decode(LessonsResponse.self, from: data).lessons {
+            var odd = GenerationSettings()
+            odd.firstHourStart = 8 * 60 + 10
+            odd.hourLength = 50
+            for (settings, expectsFree) in [(odd, true), (GenerationSettings(), false)] {
+                let ownerG = "selftest-g-\(UUID().uuidString)"
+                defer { TimetableStore.removeData(owner: ownerG) }
+                let drafting = TimetableStore()
+                drafting.load(owner: ownerG)
+                check(drafting.alignment == .automatic, "bozza: l'orario nuovo non parte con l'allineamento automatico")
+                let entries = TimetableGenerator.generate(from: lessons, settings: settings).entries
+                drafting.draft = TimetableDraft(entries: entries, settings: settings, analyzedDays: 1, from: Date(), to: Date())
+                check(drafting.draftNeedsFreeAlignment == expectsFree, "bozza: allineamento libero richiesto sbagliato")
+                drafting.applyDraft(replacing: true)
+                check(drafting.alignment == (expectsFree ? .free : .automatic),
+                      "bozza: allineamento dopo l'applicazione \(drafting.alignment)")
+                check(drafting.entries(weekday: 1, includingDraft: false).map(\.start) == entries.filter { $0.weekday == 1 }.map(\.start),
+                      "bozza: orari cambiati applicandola")
+            }
+        }
+
         // Passaggio dall'allineamento libero all'automatico.
         let ownerD = "selftest-d-\(UUID().uuidString)"
         defer { TimetableStore.removeData(owner: ownerD) }
@@ -947,3 +984,19 @@ enum TimetableSelfTest {
 }
 #endif
 
+
+/// Posizione dello scorrimento della Lista e se è in cima, per il nuovo tocco sulla scheda Orario.
+private struct ListScrollTracking: ViewModifier {
+    @Binding var position: ScrollPosition
+    @Binding var isAtTop: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .scrollPosition($position)
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top <= 1
+            } action: { _, atTop in
+                isAtTop = atTop
+            }
+    }
+}

@@ -588,7 +588,8 @@ private struct PreviewChoice<Preview: View>: View {
                     .frame(maxWidth: .infinity)
                     .background(Theme.surfaceContainerHigh, in: .rect(cornerRadius: Theme.radii.l, style: .continuous))
                     .clipShape(.rect(cornerRadius: Theme.radii.l, style: .continuous))
-                VStack(alignment: .leading, spacing: 2) {
+                // Titolo e sottotitolo centrati sotto l'anteprima (richiesta dell'utente).
+                VStack(alignment: .center, spacing: 2) {
                     Text(title)
                         .font(.m3(15, weight: 650))
                         .foregroundStyle(selected ? Theme.onSecondaryContainer : Theme.ink)
@@ -597,6 +598,8 @@ private struct PreviewChoice<Preview: View>: View {
                         .foregroundStyle(selected ? Theme.onSecondaryContainer.opacity(0.85) : Theme.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 4)
             }
             .padding(10)
@@ -1284,7 +1287,7 @@ private struct OnboardingTimetablePage: View {
 
     private var hoursFooter: String {
         if store.alignment == .automatic && !isAligned {
-            return "Con ore così, BCW terrà gli orari esatti: l'orario userà l'allineamento libero, che si cambia in Modifica orario."
+            return "Con ore così BCW tiene gli orari esatti: applicando l'orario passerà da solo all'allineamento libero, che si cambia in Modifica orario."
         }
         return "Le trovi sul diario o sul sito della scuola. Se sbagli, potrai cambiarle e rigenerare."
     }
@@ -1294,7 +1297,7 @@ private struct OnboardingTimetablePage: View {
         errorMessage = nil
         defer { isGenerating = false }
         do {
-            let result = try await model.makeTimetableDraft(settings: settings, keepsExactTimes: true)
+            let result = try await model.makeTimetableDraft(settings: settings)
             Haptics.success()
             forward = true
             DispatchQueue.main.async {
@@ -1339,11 +1342,8 @@ private struct OnboardingTimetablePage: View {
         guard let draft else { return }
         Haptics.success()
         store.draft = draft
+        // Con ore fuori dalle mezz'ore passa da sé all'allineamento libero.
         store.applyDraft(replacing: replacing)
-        // Gli orari esatti non stanno nell'allineamento automatico.
-        if store.alignment == .automatic, draft.entries.contains(where: { !$0.isAutoAligned }) {
-            store.setAlignment(.free)
-        }
         next()
     }
 }

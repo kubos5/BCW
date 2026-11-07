@@ -172,6 +172,10 @@ enum NewsNotifications {
         await model.refreshAll()
         // L'app può essere sospesa subito dopo: i widget si aggiornano ora, senza attesa.
         model.widgets.export()
+        // Anche l'attività in diretta si allinea all'ora attuale prima che l'app venga sospesa: iOS
+        // concede pochi aggiornamenti in background e senza l'app, passata la fase dopo quella in corso,
+        // l'attività resterebbe su "0:00".
+        await model.liveActivities.runBackgroundRefresh(model: model)
     }
 }
 

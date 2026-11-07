@@ -59,7 +59,7 @@ struct TimetableGeneratorSheet: View {
     private var hoursFooter: String {
         let aligned = settings.firstHourStart % 30 == 0 && (settings.hourLength == 30 || settings.hourLength == 60)
         if store.alignment == .automatic && !aligned {
-            return "L'orario usa l'allineamento automatico: con questi orari le lezioni verranno spostate all'ora o alla mezz'ora più vicina. Per tenere gli orari esatti passa all'allineamento libero in Modifica orario."
+            return "Con questi orari BCW tiene gli orari esatti: applicando la bozza l'orario passerà da solo dall'allineamento automatico a quello libero, che si cambia in Modifica orario."
         }
         return "Classeviva registra solo in quale ora della giornata si svolge una lezione: l'orario si ricava da qui."
     }
@@ -150,7 +150,7 @@ private struct LiveActivitySettingsGroup: View {
         // L'iPad non ha la Dynamic Island: l'attività sta solo nella schermata di blocco.
         let places = WindowClass.isPad ? "nella schermata di blocco" : "nella schermata di blocco e nella Dynamic Island"
         ListGroup("Schermata di blocco", footer: live.areActivitiesEnabled
-            ? "Nei giorni con lezioni la lezione in corso, il tempo che manca e la successiva restano \(places), da mezz'ora prima della prima lezione alla fine dell'ultima. Si avvia e si ferma anche a mano dalla scheda in cima all'orario di oggi. Vale solo su questo dispositivo."
+            ? "Nei giorni con lezioni la lezione in corso, il tempo che manca e la successiva restano \(places), da mezz'ora prima della prima lezione alla fine dell'ultima. Si avvia e si ferma anche a mano dalla scheda in cima all'orario di oggi. Ogni evento può fare eccezione (modifica dell'evento › Attività in diretta: Mostra o Non mostrare). Vale solo su questo dispositivo."
             : "Le attività in diretta di BCW sono spente nelle Impostazioni di iOS (BCW › Attività in diretta).") {
             ToggleRow("Attività in diretta", subtitle: "Si avvia da sola nei giorni di lezione", icon: "lockClock",
                       isOn: Bindable(model.preferences).liveActivities)
@@ -192,6 +192,11 @@ struct TimetableSettingsSection: View {
         ListGroup("Vista e allineamento", footer: "Di serie la vista Lista segna le verifiche di Classeviva e quelle segnate a mano; spegnendo \"Mostra le verifiche\" restano nel dettaglio dell'evento e nella vista Giorno. Quelle nascoste, e le regole per nasconderle in automatico, sono in Verifiche nascoste (menu ⋯ dell'orario). L'allineamento vale per tutto l'orario e per la modalità di modifica (pulsante + dell'orario › Modifica orario). Automatico: gli eventi iniziano all'ora o alla mezz'ora e durano 30 minuti o un'ora; passando all'automatico gli eventi non allineati vengono allineati, dopo una conferma. Libero: qualsiasi orario e durata. Gli intervalli si posizionano sempre liberamente.") {
             TimetableAlignmentPicker()
             ToggleRow("Mostra le verifiche nella lista", icon: "test", isOn: Bindable(model.preferences).timetableShowsTests)
+        }
+
+        ListGroup("Oggi", footer: "La card in cima all'orario di oggi mostra l'evento in corso con il tempo che manca, o il prossimo, e il pulsante per avviare o fermare l'attività in diretta. Nascosta, l'attività in diretta si avvia comunque da sola se è attiva qui sotto.") {
+            ToggleRow("Card dell'evento in corso", subtitle: "In cima all'orario di oggi", icon: "schedule",
+                      isOn: Bindable(model.preferences).timetableShowsNowCard)
         }
 
         LiveActivitySettingsGroup()

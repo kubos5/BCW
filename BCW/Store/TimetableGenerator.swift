@@ -125,9 +125,11 @@ extension AppModel {
         }
     }
 
-    /// Scarica le lezioni registrate e ne ricava una bozza dell'orario. Con l'allineamento automatico
-    /// la bozza rispetta le ore e le mezz'ore, a meno di `keepsExactTimes`.
-    func makeTimetableDraft(settings: GenerationSettings, keepsExactTimes: Bool = false) async throws -> TimetableDraft {
+    /// Scarica le lezioni registrate e ne ricava una bozza dell'orario, sempre con gli orari esatti delle
+    /// ore indicate: se non stanno nell'allineamento automatico, applicandola l'orario passa a quello
+    /// libero (`TimetableStore.applyDraft`, richiesta dell'utente). Prima, dalla scheda Orario, le lezioni
+    /// venivano spostate all'ora o alla mezz'ora più vicina.
+    func makeTimetableDraft(settings: GenerationSettings) async throws -> TimetableDraft {
         let range = TimetableGenerator.range(for: settings)
         let lessons: [Lesson]
         do {
@@ -135,10 +137,7 @@ extension AppModel {
         } catch {
             throw TimetableDraftError.download(error.localizedDescription)
         }
-        var result = TimetableGenerator.generate(from: lessons, settings: settings)
-        if timetable.alignment == .automatic && !keepsExactTimes {
-            result.entries = result.entries.flatMap { $0.alignedPieces() }
-        }
+        let result = TimetableGenerator.generate(from: lessons, settings: settings)
         guard !result.entries.isEmpty else {
             throw lessons.isEmpty ? TimetableDraftError.noLessons : TimetableDraftError.irregular
         }
