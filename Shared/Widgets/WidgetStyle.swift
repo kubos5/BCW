@@ -21,6 +21,16 @@ enum WidgetLook: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Sfondo
+
+/// Sfondo del widget, scelto per ogni widget (tieni premuto il widget › Modifica widget).
+nonisolated enum WidgetBackgroundStyle: String, CaseIterable, Sendable {
+    /// Quello di sempre: la superficie del tema, chiara o scura come iOS.
+    case system
+    /// Il colore del tema (il tono di "Tonale" in Aspetto), con il resto del widget in tinta.
+    case theme
+}
+
 // MARK: - Colori
 
 /// Colori dei widget: i ruoli di Material 3 del tema dell'istantanea, risolti per il tema chiaro o
@@ -29,6 +39,8 @@ enum WidgetLook: String, CaseIterable, Identifiable {
 struct WidgetPalette {
     let look: WidgetLook
     let isDark: Bool
+    /// Sfondo nel colore del tema (Modifica widget).
+    let hasThemeBackground: Bool
     /// Nella galleria di prova le parti `widgetAccentable` prendono un colore simile a quello del
     /// sistema (nei widget veri lo sceglie iOS).
     let simulated: Bool
@@ -50,17 +62,86 @@ struct WidgetPalette {
         }
     }
 
-    init(theme: WidgetSnapshot.ThemeSnapshot, colorScheme: ColorScheme, look: WidgetLook, simulated: Bool = false) {
+    init(theme: WidgetSnapshot.ThemeSnapshot, colorScheme: ColorScheme, look: WidgetLook, simulated: Bool = false,
+         background: WidgetBackgroundStyle = .system) {
         self.look = look
         isDark = colorScheme == .dark
+        hasThemeBackground = background == .theme
         self.simulated = simulated
-        roles = isDark ? theme.dark : theme.light
+        let roles = isDark ? theme.dark : theme.light
+        self.roles = background == .theme ? Self.themed(roles, isDark: isDark) : roles
         rond = theme.rond
         rondBody = theme.rondBody
         radii = Radii(theme.corners)
     }
 
     var isFullColor: Bool { look == .fullColor }
+
+    /// I ruoli con lo sfondo nel colore del tema. In chiaro la superficie diventa il contenitore
+    /// secondario, il tono del pulsante "Tonale" in Impostazioni › Aspetto (scelta dell'utente: il
+    /// primario era troppo acceso). Le card sono veli del colore del testo. Primario e contenitore primario
+    /// restano, per la lezione in corso che deve staccarsi dallo sfondo; anche "Prossima verifica", nel
+    /// contenitore terziario, prende questo sfondo. In scuro lo sfondo deve sembrare quello dell'app
+    /// (scelta dell'utente: i contenitori e anche un loro tono mescolato con la superficie erano troppo
+    /// chiari), ma sulla Home iOS schiarisce lo sfondo dei widget scuri: si scuriscono le superfici di
+    /// quanto le schiarisce (`homeScreenLift`).
+    private static func themed(_ roles: [String: String], isDark: Bool) -> [String: String] {
+        if isDark { return compensatingHomeScreenLift(roles) }
+        let defaults = ThemeDefaults.light
+        func value(_ name: String) -> Int {
+            ThemeDefaults.hexValue(roles[name]) ?? ThemeDefaults.hexValue(defaults[name]) ?? 0x808080
+        }
+        let tonal = value("secondary-container")
+        let onTonal = value("on-secondary-container")
+        func veil(_ amount: Double) -> Int { mix(onTonal, tonal, amount) }
+        var result = roles
+        let changes: [String: Int] = [
+            "surface": tonal,
+            "on-surface": onTonal,
+            "on-surface-variant": veil(0.8),
+            "outline": veil(0.6),
+            "outline-variant": veil(0.25),
+            "surface-container-low": veil(0.06),
+            "surface-container": veil(0.1),
+            "surface-container-high": veil(0.16),
+            "surface-container-highest": veil(0.22),
+            "secondary-container": veil(0.14),
+            "tertiary-container": tonal,
+            "on-tertiary-container": onTonal,
+        ]
+        for (name, color) in changes { result[name] = String(format: "#%06X", color) }
+        return result
+    }
+
+    /// Quanto iOS schiarisce lo sfondo dei widget scuri sulla Home (iOS 26 e 27): circa 13 livelli per
+    /// canale in basso e 30 in alto, come una luce dall'alto, misurati sul simulatore (lo sfondo nero
+    /// diventa #0D0D0D in basso e #1F1E1F in alto) e visti anche sull'iPhone. Non si può spegnere:
+    /// si toglie la parte in basso, così il widget ha il colore dell'app (in alto resta la luce di iOS).
+    private static let homeScreenLift = 13
+
+    /// Le superfici scure scurite di `homeScreenLift` (fino al nero).
+    private static func compensatingHomeScreenLift(_ roles: [String: String]) -> [String: String] {
+        var result = roles
+        let names = ["surface", "surface-dim", "surface-container-lowest", "surface-container-low", "surface-container",
+                     "surface-container-high", "surface-container-highest"]
+        for name in names {
+            guard let value = ThemeDefaults.hexValue(roles[name] ?? ThemeDefaults.dark[name]) else { continue }
+            var darker = 0
+            for shift in [16, 8, 0] {
+                darker |= max(((value >> shift) & 0xFF) - homeScreenLift, 0) << shift
+            }
+            result[name] = String(format: "#%06X", darker)
+        }
+        return result
+    }
+
+    /// Sfondo dei widget che stanno in un contenitore ("Lezione in corso", "Prossima verifica"). Con il
+    /// colore del tema è quello di tutti; in scuro il contenitore (tono 30) è troppo chiaro per uno sfondo,
+    /// quindi è la superficie (con il colore del tema, scurita come per gli altri widget).
+    func containerBackground(_ name: String) -> Color {
+        if hasThemeBackground || isDark { return background }
+        return role("\(name)-container")
+    }
 
     /// Colore di un ruolo (sempre a colori, es. per i riempimenti a colori).
     func role(_ name: String) -> Color {

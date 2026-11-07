@@ -160,6 +160,16 @@ nonisolated struct TimetableEntry: Codable, Identifiable, Hashable {
         isBreak || (start % 30 == 0 && (duration == 30 || duration == 60))
     }
 
+    /// L'evento spostato di `minutes` minuti (negativi = prima), con la stessa durata e senza uscire
+    /// dalla giornata.
+    func shifted(by minutes: Int) -> TimetableEntry {
+        var copy = self
+        let length = duration
+        copy.start = min(max(0, start + minutes), 24 * 60 - length)
+        copy.end = copy.start + length
+        return copy
+    }
+
     /// L'evento con l'allineamento automatico: inizio e fine vanno all'ora o alla mezz'ora più
     /// vicina (presi uno per uno, così gli eventi che erano di seguito restano di seguito, senza
     /// sovrapporsi) e un evento più lungo di un'ora diventa una serie di eventi uguali da un'ora

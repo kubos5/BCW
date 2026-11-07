@@ -32,6 +32,7 @@ BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 - puoi segnare i compiti come fatti e, opzionalmente, nasconderli
 - puoi ricevere promemoria la sera prima di compiti o verifiche a un orario specificato
 - dato un obiettivo di media, puoi calcolare il voto necessario nelle prossime 1-5 prove
+- puoi vedere come cambierebbe la media (della materia e generale) se prendessi uno o più voti, a tua scelta: "E se prendessi…" nei Voti e nella pagina di ogni materia
 - puoi vedere l'effetto di ogni voto sulla media della materia (▲/▼) e grafici dell'andamento (toccando il grafico si legge la media di quel giorno)
 - puoi scegliere se calcolare la media come media di tutti i voti o media delle medie, con o senza pesi
 - integrazione con il Calendario di iOS per compiti, verifiche ed eventi
@@ -50,6 +51,7 @@ BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 - notifiche per nuovi voti, comunicazioni, note, assenze e compiti, da attivare in Impostazioni › Notifiche (anche con l'app chiusa)
 - in cima alla Dashboard la settimana (vista Lista) o il mese (vista Calendario) come fila di pulsanti; toccando il periodo si sceglie una data qualsiasi e scorrendo di lato si passa al giorno prima o dopo
 - in "Nei prossimi giorni" ogni giorno si comprime toccandone il titolo; toccando la data o il resto si va a quel giorno
+- alla prima apertura un'introduzione guida tra colori, stile, vista della Dashboard, preferenze, accesso a Classeviva, account BCW e orario ricavato dalle lezioni; l'app parte in bianco e nero e i colori arrivano con un cerchio che si allarga dal tema scelto. Si rivede da Impostazioni › Generale, dove ci sono anche i link al codice su GitHub
 
 ### Orario
 
@@ -58,21 +60,21 @@ La scheda Orario contiene l'orario settimanale, che si compila a mano o si gener
 - due viste: Lista (la settimana in alto e gli eventi del giorno sotto) e Giorno (le ore della giornata, come nell'app Calendario)
 - in cima la settimana è una fila di pulsanti, uno per giorno; le frecce cambiano settimana, toccando le date si sceglie un giorno qualsiasi dal calendario e scorrendo di lato sugli eventi si passa al giorno prima o dopo, come nella Dashboard
 - aprendo l'Orario si vede oggi finché c'è una lezione da finire, poi il primo giorno successivo con lezioni (come il widget Orario); a quel giorno riportano anche il pulsante accanto al giorno in grande ("Oggi", "Domani" o il giorno della settimana) e un nuovo tocco sulla scheda Orario
-- accanto al giorno in grande, attivandola in Impostazioni › Orario, la percentuale e la barra di avanzamento della giornata: la parte passata della durata complessiva delle lezioni (ondulata mentre la giornata è in corso); la stessa impostazione vale per i widget
 - la scheda Orario si può nascondere da Impostazioni › Orario (widget e attività in diretta continuano a funzionare e aprono la Dashboard)
-- oggi una scheda in cima mostra la lezione in corso (quanto manca) e quella dopo, oppure la prossima lezione; il pulsante con il lucchetto la porta nella schermata di blocco come attività in diretta, o la toglie
+- oggi una scheda in cima mostra la lezione in corso (quanto manca, con le ore uguali di seguito contate come una sola) e quella dopo, oppure la prossima lezione; il pulsante con il lucchetto la porta nella schermata di blocco come attività in diretta, o la toglie
 - toccando un evento si vedono i dettagli e si aggiungono note, file e foto, per un solo giorno o per ogni settimana
 - le verifiche segnate dai docenti su Classeviva compaiono da sole sulla lezione della materia e si possono nascondere; altre verifiche si segnano a mano, per un giorno o per ogni settimana
 - Verifiche nascoste (dal menu dell'orario): l'elenco delle verifiche nascoste, con il motivo, da cui si possono mostrare di nuovo, e le regole per nasconderle in automatico (per docente, materia, giorno della settimana, periodo, parole nel testo o materie che quel giorno non sono in orario)
 - modificando un evento si può applicare la modifica a tutti quelli con lo stesso nome
 - gli eventi uguali di seguito (es. due ore di matematica) sono uniti in un gruppo, quelli contemporanei sono affiancati
 - intervalli che nella vista Giorno stanno sopra le lezioni senza cambiarne la durata e nella vista Lista sono un separatore ondulato con l'orario
-- le verifiche nella vista Lista si mostrano solo attivando "Mostra le verifiche" (Impostazioni o menu dell'orario)
+- le verifiche nella vista Lista si possono togliere spegnendo "Mostra le verifiche" (Impostazioni o menu dell'orario)
 - il pulsante + apre un menu con nuovo evento, nuovo intervallo, Modifica orario e generazione dalle lezioni
-- modalità Modifica orario, nella vista Giorno, con una barra degli strumenti in basso (allineamento, intervalli, colori): gli eventi si spostano tenendoli premuti e trascinandoli, si allungano dal bordo inferiore, se ne crea uno nuovo toccando due volte un'ora vuota e toccandoli si modificano gli orari a mano
+- modalità Modifica orario, nella vista Giorno, con una barra degli strumenti in basso (allineamento, spostamento degli orari, intervalli): gli eventi si spostano tenendoli premuti e trascinandoli, si allungano dal bordo inferiore, se ne crea uno nuovo toccando due volte un'ora vuota e toccandoli si modificano gli orari a mano
+- spostamento degli orari, in Modifica orario: alcuni o tutti gli eventi, con o senza intervalli, di un numero di minuti a tua scelta, uguale per tutti o diverso per ogni giorno della settimana (per esempio tutto avanti di 5 minuti), vedendo prima i nuovi orari
 - allineamento dell'orario, scelto in Modifica orario: automatico (eventi da 30 minuti o un'ora, alla mezz'ora, anche inserendo gli orari a mano) o libero (qualsiasi orario e durata); passando all'automatico gli eventi non allineati vengono allineati dopo una conferma; gli intervalli si posizionano sempre liberamente
 - colori: quelli delle lezioni, colori personalizzati salvati, colori presi dalle palette (anche personalizzate) oppure una palette a sfumatura applicata a una serie di eventi di una giornata
-- generazione automatica di una bozza dell'orario dalle lezioni registrate, mostrata in anteprima con i bordi tratteggiati prima di applicarla
+- generazione automatica di una bozza dell'orario dalle lezioni registrate, mostrata in anteprima prima di applicarla: pillole morbide con un'onda di luce che attraversa la giornata, che applicando si assestano nell'orario
 - backup dell'orario da esportare e reimportare dalle Impostazioni (con file allegati)
 - con un account BCW l'orario di ogni account abbinato, con i file allegati, si sincronizza tra i dispositivi
 
@@ -80,13 +82,13 @@ La scheda Orario contiene l'orario settimanale, che si compila a mano o si gener
 
 Widget per la schermata Home e la schermata di blocco, con i colori, il font e le forme dell'app (in chiaro e in scuro, anche con le icone colorate o trasparenti di iOS):
 
-- Orario (piccolo, medio, grande): il giorno (con la percentuale e la barra di avanzamento della giornata, se attivate), sotto le lezioni in una lista segmentata con quella in corso più alta e in evidenza e un piccolo stacco al posto degli intervalli; finita l'ultima lezione il giorno seguente con lezioni, come la scheda Orario all'apertura; nel grande la giornata intera
+- Orario (piccolo, medio, grande): il giorno, sotto le lezioni in una lista segmentata con quella in corso più alta e in evidenza e un piccolo stacco al posto degli intervalli; finita l'ultima lezione il giorno seguente con lezioni, come la scheda Orario all'apertura; nel grande la giornata intera
 - Lezione in corso (piccolo e schermata di blocco): la materia, l'aula, quanto manca con la barra o l'anello di avanzamento e la lezione dopo; senza lezioni in corso la prossima
 - Compiti e verifiche (medio e grande): i prossimi compiti, verifiche ed eventi giorno per giorno
 - Prossima verifica (piccolo e schermata di blocco): la prossima verifica con i giorni che mancano
 - Media (piccolo e schermata di blocco): la media generale nell'anello dei Voti e quella del periodo in corso
 
-Toccando un widget si apre l'app sul giorno o sulla scheda giusta. I widget si aggiornano da soli quando cambiano i dati nell'app e all'inizio e alla fine di ogni lezione; senza account invitano ad accedere e senza orario a crearlo.
+Tenendo premuto un widget, in "Modifica widget" si sceglie lo sfondo: quello predefinito, chiaro o scuro come iOS, o il colore del tema (in modalità scura lo stesso sfondo scuro dell'app, per il contrasto). Toccando un widget si apre l'app sul giorno o sulla scheda giusta. I widget si aggiornano da soli quando cambiano i dati nell'app e all'inizio e alla fine di ogni lezione; senza account invitano ad accedere e senza orario a crearlo.
 
 ### Attività in diretta
 
@@ -124,10 +126,10 @@ Sull'iPad con la finestra larga l'app prende la struttura della versione web sug
 ### Design
 
 L'app segue Material 3 Expressive, con colori, font e pagina Aspetto della [versione web](https://kubos5.github.io/BCW-web): font Google Sans Flex, icone Material Symbols e colori generati dal colore d'accento scelto in Impostazioni › Aspetto (con stile dei colori, contrasto, angoli e animazioni).
-Anche l'esperienza d'uso è quella di un'app Material 3 Expressive: barra di ricerca in alto, liste segmentate, chip di stato, gruppi di pulsanti collegati, schede, menu del pulsante d'azione flottante e barra degli strumenti flottante, con le animazioni a molla e le transizioni di Material 3.
+Anche l'esperienza d'uso è quella di un'app Material 3 Expressive: barra di navigazione flottante, barra di ricerca in alto, liste segmentate, chip di stato, gruppi di pulsanti collegati, schede, menu del pulsante d'azione flottante e barra degli strumenti flottante, con le animazioni a molla e le transizioni di Material 3.
 Le forme usano angoli continui e su iPhone l'interfaccia ha il feedback aptico.
 In Impostazioni › Aspetto si può attivare Liquid Glass: barra di navigazione, barra delle schede e menu diventano quelli di sistema, in vetro.
-In Impostazioni › Aspetto › Icona dell'app si sceglie il colore dell'icona: quello del tema dell'app (ogni colore d'accento proposto ha il suo, per un colore scelto a mano il più vicino) oppure Mattone, Arancio, Oro, Verde, Petrolio, Blu, Indaco, Viola, Rosa, Ardesia o Grafite. Cerchio e barra sono due lastre di vetro, come nelle icone di iOS. L'icona segue sempre le icone chiare, scure, colorate e trasparenti di iOS. L'icona cambia subito, anche quando il colore d'accento cambia dalla pagina Aspetto o da un altro dispositivo; solo se dopo un secondo iOS non ha ancora risposto, un avviso in basso dice che il cambio è in corso. La scelta si sincronizza con l'account BCW.
+In Impostazioni › Aspetto › Icona dell'app si sceglie il colore dell'icona: quello del tema dell'app (ogni colore d'accento proposto ha il suo, per un colore scelto a mano il più vicino) oppure Mattone, Arancio, Oro, Verde, Petrolio, Blu, Indaco, Viola, Rosa o Ardesia, uno per ogni tema, con i suoi colori di Material 3. L'icona è il logo dell'introduzione: la scritta BCW e la barra sotto sono due lastre di vetro, come nelle icone di iOS. L'icona segue sempre le icone chiare, scure, colorate e trasparenti di iOS. L'icona cambia subito, anche quando il colore d'accento cambia dalla pagina Aspetto o da un altro dispositivo; solo se dopo un secondo iOS non ha ancora risposto, un avviso in basso dice che il cambio è in corso. La scelta si sincronizza con l'account BCW.
 
 ### Requisiti
 
@@ -174,7 +176,7 @@ BCW/
 ├── Theme/          Colori e stili
 ├── Utilities/      Date, decodifica e piccoli adattatori
 ├── Components/     Componenti riutilizzabili (card, badge voto, anelli, righe agenda…)
-└── Features/       Dashboard, Orario, Voti, Tu (e sottosezioni), Cerca, Impostazioni, Login
+└── Features/       Dashboard, Orario, Voti, Tu (e sottosezioni), Cerca, Impostazioni, Login, Introduzione
 Shared/             Codice comune all'app e ai widget: dati dei widget, giorno dell'orario, collegamenti, viste dei widget e dell'attività in diretta
 BCWWidgets/         Estensione dei widget e dell'attività in diretta (elenco dei widget, linea temporale, icone)
 ```

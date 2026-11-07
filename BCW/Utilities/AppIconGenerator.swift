@@ -1,15 +1,16 @@
 #if DEBUG
+import CoreGraphics
 import Foundation
 
 /// Generatore delle icone (solo DEBUG). Con `-BCWGenerateAppIcons /percorso/assoluto/BCW/Resources`
 /// scrive le icone di Icon Composer di Impostazioni › Aspetto › Icona dell'app, poi esce: la
-/// principale `AppIcon.icon` (Mattone) e le altre dieci in `AppIcons/<nome>.icon`. iOS non
+/// principale `AppIcon.icon` (Mattone) e le altre nove in `AppIcons/<nome>.icon`. iOS non
 /// sa disegnare le icone mentre l'app gira: vanno tutte nel pacchetto.
 ///
-/// Ogni icona ha tre livelli: lo sfondo, il cerchio e la barra, questi ultimi in due gruppi
+/// Ogni icona ha lo sfondo e il logo dell'introduzione: la scritta "BCW" e la barra, in due gruppi
 /// distinti con il vetro, così iOS li disegna come due lastre (ombra e riflessi per gruppo, come le
-/// icone di sistema). Colori e proporzioni sono quelli dell'anteprima (`AppIconPalette`,
-/// `AppIconGeometry`). Il risultato è deterministico: con un percorso di prova i file escono
+/// icone di sistema). Colori e tracciati sono quelli dell'anteprima (`AppIconPalette`,
+/// `AppIconLogo`). Il risultato è deterministico: con un percorso di prova i file escono
 /// identici a quelli del repository.
 enum AppIconGenerator {
     static func runIfRequested() {
@@ -38,18 +39,50 @@ enum AppIconGenerator {
         return choices.count
     }
 
-    /// Una cartella `.icon`: `icon.json` e gli SVG del cerchio e della barra.
+    /// Una cartella `.icon`: `icon.json` e gli SVG della scritta e della barra, in punti della tela
+    /// (1024) con un margine di 2 attorno alla forma: Icon Composer mette il centro dell'immagine al
+    /// centro della tela più lo spostamento (`translation`).
     private static func write(_ choice: AppIconChoice, to folder: URL) throws {
         let files = FileManager.default
         let assets = folder.appendingPathComponent("Assets", isDirectory: true)
         if files.fileExists(atPath: folder.path) { try files.removeItem(at: folder) }
         try files.createDirectory(at: assets, withIntermediateDirectories: true)
-        // Tracciati in unità SVG con un margine di 1, scalati ai punti della tela (1024).
-        let shapeSVG = ##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 102 102" width="102" height="102"><path fill="#000000" d="\##(MaterialShapeName.circle.svg)"/></svg>"##
-        let barSVG = ##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 66 10.73" width="66" height="10.73"><rect fill="#000000" x="0" y="0" width="64" height="8.73" rx="4.365"/></svg>"##
-        try Data(shapeSVG.utf8).write(to: assets.appendingPathComponent("bcw-forma.svg"))
-        try Data(barSVG.utf8).write(to: assets.appendingPathComponent("bcw-linea.svg"))
-        try json(for: choice).write(to: folder.appendingPathComponent("icon.json"))
+        let canvas = CGAffineTransform(scaleX: 1024, y: 1024)
+        let text = AppIconLogo.shapes.text.copy(using: [canvas]) ?? AppIconLogo.shapes.text
+        let bar = AppIconLogo.shapes.bar.applying(canvas)
+        try Data(svg(svgPath(text), bounds: text.boundingBoxOfPath).utf8).write(to: assets.appendingPathComponent("bcw-scritta.svg"))
+        let barPath = CGPath(roundedRect: bar, cornerWidth: bar.height / 2, cornerHeight: bar.height / 2, transform: nil)
+        try Data(svg(svgPath(barPath), bounds: bar).utf8).write(to: assets.appendingPathComponent("bcw-linea.svg"))
+        try json(for: choice, text: text.boundingBoxOfPath, bar: bar).write(to: folder.appendingPathComponent("icon.json"))
+    }
+
+    private static func number(_ value: CGFloat) -> String {
+        let text = String(format: "%.2f", value)
+        return text == "-0.00" ? "0.00" : text
+    }
+
+    private static func svg(_ path: String, bounds: CGRect) -> String {
+        let box = bounds.insetBy(dx: -2, dy: -2)
+        let size = "width=\"\(number(box.width))\" height=\"\(number(box.height))\""
+        return "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"\(number(box.minX)) \(number(box.minY)) \(number(box.width)) \(number(box.height))\" \(size)><path fill=\"#000000\" d=\"\(path)\"/></svg>"
+    }
+
+    /// Il tracciato in sintassi SVG.
+    private static func svgPath(_ path: CGPath) -> String {
+        var parts: [String] = []
+        func point(_ p: CGPoint) -> String { "\(number(p.x)) \(number(p.y))" }
+        path.applyWithBlock { element in
+            let points = element.pointee.points
+            switch element.pointee.type {
+            case .moveToPoint: parts.append("M\(point(points[0]))")
+            case .addLineToPoint: parts.append("L\(point(points[0]))")
+            case .addQuadCurveToPoint: parts.append("Q\(point(points[0])) \(point(points[1]))")
+            case .addCurveToPoint: parts.append("C\(point(points[0])) \(point(points[1])) \(point(points[2]))")
+            case .closeSubpath: parts.append("Z")
+            @unknown default: break
+            }
+        }
+        return parts.joined()
     }
 
     private static func srgb(_ hex: Int) -> String {
@@ -72,22 +105,24 @@ enum AppIconGenerator {
         NSDecimalNumber(string: String(format: "%.4f", value))
     }
 
-    private static func json(for choice: AppIconChoice) throws -> Data {
-        let tint = choice.color.tint ?? AppIconPalette.tints[.mattone]!
-        let gray = String(format: "%.5f", AppIconPalette.tintedShapeWhite)
-        let tintedShape: [String: Any] = ["solid": "srgb:\(gray),\(gray),\(gray),1.00000"]
-        // Sfondo bianco caldo, e con le icone scure quello di iOS (`automatic`) con il cerchio più
-        // chiaro. Con le icone colorate il cerchio è grigio (iOS tinge).
-        let background = [entry(nil, solid(AppIconPalette.lightBackground)), entry("dark", "automatic")]
-        let shape = [entry(nil, solid(tint.light)), entry("dark", solid(tint.dark)), entry("tinted", tintedShape)]
-        func group(_ name: String, _ layer: String, _ fills: [[String: Any]], _ scale: CGFloat) -> [String: Any] {
+    private static func json(for choice: AppIconChoice, text: CGRect, bar: CGRect) throws -> Data {
+        let light = AppIconPalette.scheme(for: choice.color, dark: false)
+        let dark = AppIconPalette.scheme(for: choice.color, dark: true)
+        func gray(_ white: CGFloat) -> [String: Any] {
+            let value = String(format: "%.5f", white)
+            return ["solid": "srgb:\(value),\(value),\(value),1.00000"]
+        }
+        // Sfondo nel contenitore primario del tema chiaro e, con le icone scure, quello scuro di iOS
+        // (`automatic`). Con le icone colorate iOS tinge la scala di grigi: scritta bianca, barra grigia.
+        let background = [entry(nil, solid(light.background)), entry("dark", "automatic")]
+        func group(_ name: String, _ layer: String, _ fills: [[String: Any]], _ frame: CGRect) -> [String: Any] {
             [
                 "layers": [[
                     "fill-specializations": fills,
                     "glass": true,
                     "image-name": "\(layer).svg",
                     "name": layer,
-                    "position": ["scale": decimal(scale), "translation-in-points": [0, 0]],
+                    "position": ["scale": decimal(1), "translation-in-points": [decimal(frame.midX), decimal(frame.midY)]] as [String: Any],
                 ] as [String: Any]],
                 "name": name,
                 "shadow": ["kind": "neutral", "opacity": decimal(0.5)] as [String: Any],
@@ -96,11 +131,12 @@ enum AppIconGenerator {
         }
         let icon: [String: Any] = [
             "fill-specializations": background,
-            // Il primo gruppo sta sopra.
+            // Il primo gruppo sta sopra: la barra e la scritta non si toccano, l'ordine conta solo per le ombre.
             "groups": [
-                group("Barra", "bcw-linea", [entry(nil, solid(AppIconPalette.bar))],
-                      1024 * AppIconGeometry.shape * AppIconGeometry.bar / 64),
-                group("Forma", "bcw-forma", shape, 1024 * AppIconGeometry.shape / 100),
+                group("Barra", "bcw-linea", [entry(nil, solid(light.bar)), entry("dark", solid(dark.bar)),
+                                             entry("tinted", gray(AppIconPalette.tintedBar))], bar),
+                group("Scritta", "bcw-scritta", [entry(nil, solid(light.text)), entry("dark", solid(dark.text)),
+                                                 entry("tinted", gray(AppIconPalette.tintedText))], text),
             ],
             "supported-platforms": ["circles": ["watchOS"], "squares": "shared"] as [String: Any],
         ]

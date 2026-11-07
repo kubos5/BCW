@@ -110,3 +110,39 @@ enum TimetableGenerator {
         return (max(schoolStart, to.adding(days: -7 * settings.weeks)), to)
     }
 }
+
+extension AppModel {
+    /// Perché non si può ricavare una bozza dell'orario.
+    enum TimetableDraftError: LocalizedError {
+        case download(String), noLessons, irregular
+
+        var errorDescription: String? {
+            switch self {
+            case let .download(reason): "Non riesco a scaricare le lezioni: \(reason)"
+            case .noLessons: "Non ci sono lezioni registrate nel periodo scelto. Riprova più avanti o esamina un periodo più lungo."
+            case .irregular: "Le lezioni registrate sono troppo poche o troppo irregolari per ricavare un orario. Prova a esaminare un periodo più lungo."
+            }
+        }
+    }
+
+    /// Scarica le lezioni registrate e ne ricava una bozza dell'orario. Con l'allineamento automatico
+    /// la bozza rispetta le ore e le mezz'ore, a meno di `keepsExactTimes`.
+    func makeTimetableDraft(settings: GenerationSettings, keepsExactTimes: Bool = false) async throws -> TimetableDraft {
+        let range = TimetableGenerator.range(for: settings)
+        let lessons: [Lesson]
+        do {
+            lessons = try await fetchLessons(from: range.from, to: range.to)
+        } catch {
+            throw TimetableDraftError.download(error.localizedDescription)
+        }
+        var result = TimetableGenerator.generate(from: lessons, settings: settings)
+        if timetable.alignment == .automatic && !keepsExactTimes {
+            result.entries = result.entries.flatMap { $0.alignedPieces() }
+        }
+        guard !result.entries.isEmpty else {
+            throw lessons.isEmpty ? TimetableDraftError.noLessons : TimetableDraftError.irregular
+        }
+        return TimetableDraft(entries: result.entries, settings: settings, analyzedDays: result.analyzedDays,
+                              from: range.from, to: range.to)
+    }
+}

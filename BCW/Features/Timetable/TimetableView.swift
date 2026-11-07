@@ -27,6 +27,8 @@ struct TimetableView: View {
     @State private var editor: TimetableEditorRequest?
     @State private var detail: TimetableDetailRequest?
     @State private var paletteWeekday: PaletteWeekday?
+    /// Spostamento degli orari (Modifica orario), aperto sul giorno scelto.
+    @State private var shiftingWeekday: ShiftRequest?
     @State private var showingGenerator = false
     @State private var showingHiddenTests = false
     @State private var deleting: TimetableEntry?
@@ -43,6 +45,11 @@ struct TimetableView: View {
     @State private var weekSide = false
 
     struct PaletteWeekday: Identifiable {
+        let weekday: Int
+        var id: Int { weekday }
+    }
+
+    struct ShiftRequest: Identifiable {
         let weekday: Int
         var id: Int { weekday }
     }
@@ -76,16 +83,22 @@ struct TimetableView: View {
                         // Modalità temporanea: la barra degli strumenti vivace prende il posto
                         // della barra delle schede.
                         TimetableEditToolbar {
+                            shiftingWeekday = ShiftRequest(weekday: selectedDay.timetableWeekday)
+                        } addBreak: {
                             editor = TimetableEditorRequest(weekday: selectedDay.timetableWeekday, kind: .breakTime)
-                        } colorDay: {
-                            paletteWeekday = PaletteWeekday(weekday: selectedDay.timetableWeekday)
                         } done: {
                             setEditing(false)
                         }
                         .padding(.bottom, 16)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
-                    } else if store.draft == nil {
+                    } else if store.draft != nil {
+                        // Anche l'anteprima è una modalità temporanea, con la sua barra degli strumenti.
+                        TimetableDraftToolbar { showingGenerator = true }
+                            .padding(.bottom, 16)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else {
                         // Le azioni per creare e modificare: il menu del pulsante d'azione flottante.
                         FABMenu(icon: "plus", label: "Aggiungi o modifica", items: fabItems)
                             .transition(.scale(scale: 0.4, anchor: .bottomTrailing).combined(with: .opacity))
@@ -109,6 +122,9 @@ struct TimetableView: View {
                 }
                 .sheet(item: $paletteWeekday) { request in
                     PaletteSeriesSheet(weekday: request.weekday)
+                }
+                .sheet(item: $shiftingWeekday) { request in
+                    TimetableShiftSheet(startWeekday: request.weekday)
                 }
                 .sheet(isPresented: $showingGenerator) {
                     TimetableGeneratorSheet()
@@ -150,8 +166,8 @@ struct TimetableView: View {
                 .onChange(of: model.openedLink) { consumeLink() }
                 // Con una bozza in anteprima non si modifica l'orario.
                 .onChange(of: store.draft == nil) { _, noDraft in if !noDraft { setEditing(false) } }
-                .onChange(of: isEditing, initial: true) { _, editing in tabChrome?.hidesBar = editing }
-                .onAppear { tabChrome?.hidesBar = isEditing }
+                .onChange(of: isEditing || store.draft != nil, initial: true) { _, hides in tabChrome?.hidesBar = hides }
+                .onAppear { tabChrome?.hidesBar = isEditing || store.draft != nil }
                 .onDisappear { tabChrome?.hidesBar = false }
                 #if DEBUG
                 .task { await DebugTimetable.prepareIfRequested(model: model) }
@@ -179,6 +195,7 @@ struct TimetableView: View {
         // nascoste, il selettore della data, l'editor di un evento nuovo o il dettaglio del primo evento.
         switch UserDefaults.standard.string(forKey: "BCWTimetableSheet") {
         case "generator": showingGenerator = true
+        case "shift": isEditing = true; shiftingWeekday = ShiftRequest(weekday: Date().timetableWeekday)
         case "hidden": showingHiddenTests = true
         case "date": pickingDate = true
         case "editor": editor = TimetableEditorRequest(weekday: Date().timetableWeekday)
@@ -325,10 +342,6 @@ struct TimetableView: View {
     }
 
     // MARK: Contenuto
-
-    private var banner: some View {
-        TimetableDraftBanner { showingGenerator = true }
-    }
 
     @ViewBuilder
     private var content: some View {
@@ -514,7 +527,7 @@ struct TimetableView: View {
         if store.draft != nil || isEditing || !unmatched.isEmpty {
             VStack(spacing: 10) {
                 if store.draft != nil {
-                    banner
+                    TimetableDraftHeader()
                 }
                 if isEditing {
                     TimetableEditBar(multipleDays: windowClass == .regular && showsWeek)
@@ -605,8 +618,7 @@ enum DebugTimetable {
     }
 
     /// `-BCWTimetableToday YES` (demo): se oggi non ha eventi (fine settimana) prende quelli del
-    /// lunedì, per provare la giornata in corso, la barra di avanzamento e la card "Adesso" a
-    /// qualsiasi giorno.
+    /// lunedì, per provare la giornata in corso e la card "Adesso" a qualsiasi giorno.
     private static func fillTodayIfRequested(model: AppModel) {
         let store = model.timetable
         let today = Date().timetableWeekday
@@ -817,6 +829,47 @@ enum TimetableSelfTest {
         check(align.unalignedEntries.isEmpty, "restano eventi non allineati")
         check(TimetableLayout(entries: lab).clusters.first?.blocks.first?.block.entries.count == 3,
               "i pezzi dell'evento lungo non formano un gruppo")
+
+        // Spostare più eventi di alcuni minuti (Modifica orario): ciascuno il suo, stessa durata, dentro la giornata.
+        let ownerShift = "selftest-shift-\(UUID().uuidString)"
+        defer { TimetableStore.removeData(owner: ownerShift) }
+        let moving = TimetableStore()
+        moving.load(owner: ownerShift)
+        let early = TimetableEntry(weekday: 1, start: 3, end: 63, title: "Presto")
+        let late = TimetableEntry(weekday: 2, start: 23 * 60, end: 23 * 60 + 30, title: "Tardi")
+        let stay = TimetableEntry(weekday: 2, start: 8 * 60, end: 9 * 60, title: "Ferma")
+        let recess = TimetableEntry(weekday: 2, start: 10 * 60, end: 10 * 60 + 10, kind: .breakTime, title: "Intervallo")
+        moving.add([early, late, stay, recess])
+        moving.setAlignment(.automatic)
+        let keepAuto = moving.alignment
+        moving.shift([stay.id: 0])
+        check(moving.alignment == keepAuto && moving.entry(id: stay.id)?.start == 8 * 60, "spostamento di 0 minuti")
+        moving.shift([early.id: -10, late.id: 60, recess.id: 5], freeAlignment: true)
+        check(moving.alignment == .free, "spostamento: allineamento libero non impostato")
+        check(moving.entry(id: early.id)?.start == 0 && moving.entry(id: early.id)?.duration == 60, "spostamento oltre l'inizio del giorno")
+        check(moving.entry(id: late.id)?.end == 24 * 60 && moving.entry(id: late.id)?.duration == 30, "spostamento oltre la fine del giorno")
+        check(moving.entry(id: recess.id)?.start == 10 * 60 + 5 && moving.entry(id: recess.id)?.end == 10 * 60 + 15, "intervallo spostato")
+        check(moving.entry(id: stay.id)?.start == 8 * 60, "evento non scelto spostato")
+
+        // Simulatore della media: voti ipotetici insieme a quelli veri, nel periodo indicato.
+        if let seven = Grade.hypothetical(.init(subjectId: 1, subjectName: "Fisica", value: 7, weight: 1), position: 1, periodName: "Primo"),
+           let five = Grade.hypothetical(.init(subjectId: 2, subjectName: "Storia", value: 5, weight: 1), position: 2, periodName: "Secondo") {
+            let book = GradeBook(grades: [seven, five], periods: [])
+            let tried = [HypotheticalGrade(subjectId: 1, subjectName: "Fisica", value: 9, weight: 1),
+                         HypotheticalGrade(subjectId: 3, subjectName: "Arte", value: 10, weight: 1)]
+            let simulated = book.adding(tried, position: 2, periodName: "Secondo")
+            check(book.average() == 6 && simulated.average() == 7.75, "simulatore: media generale \(simulated.average() ?? 0)")
+            check(simulated.average(period: 1) == 7 && simulated.average(period: 2) == 8, "simulatore: media del periodo")
+            check(book.grades.count == 2 && simulated.grades.count == 4 && Set(simulated.grades.map(\.id)).count == 4,
+                  "simulatore: voti aggiunti al libretto originale o con lo stesso id")
+            var averages = book
+            averages.mode = .subjectAverages
+            // Fisica (7 e 9) 8, Storia 5, Arte 10.
+            check(abs((averages.adding(tried, position: 2, periodName: "Secondo").average() ?? 0) - 23.0 / 3) < 0.001,
+                  "simulatore: media delle medie per materia")
+        } else {
+            failures.append("simulatore: voti di prova non decodificati")
+        }
 
         // Viste Lista e Calendario: un intervallo tra due eventi uguali di seguito li separa.
         let first = TimetableEntry(weekday: 1, start: 8 * 60, end: 9 * 60, title: "Matematica")

@@ -49,6 +49,8 @@ enum SettingsPane: String, CaseIterable, Identifiable {
             SecuritySettingsSection()
             DataSettingsSection()
             AboutSettingsSection()
+            OnboardingSettingsSection()
+            LinksSettingsSection()
         case .appearance: AppearanceSettingsSection()
         case .grades: GradeSettingsSection()
         case .dashboard: DashboardSettingsSection()
@@ -355,6 +357,56 @@ struct AboutSettingsSection: View {
     }
 }
 
+/// Rivedere l'introduzione.
+struct OnboardingSettingsSection: View {
+    var body: some View {
+        ListGroup {
+            ButtonRow("Rivedi l'introduzione", icon: "sparkles") {
+                Onboarding.shared.present()
+            }
+        }
+    }
+}
+
+/// Il codice di BCW su GitHub e il profilo dell'autore.
+struct LinksSettingsSection: View {
+    private struct Item: Identifiable {
+        let title: String
+        let subtitle: String
+        let icon: String
+        let url: String
+        var id: String { url }
+    }
+
+    private static let items = [
+        Item(title: "BCW", subtitle: "L'app (repository principale)", icon: "github", url: "https://github.com/kubos5/BCW/"),
+        Item(title: "BCW-web", subtitle: "La versione web", icon: "globe", url: "https://github.com/kubos5/BCW-web/"),
+        Item(title: "BCW-api", subtitle: "Il server degli account BCW", icon: "server", url: "https://github.com/kubos5/BCW-api/"),
+        Item(title: "kubos5", subtitle: "Il profilo dell'autore su GitHub", icon: "person", url: "https://github.com/kubos5/"),
+    ]
+
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        ListGroup("Su GitHub") {
+            ForEach(Self.items) { item in
+                Button {
+                    if let url = URL(string: item.url) { openURL(url) }
+                } label: {
+                    ListRow(item.title, subtitle: item.subtitle) {
+                        FormIcon(item.icon)
+                    } trailing: {
+                        Icon("externalLink", size: 18)
+                            .foregroundStyle(Theme.onSurfaceVariant)
+                    }
+                }
+                .buttonStyle(.listRow)
+                .accessibilityHint("Apre GitHub nel browser")
+            }
+        }
+    }
+}
+
 // MARK: - Aspetto
 
 /// Aspetto: tema, colore d'accento (colori dinamici di Material 3), forme, movimento, caratteri e
@@ -405,7 +457,7 @@ struct AppearanceSettingsSection: View {
 }
 
 /// Piccola anteprima dei componenti con i colori e le forme scelti.
-private struct ThemePreview: View {
+struct ThemePreview: View {
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
             Shaped(shape: .cookie9Sided, fill: Theme.primaryContainer, size: 56) {
@@ -868,7 +920,7 @@ struct AccountRow: View {
 }
 
 /// Selettore dei colori di sistema (`UIColorPickerViewController`), senza trasparenza.
-private struct SystemColorPicker: UIViewControllerRepresentable {
+struct SystemColorPicker: UIViewControllerRepresentable {
     @Binding var color: Color
 
     func makeCoordinator() -> Coordinator { Coordinator(color: $color) }

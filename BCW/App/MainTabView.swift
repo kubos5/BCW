@@ -1,9 +1,8 @@
 import SwiftUI
 
 /// Schede dell'app su iPhone e iPad. Con Liquid Glass è la `TabView` di sistema (con la scheda
-/// Cerca); altrimenti la barra di navigazione di Material 3 con quattro destinazioni (64 punti,
-/// `surface-container`, indicatore a pillola 56 × 32 dietro l'icona della scheda aperta) e la
-/// ricerca nella barra in cima alla Dashboard.
+/// Cerca); altrimenti una barra di navigazione flottante di Material 3 Expressive con quattro
+/// destinazioni (`M3NavigationBar`) e la ricerca nella barra in cima alla Dashboard.
 ///
 /// Sull'iPad con la finestra larga (`WindowClass.regular`) le sezioni di Tu sono destinazioni a
 /// sé: senza Liquid Glass nella barra di navigazione laterale (`NavigationRail`), con la barra
@@ -510,27 +509,46 @@ private struct MaterialTab: ViewModifier {
     }
 }
 
-/// Barra di navigazione di Material 3 (corta, 64 punti) con l'indicatore a pillola.
+/// Barra di navigazione flottante di Material 3 Expressive: una pillola sospesa sul contenuto con i
+/// nomi delle schede; quella aperta è una pillola piena nel colore primario con l'icona, che scivola
+/// da una scheda all'altra allargandosi con una molla.
 private struct M3NavigationBar: View {
-    static let height: CGFloat = 68
+    /// Spazio che le pagine lasciano libero sopra il bordo dello spazio sicuro.
+    static let height: CGFloat = 64
+    private static let barHeight: CGFloat = 56
+    /// Distanza dal bordo dello schermo senza l'indicatore della Home.
+    private static let minimumMargin: CGFloat = 14
+    /// Con l'indicatore della Home la barra scende un po' dentro lo spazio sicuro.
+    private static let safeAreaOverlap: CGFloat = 10
+
     let tabs: [MainTabView.AppTab]
     let selection: MainTabView.AppTab
     let badge: Int
     let select: (MainTabView.AppTab) -> Void
     let longPress: (MainTabView.AppTab) -> Void
+    @Namespace private var namespace
+    @State private var safeBottom: CGFloat = 0
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 2) {
             // La ricerca sta nella barra in cima alla Dashboard, come nelle app Google.
             ForEach(tabs, id: \.self) { tab in
                 NavigationBarItem(tab: tab, selected: tab == selection, badge: tab == .you ? badge : 0,
-                                  select: { select(tab) }, longPress: { longPress(tab) })
+                                  namespace: namespace, select: { select(tab) }, longPress: { longPress(tab) })
             }
         }
-        .padding(.horizontal, 4)
-        .frame(height: Self.height)
+        .padding(6)
+        .frame(height: Self.barHeight)
+        .background {
+            Capsule(style: .continuous)
+                .fill(Theme.surfaceContainerHigh)
+                .shadow(color: Theme.shadow.opacity(0.2), radius: 3, y: 1)
+                .shadow(color: Theme.shadow.opacity(0.14), radius: 14, y: 6)
+        }
         .frame(maxWidth: .infinity)
-        .background(Theme.surfaceContainer.ignoresSafeArea(edges: .bottom))
+        .offset(y: safeBottom > Self.minimumMargin + Self.safeAreaOverlap ? Self.safeAreaOverlap : -Self.minimumMargin)
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { safeBottom = $0 }
+        .animation(Motion.spatial, value: selection)
     }
 }
 
@@ -538,6 +556,7 @@ private struct NavigationBarItem: View {
     let tab: MainTabView.AppTab
     let selected: Bool
     let badge: Int
+    let namespace: Namespace.ID
     let select: () -> Void
     let longPress: () -> Void
     @State private var pressed = false
@@ -553,30 +572,34 @@ private struct NavigationBarItem: View {
             Haptics.selection()
             select()
         } label: {
-            VStack(spacing: 4) {
-                ZStack {
+            HStack(spacing: 6) {
+                if selected {
+                    Icon(tab.selectedIcon, size: 20)
+                        .transition(.scale(scale: 0.4).combined(with: .opacity))
+                }
+                Text(tab.title)
+                    .font(.m3(14, weight: selected ? 650 : 550))
+                    .lineLimit(1)
+                    .fixedSize()
+                if badge > 0 {
+                    CountBadge(count: badge)
+                }
+            }
+            .foregroundStyle(selected ? Theme.onPrimary : Theme.onSurfaceVariant)
+            .padding(.horizontal, selected ? 16 : 13)
+            .frame(maxHeight: .infinity)
+            .background {
+                if selected {
                     Capsule(style: .continuous)
-                        .fill(Theme.secondaryContainer)
-                        .scaleEffect(x: selected ? 1 : 0, y: 1)
-                        .opacity(selected ? 1 : 0)
+                        .fill(Theme.primary)
+                        .matchedGeometryEffect(id: "selected", in: namespace)
+                } else {
                     Capsule(style: .continuous)
                         .fill(Theme.onSurfaceVariant.opacity(pressed ? 0.12 : 0))
-                    Icon(selected ? tab.selectedIcon : tab.icon)
-                        .foregroundStyle(selected ? Theme.onSecondaryContainer : Theme.onSurfaceVariant)
-                    if badge > 0 {
-                        CountBadge(count: badge)
-                            .offset(x: 13, y: -10)
-                    }
                 }
-                .frame(width: 56, height: 32)
-                Text(tab.title)
-                    .font(.m3(12, weight: selected ? 750 : 550))
-                    .tracking(0.3)
-                    .foregroundStyle(selected ? Theme.secondary : Theme.onSurfaceVariant)
-                    .lineLimit(1)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
+            .contentShape(.capsule)
+            .scaleEffect(pressed ? 0.95 : 1)
         }
         .buttonStyle(PressReportingStyle(pressed: $pressed))
         .simultaneousGesture(
@@ -587,8 +610,7 @@ private struct NavigationBarItem: View {
                 longPress()
             }
         )
-        .animation(Motion.effectsFast, value: pressed)
-        .animation(Motion.spatial, value: selected)
+        .animation(Motion.spatialFast, value: pressed)
         .accessibilityLabel(tab.title)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityValue(badge > 0 ? "\(badge) da leggere" : "")

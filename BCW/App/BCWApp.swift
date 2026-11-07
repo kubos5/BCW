@@ -7,6 +7,7 @@ struct BCWApp: App {
     @State private var model = AppModel()
 
     init() {
+        ProtectedData.restartWhenAvailableIfNeeded()
         Theme.configureAppearance()
         UNUserNotificationCenter.current().delegate = NotificationPresenter.shared
         #if DEBUG
@@ -48,8 +49,11 @@ struct RootView: View {
             case .launching:
                 Theme.background.ignoresSafeArea()
             case .signedOut:
-                LoginView()
-                    .transition(.opacity)
+                // Sotto l'introduzione niente accesso, che ha forme animate: la fine lo mostra.
+                if !Onboarding.shared.isPresented {
+                    LoginView()
+                        .transition(.opacity)
+                }
             case .signedIn:
                 Group {
                     MainTabView()
@@ -58,12 +62,20 @@ struct RootView: View {
                 .opacity(model.isChangingSession ? 0 : 1)
                 .background(Theme.background.ignoresSafeArea())
                 .transition(.opacity)
+                .accessibilityHidden(Onboarding.shared.isPresented)
             }
 
             if lock.isLocked && model.phase == .signedIn {
                 LockView(lock: lock)
                     .transition(.opacity)
                     .zIndex(1)
+            }
+
+            if Onboarding.shared.isPresented {
+                OnboardingView()
+                    .zIndex(2)
+                    // Compare e sparisce con il cerchio dei colori (`ThemeReveal`).
+                    .transition(.identity)
             }
         }
         .animation(Motion.effects, value: model.phase)

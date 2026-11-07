@@ -2,7 +2,7 @@
   "fill-specializations" : [
     {
       "value" : {
-        "solid" : "srgb:0.98431,0.96863,0.95686,1.00000"
+        "solid" : "srgb:0.65882,0.93725,0.95686,1.00000"
       }
     },
     {
@@ -17,7 +17,19 @@
           "fill-specializations" : [
             {
               "value" : {
-                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+                "solid" : "srgb:0.00000,0.41176,0.43529,1.00000"
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "srgb:0.41961,0.64706,0.66275,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:0.60000,0.60000,0.60000,1.00000"
               }
             }
           ],
@@ -25,10 +37,10 @@
           "image-name" : "bcw-linea.svg",
           "name" : "bcw-linea",
           "position" : {
-            "scale" : 10.5952,
+            "scale" : 1,
             "translation-in-points" : [
               0,
-              0
+              174.0811
             ]
           }
         }
@@ -49,35 +61,35 @@
           "fill-specializations" : [
             {
               "value" : {
-                "solid" : "srgb:0.05490,0.58431,0.61961,1.00000"
+                "solid" : "srgb:0.16471,0.20392,0.20784,1.00000"
               }
             },
             {
               "appearance" : "dark",
               "value" : {
-                "solid" : "srgb:0.15294,0.70980,0.74510,1.00000"
+                "solid" : "srgb:0.86667,0.90980,0.90980,1.00000"
               }
             },
             {
               "appearance" : "tinted",
               "value" : {
-                "solid" : "srgb:0.30000,0.30000,0.30000,1.00000"
+                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
               }
             }
           ],
           "glass" : true,
-          "image-name" : "bcw-forma.svg",
-          "name" : "bcw-forma",
+          "image-name" : "bcw-scritta.svg",
+          "name" : "bcw-scritta",
           "position" : {
-            "scale" : 8.8064,
+            "scale" : 1,
             "translation-in-points" : [
               0,
-              0
+              -41.6402
             ]
           }
         }
       ],
-      "name" : "Forma",
+      "name" : "Scritta",
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5

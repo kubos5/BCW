@@ -26,9 +26,6 @@ struct TimetableWidgetDay {
     /// La prossima lezione (dopo quella in corso, o la prima del giorno se non è oggi).
     let next: Event?
     let isHoliday: Bool
-    /// A che punto è la giornata (`nil` senza lezioni o con la barra spenta in Impostazioni ›
-    /// Orario): per un giorno dopo oggi allo 0%.
-    let progress: DayProgress?
 
     init(snapshot: WidgetSnapshot, now: Date) {
         self.now = now
@@ -60,9 +57,6 @@ struct TimetableWidgetDay {
             current = nil
             next = merged.first
         }
-        progress = snapshot.showsDayProgress == true
-            ? DayProgress(spans: lessons.map { TimetableDefaultDay.Span(start: $0.start, end: $0.end) }, minute: minute ?? 0)
-            : nil
     }
 
     /// Le lezioni dopo quella in evidenza (in corso o prossima), con le ore uguali unite.
@@ -144,8 +138,8 @@ struct TimetableBlock: Identifiable {
 // MARK: - Widget "Orario"
 
 /// Orario di oggi o, dopo l'ultimo evento, del giorno seguente (come la scheda Orario). In alto il
-/// giorno con la barra di avanzamento della giornata, sotto le lezioni in una lista segmentata con
-/// quella in corso più alta, nel contenitore primario.
+/// giorno, sotto le lezioni in una lista segmentata con quella in corso più alta, nel contenitore
+/// primario.
 struct TimetableWidgetView: View {
     let snapshot: WidgetSnapshot
     let now: Date
@@ -179,17 +173,16 @@ struct TimetableWidgetView: View {
     }
 }
 
-// MARK: Avanzamento della giornata
+// MARK: Intestazione
 
-/// Il giorno ("Oggi", "Domani", "Lunedì") e, a destra, a che punto è la giornata, come il giorno in
-/// grande della scheda Orario.
+/// Il giorno ("Oggi", "Domani", "Lunedì") e, a destra, le lezioni e l'orario della giornata.
 private struct TimetableWidgetHeader: View {
     let day: TimetableWidgetDay
     let palette: WidgetPalette
     var titleSize: CGFloat = 24
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(day.dayName)
                 .font(palette.font(titleSize, weight: 500, rounded: true))
                 .tracking(-0.3)
@@ -197,129 +190,30 @@ private struct TimetableWidgetHeader: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .layoutPriority(1)
-            if let progress = day.progress {
-                HStack(spacing: 8) {
-                    WidgetDayPercent(progress: progress, palette: palette, size: titleSize * 0.62)
-                    WidgetLinearProgress(progress: progress, palette: palette)
-                }
-                .frame(maxWidth: .infinity)
-            } else {
-                Spacer(minLength: 0)
-            }
+            Spacer(minLength: 0)
+            Text(day.summary)
+                .font(palette.font(12, weight: 500))
+                .foregroundStyle(palette.secondaryInk)
+                .lineLimit(1)
         }
-    }
-}
-
-/// "30%": nel colore primario mentre la giornata è in corso.
-private struct WidgetDayPercent: View {
-    let progress: DayProgress
-    let palette: WidgetPalette
-    var size: CGFloat = 15
-
-    var body: some View {
-        let running = progress.elapsed > 0 && !progress.isFinished
-        Text("\(progress.percent)%")
-            .font(palette.numeral(size, weight: 650, rounded: true))
-            .foregroundStyle(running ? palette.primary : palette.secondaryInk)
-            .lineLimit(1)
-            .fixedSize()
-            .widgetAccentable(running)
-            .accessibilityLabel("Giornata al \(progress.percent)%")
-    }
-}
-
-/// Indicatore lineare di Material 3 Expressive: la parte passata (ondulata mentre la giornata è in
-/// corso, come la card "Adesso" dell'app, qui ferma), uno spazio e la traccia con il punto finale.
-/// Si aggiorna con le voci della linea temporale (ogni 5 minuti durante le lezioni).
-private struct WidgetLinearProgress: View {
-    let progress: DayProgress
-    let palette: WidgetPalette
-
-    var body: some View {
-        let fraction = min(1, max(0, progress.fraction))
-        let running = fraction > 0 && fraction < 1
-        let active = palette.primary
-        let track = palette.isFullColor ? palette.role("secondary-container") : Color.white.opacity(0.25)
-        GeometryReader { proxy in
-            let width = proxy.size.width
-            let gap: CGFloat = running ? 4 : 0
-            let filled = fraction >= 1 ? width : max(0, (width - gap) * fraction)
-            ZStack(alignment: .leading) {
-                if fraction < 1 {
-                    Capsule()
-                        .fill(track)
-                        .frame(width: max(4, width - filled - gap), height: 4)
-                        .overlay(alignment: .trailing) {
-                            Circle().fill(active).frame(width: 4, height: 4).widgetAccentable()
-                        }
-                        .offset(x: filled + gap)
-                }
-                if filled > 0 {
-                    Group {
-                        if running && filled > 14 {
-                            ProgressWave()
-                                .stroke(active, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-                                .padding(.horizontal, 2)
-                                .frame(width: filled, height: 10)
-                        } else {
-                            Capsule().fill(active).frame(width: filled, height: 4)
-                        }
-                    }
-                    .widgetAccentable()
-                }
-            }
-            .frame(width: width, height: proxy.size.height, alignment: .leading)
-        }
-        .frame(height: 10)
-        .accessibilityHidden(true)
-    }
-}
-
-/// Onda della parte passata dell'indicatore, dal bordo sinistro (le onde dei separatori, invece,
-/// sono intere e centrate).
-private struct ProgressWave: Shape {
-    var amplitude: CGFloat = 2
-    var wavelength: CGFloat = 20
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        guard rect.width > 0 else { return path }
-        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
-        var x: CGFloat = 0
-        while x < rect.width {
-            x = min(x + 1, rect.width)
-            path.addLine(to: CGPoint(x: rect.minX + x, y: rect.midY - sin(x / wavelength * 2 * .pi) * amplitude))
-        }
-        return path
     }
 }
 
 // MARK: Piccolo
 
-/// Piccolo: il giorno con la percentuale e la barra, la lezione in corso (o la prossima) e quelle
-/// dopo; per un altro giorno le prime ore.
+/// Piccolo: il giorno, la lezione in corso (o la prossima) e quelle dopo; per un altro giorno le
+/// prime ore.
 private struct TimetableSmallView: View {
     let day: TimetableWidgetDay
     let palette: WidgetPalette
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(day.dayName)
-                        .font(palette.font(17, weight: 600, rounded: true))
-                        .foregroundStyle(palette.ink)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                    Spacer(minLength: 0)
-                    if let progress = day.progress {
-                        WidgetDayPercent(progress: progress, palette: palette, size: 13)
-                    }
-                }
-                if let progress = day.progress {
-                    WidgetLinearProgress(progress: progress, palette: palette)
-                }
-            }
+            Text(day.dayName)
+                .font(palette.font(17, weight: 600, rounded: true))
+                .foregroundStyle(palette.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
             if day.isToday, let featured = day.current ?? day.next {
                 ViewThatFits(in: .vertical) {
                     todayContent(featured, titleLines: 2, rows: 2)
@@ -438,7 +332,7 @@ private struct CompactLessonRow: View {
 
 // MARK: Medio e grande
 
-/// Medio: il giorno con l'avanzamento e le lezioni da quella in corso (o dalla prossima).
+/// Medio: il giorno e le lezioni da quella in corso (o dalla prossima).
 private struct TimetableMediumView: View {
     let day: TimetableWidgetDay
     let palette: WidgetPalette
@@ -461,8 +355,8 @@ private struct TimetableMediumView: View {
     }
 }
 
-/// Grande: il giorno con l'avanzamento e la giornata intera, con le lezioni finite sbiadite e la
-/// lezione in corso in evidenza.
+/// Grande: il giorno e la giornata intera, con le lezioni finite sbiadite e la lezione in corso in
+/// evidenza.
 private struct TimetableLargeView: View {
     let day: TimetableWidgetDay
     let palette: WidgetPalette
