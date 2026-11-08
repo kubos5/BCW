@@ -2,12 +2,27 @@
   <img width="1920" height="480" alt="ios" src="https://github.com/user-attachments/assets/125e79ef-37f0-48ff-bb12-ab1510c0abf2" />
 </p>
 
-# BCW: Better ClasseViVa
-Un client nativo per iPhone e iPad per il registro elettronico [Classeviva](https://web.spaggiari.eu) di Gruppo Spaggiari Parma.
 
-> BCW non è affiliato a Gruppo Spaggiari Parma S.p.A.
+<h1 align="center">BCW: Classeviva, in Material Design</h1>
 
----
+<p align="center">
+  <strong>Un client per iOS, Android e Web per il registro elettronico <a href="https://web.spaggiari.eu">Classeviva</a> di Spaggiari</strong>
+</p>
+
+<p align="center">
+  BCW non è affiliata a Gruppo Spaggiari Parma S.p.A.
+</p>
+
+<p align="center">
+  <strong><a href="https://github.com/kubos5/BCW">BCW per iOS</a></strong> ·
+  <a href="https://github.com/kubos5/BCW-web">BCW per Web</a> ·
+  <a href="https://github.com/kubos5/BCW-android">BCW per Android</a> ·
+  <a href="https://github.com/kubos5/BCW-api">Backend</a>
+</p>
+
+<br><br>
+
+
 
 ## Installazione
 
