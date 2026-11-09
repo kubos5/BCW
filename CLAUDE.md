@@ -760,7 +760,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   tastiera aperta il cursore passa al campo corrispondente (al giro dopo) e la tastiera resta. Un tocco nello spazio
   vuoto la chiude. Note in basso ridotte (richiesta dell'utente, novembre 2026): con un accesso già fatto
   (`alreadySignedIn`: aggiunta di un account, account BCW dalle Impostazioni, primo account da abbinare) nessuna; con
-  Classeviva solo l'affiliazione; con l'account BCW anche "Usa un altro server BCW" (senza l'indirizzo). La spiegazione
+  Classeviva l'affiliazione e "Rivedi l'introduzione" (3.3.1, come il web: `Onboarding.shared.present()`); con
+  l'account BCW anche "Usa un altro server BCW" (senza l'indirizzo); i due collegamenti affiancati, uno sotto
+  l'altro se non ci stanno (`ViewThatFits`). La spiegazione
   di ogni modulo (`footerText`) resta solo nella card larga dell'iPad. Le note occupano sempre l'altezza delle più
   lunghe tra i due moduli (copie nascoste in uno `ZStack` allineato in alto): cambiando Classeviva/Account BCW il
   resto, centrato, non si sposta.
@@ -919,7 +921,10 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   plist a mano cfprefsd tiene i valori vecchi.
 
 ## Introduzione (onboarding)
-- Richiesta dell'utente (3.3): alla prima apertura, poi da Impostazioni › Generale › Rivedi l'introduzione.
+- Richiesta dell'utente (3.3): alla prima apertura, poi da Impostazioni › Generale › Rivedi l'introduzione e (3.3.1)
+  dalle note della schermata di accesso. Impostazioni › Generale › Su GitHub (`LinksSettingsSection`, 3.3.1 come il
+  web): BCW per iOS, Web e Android, poi Backend e "Autore di BCW <3" in gruppi a parte (icone `m.ios`, `m.android`,
+  `m.api`, `m.favorite`, dagli stessi tracciati di `js/icons.js`).
 - Introduzione a ogni riavvio del dispositivo (segnalato dall'utente sull'iPhone): dopo un riavvio iOS può avviare l'app in
   background prima del primo sblocco (attività in diretta programmata, aggiornamento in background); fino ad allora
   preferenze e Portachiavi non si leggono (`UserDefaults` risponde vuoto), quindi `isFirstRun` era vero e restava tale per

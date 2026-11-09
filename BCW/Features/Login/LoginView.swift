@@ -302,13 +302,29 @@ struct LoginView: View {
             HStack(spacing: 24) {
                 Text("BCW non è affiliata a Gruppo Spaggiari Parma.")
                 Spacer(minLength: 0)
-                if currentMode == .bcw {
-                    serverLine
+                HStack(spacing: 20) {
+                    introLine
+                    if currentMode == .bcw { serverLine }
                 }
             }
             .font(.m3(12))
             .foregroundStyle(Theme.secondaryInk)
         }
+    }
+
+    /// Rivedere l'introduzione, come da Impostazioni › Generale (come la versione web 3.3.1): il cerchio dei
+    /// colori la porta sopra l'accesso.
+    private var introLine: some View {
+        Button {
+            focused = nil
+            Onboarding.shared.present()
+        } label: {
+            HStack(spacing: 6) {
+                Icon("sparkles", size: 16)
+                Text("Rivedi l'introduzione")
+            }
+        }
+        .buttonStyle(LinkButtonStyle())
     }
 
     /// Il collegamento per cambiare il server BCW, senza l'indirizzo (richiesta dell'utente).
@@ -573,7 +589,8 @@ struct LoginView: View {
     }
 
     /// Note in basso, ridotte al minimo (richiesta dell'utente): con un accesso già fatto nessuna; con
-    /// Classeviva l'affiliazione; con l'account BCW anche il collegamento per cambiare server. Occupano
+    /// Classeviva l'affiliazione e "Rivedi l'introduzione"; con l'account BCW anche il collegamento per
+    /// cambiare server. Occupano
     /// sempre l'altezza delle più lunghe e sono allineate in alto: cambiando tra Classeviva e Account BCW
     /// il resto della pagina (centrato) non si sposta.
     @ViewBuilder
@@ -594,8 +611,16 @@ struct LoginView: View {
     private func footer(for mode: Mode) -> some View {
         VStack(spacing: 8) {
             Text("BCW non è affiliata a Gruppo Spaggiari Parma.")
-            if mode == .bcw {
-                serverLine
+            // Uno accanto all'altro, uno sotto l'altro se non ci stanno.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 20) {
+                    introLine
+                    if mode == .bcw { serverLine }
+                }
+                VStack(spacing: 8) {
+                    introLine
+                    if mode == .bcw { serverLine }
+                }
             }
         }
         .font(.m3(12))
