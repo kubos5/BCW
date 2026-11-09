@@ -368,7 +368,9 @@ struct OnboardingSettingsSection: View {
     }
 }
 
-/// Il codice di BCW su GitHub e il profilo dell'autore.
+/// Il codice di BCW su GitHub (le versioni e il backend) e il profilo dell'autore, come Impostazioni ›
+/// Generale › Su GitHub della versione web (3.3.1): le tre versioni di BCW, poi backend e autore in gruppi
+/// a parte.
 struct LinksSettingsSection: View {
     private struct Item: Identifiable {
         let title: String
@@ -378,18 +380,27 @@ struct LinksSettingsSection: View {
         var id: String { url }
     }
 
-    private static let items = [
-        Item(title: "BCW", subtitle: "L'app (repository principale)", icon: "github", url: "https://github.com/kubos5/BCW/"),
-        Item(title: "BCW-web", subtitle: "La versione web", icon: "globe", url: "https://github.com/kubos5/BCW-web/"),
-        Item(title: "BCW-api", subtitle: "Il server degli account BCW", icon: "server", url: "https://github.com/kubos5/BCW-api/"),
-        Item(title: "kubos5", subtitle: "Il profilo dell'autore su GitHub", icon: "person", url: "https://github.com/kubos5/"),
+    private static let groups: [[Item]] = [
+        [
+            Item(title: "BCW", subtitle: "BCW per iOS", icon: "ios", url: "https://github.com/kubos5/BCW"),
+            Item(title: "BCW-web", subtitle: "BCW per Web", icon: "globe", url: "https://github.com/kubos5/BCW-web"),
+            Item(title: "BCW-android", subtitle: "BCW per Android", icon: "android", url: "https://github.com/kubos5/BCW-android"),
+        ],
+        [Item(title: "BCW-api", subtitle: "Backend", icon: "api", url: "https://github.com/kubos5/BCW-api")],
+        [Item(title: "kubos5", subtitle: "Autore di BCW <3", icon: "favorite", url: "https://github.com/kubos5")],
     ]
 
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        ListGroup("Su GitHub") {
-            ForEach(Self.items) { item in
+        ForEach(Array(Self.groups.enumerated()), id: \.offset) { index, items in
+            group(items, header: index == 0 ? "Su GitHub" : nil)
+        }
+    }
+
+    private func group(_ items: [Item], header: String?) -> some View {
+        ListGroup(header) {
+            ForEach(items) { item in
                 Button {
                     if let url = URL(string: item.url) { openURL(url) }
                 } label: {

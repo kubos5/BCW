@@ -51,7 +51,7 @@ BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 - notifiche per nuovi voti, comunicazioni, note, assenze e compiti, da attivare in Impostazioni › Notifiche (anche con l'app chiusa)
 - in cima alla Dashboard la settimana (vista Lista) o il mese (vista Calendario) come fila di pulsanti; toccando il periodo si sceglie una data qualsiasi e scorrendo di lato si passa al giorno prima o dopo
 - in "Nei prossimi giorni" ogni giorno si comprime toccandone il titolo; toccando la data o il resto si va a quel giorno
-- alla prima apertura un'introduzione guida tra colori, stile, vista della Dashboard, preferenze, accesso a Classeviva, account BCW e orario ricavato dalle lezioni; l'app parte in bianco e nero e i colori arrivano con un cerchio che si allarga dal tema scelto. Si rivede da Impostazioni › Generale, dove ci sono anche i link al codice su GitHub
+- alla prima apertura un'introduzione guida tra colori, stile, vista della Dashboard, preferenze, accesso a Classeviva, account BCW e orario ricavato dalle lezioni; l'app parte in bianco e nero e i colori arrivano con un cerchio che si allarga dal tema scelto. Si rivede da Impostazioni › Generale o dalla schermata di accesso; in Impostazioni › Generale ci sono anche i link a BCW per iOS, Web e Android, al backend e all'autore su GitHub
 
 ### Orario
 
