@@ -101,6 +101,10 @@ struct AgendaEventRow: View {
         if showsDate { parts.append(event.begin.relativeDayName) }
         if event.kind != .homework { parts.append(event.timeDescription) }
         if !event.authorName.isEmpty, event.subjectName != nil { parts.append(event.authorName) }
+        // I file e i link del docente di un compito del modulo Compiti si aprono dal sito di Classeviva.
+        if event.attachments > 0 {
+            parts.append(event.attachments == 1 ? "1 allegato su Classeviva" : "\(event.attachments) allegati su Classeviva")
+        }
         return parts.joined(separator: " · ")
     }
 

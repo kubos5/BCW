@@ -47,9 +47,9 @@ private struct AppIconSettingsSection: View {
     private func colorFooter(theme: ThemeStore, choice: AppIconChoice) -> String {
         let current = "Ora: \(choice.color.title)."
         let rule = theme.appIconColor == .theme
-            ? "Tema dell'app: l'icona segue il colore d'accento (ogni colore proposto in Aspetto ha il suo) e cambia con lui. \(current)"
+            ? "Con Tema dell'app l'icona cambia insieme al colore d'accento. \(current)"
             : "Con Tema dell'app l'icona segue il colore d'accento. \(current)"
-        return "\(rule) L'icona è chiara o scura come le icone di iOS; con le icone colorate e trasparenti è tinta da iOS. A ogni cambio d'icona iOS mostra un avviso."
+        return "\(rule) È chiara o scura come le icone di iOS, che a ogni cambio mostra un avviso."
     }
 }
 

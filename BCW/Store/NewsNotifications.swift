@@ -46,8 +46,6 @@ enum NewsKind: String, CaseIterable, Identifiable {
 /// vede per un account si ricorda tutto senza notificare (altrimenti arriverebbe l'intero anno).
 /// Gli id visti sono in `UserDefaults`, separati per account; la demo non manda notifiche.
 enum NewsNotifications {
-    /// Identificativo dell'aggiornamento in background (anche in `Config/Info-iOS.plist`).
-    static let refreshTaskID = "com.bcw.app.refresh"
     private static let prefix = "bcw.news."
     /// Oltre questo numero di novità dello stesso tipo arriva una notifica sola, riassuntiva.
     private static let maxSingle = 4
@@ -147,35 +145,10 @@ enum NewsNotifications {
         }
     }
 
-    /// Chiede a iOS un aggiornamento in background (al più presto tra mezz'ora), se qualche tipo
-    /// di novità è attivato. iOS sceglie quando eseguirlo, in base a come si usa l'app.
+    /// Chiede a iOS l'aggiornamento in background (unico per tutta l'app, vedi `BackgroundRefresh`).
     @MainActor
     static func scheduleBackgroundRefresh(model: AppModel) {
-        guard !model.preferences.newsNotifications.isEmpty else {
-            BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: refreshTaskID)
-            return
-        }
-        let request = BGAppRefreshTaskRequest(identifier: refreshTaskID)
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
-        try? BGTaskScheduler.shared.submit(request)
-    }
-
-    /// Aggiornamento in background: carica l'account (se l'app è stata avviata apposta) e aggiorna;
-    /// le notifiche partono alla fine dell'aggiornamento.
-    @MainActor
-    static func runBackgroundRefresh(model: AppModel) async {
-        scheduleBackgroundRefresh(model: model)
-        if model.phase == .launching { model.bootstrap() }
-        guard model.phase == .signedIn, !model.isDemo else { return }
-        // `bootstrap` può aver già avviato un aggiornamento: si aspetta che finisca.
-        for _ in 0..<50 where model.isRefreshing { try? await Task.sleep(for: .milliseconds(200)) }
-        await model.refreshAll()
-        // L'app può essere sospesa subito dopo: i widget si aggiornano ora, senza attesa.
-        model.widgets.export()
-        // Anche l'attività in diretta si allinea all'ora attuale prima che l'app venga sospesa: iOS
-        // concede pochi aggiornamenti in background e senza l'app, passata la fase dopo quella in corso,
-        // l'attività resterebbe su "0:00".
-        await model.liveActivities.runBackgroundRefresh(model: model)
+        BackgroundRefresh.schedule(model: model)
     }
 }
 

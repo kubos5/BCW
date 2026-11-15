@@ -83,7 +83,9 @@ nonisolated struct BCWTimelineProvider: AppIntentTimelineProvider {
     func snapshot(for configuration: BCWWidgetIntent, in context: Context) async -> BCWWidgetEntry {
         let now = Date()
         let stored = WidgetSnapshot.load()
-        let snapshot = context.isPreview && stored?.signedIn != true ? .sample(now: now) : stored ?? WidgetSnapshot()
+        // Bloccati (build dell'App Store senza BCW+) anche nella galleria: l'anteprima mostra l'invito.
+        let snapshot = context.isPreview && stored?.signedIn != true && stored?.isLocked != true
+            ? .sample(now: now) : stored ?? WidgetSnapshot()
         return BCWWidgetEntry(date: now, snapshot: snapshot, background: configuration.background.style)
     }
 

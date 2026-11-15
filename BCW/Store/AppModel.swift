@@ -54,9 +54,12 @@ final class AppModel {
     var grades: [Grade] = []
     var periods: [Period] = []
     var subjects: [Subject] = []
-    var agenda: [AgendaEvent] = [] {
+    /// Eventi dell'agenda più i compiti del modulo Compiti (`updateAgenda`).
+    private(set) var agenda: [AgendaEvent] = [] {
         didSet { eventsByDay = Dictionary(grouping: agenda) { CVDate.dayKey($0.begin) } }
     }
+    /// Le due fonti di `agenda`: `agenda/all` e `homeworks/index` (issue 16), che arrivano a parte.
+    @ObservationIgnored private var agendaSources: (events: [AgendaEvent], homework: [AgendaEvent]) = ([], [])
     var absences: [AbsenceEvent] = [] {
         didSet { absencesByDay = Dictionary(grouping: absences) { CVDate.dayKey($0.date) } }
     }
@@ -376,7 +379,7 @@ final class AppModel {
         lastError = nil
         card = nil
         loginName = nil
-        grades = []; periods = []; subjects = []; agenda = []; absences = []
+        grades = []; periods = []; subjects = []; updateAgenda(events: [], homework: []); absences = []
         notices = []; notes = []; didactics = []; documents = nil; calendarDays = []; schoolbooks = []
         lessonsByDay = [:]; loadedLessonDays = []
         lastUpdated = nil
@@ -434,7 +437,13 @@ final class AppModel {
     /// giorno. All'avvio dell'app da un widget può arrivare prima della sessione: resta in attesa
     /// finché le schede non compaiono. Senza account non fa nulla.
     func open(_ url: URL) {
-        guard let link = DeepLink(url: url), phase != .signedOut else { return }
+        guard let link = DeepLink(url: url) else { return }
+        // BCW+ si apre anche senza account (la schermata dell'acquisto non ne ha bisogno).
+        if link == .plus {
+            PlusStore.shared.presentPaywall()
+            return
+        }
+        guard phase != .signedOut else { return }
         openedLink = link
     }
 
@@ -696,7 +705,9 @@ final class AppModel {
         grades = Self.gradePaths.lazy.compactMap { client.cached(GradesResponse.self, $0) }.first?.grades ?? []
         periods = client.cached(PeriodsResponse.self, "periods")?.periods ?? []
         subjects = client.cached(SubjectsResponse.self, "subjects")?.subjects ?? []
-        agenda = client.cached(AgendaResponse.self, agendaPath)?.events ?? []
+        updateAgenda(events: client.cached(AgendaResponse.self, agendaPath)?.events ?? [],
+                     homework: client.cached(HomeworksResponse.self, ClassevivaClient.homeworkPath)?.items
+                         .map(AgendaEvent.init(homework:)) ?? [])
         absences = client.cached(AbsencesResponse.self, "absences/details")?.events ?? []
         notices = client.cached(NoticeboardResponse.self, "noticeboard")?.items ?? []
         notes = client.cached(NotesResponse.self, "notes/all")?.notes ?? []
@@ -808,8 +819,27 @@ final class AppModel {
     }
 
     func loadAgenda() async {
-        await run(AgendaResponse.self, agendaPath) { self.agenda = $0.events.sorted { $0.begin < $1.begin } }
+        async let events: String? = run(AgendaResponse.self, agendaPath) { self.updateAgenda(events: $0.events) }
+        async let homework: Void = loadHomework()
+        _ = await (events, homework)
         await rescheduleReminders()
+    }
+
+    /// I compiti del modulo Compiti di Classeviva (issue 16), che `agenda/all` non contiene. Se non
+    /// arrivano restano quelli di prima, senza errori nel banner: è una fonte in più.
+    private func loadHomework() async {
+        guard let client else { return }
+        guard let result = try? await client.homework(), client === self.client else { return }
+        let items = result.value.items
+        preferences.importDoneHomework(items.filter(\.isDone).map { AgendaEvent.homeworkEventID($0.id) })
+        updateAgenda(homework: items.map(AgendaEvent.init(homework:)))
+    }
+
+    /// Unisce le due fonti dell'agenda (`nil` = quella fonte non cambia).
+    private func updateAgenda(events: [AgendaEvent]? = nil, homework: [AgendaEvent]? = nil) {
+        if let events { agendaSources.events = events }
+        if let homework { agendaSources.homework = homework }
+        agenda = AgendaEvent.merging(agendaSources.events, homework: agendaSources.homework)
     }
 
     func loadAbsences() async {
@@ -927,6 +957,27 @@ final class AppModel {
     }
 
     var unreadNoticesCount: Int { notices.filter { !$0.isRead }.count }
+
+    /// "Leggi tutto" della Bacheca: segna come lette tutte le comunicazioni da leggere, aprendole su
+    /// Classeviva come la lettura normale (che è l'unico modo per segnarle), quattro alla volta.
+    /// Adesioni e firme non vengono toccate. Restituisce quante non è riuscita a segnare.
+    func markAllNoticesRead() async -> Int {
+        var pending = notices.filter { !$0.isRead }[...]
+        var failed = 0
+        await withTaskGroup(of: Bool.self) { group in
+            for _ in 0..<4 {
+                guard let notice = pending.popFirst() else { break }
+                group.addTask { @MainActor in (try? await self.openNotice(notice)) != nil }
+            }
+            for await succeeded in group {
+                if !succeeded { failed += 1 }
+                if let notice = pending.popFirst() {
+                    group.addTask { @MainActor in (try? await self.openNotice(notice)) != nil }
+                }
+            }
+        }
+        return failed
+    }
 
     // MARK: Note
 

@@ -65,8 +65,7 @@ struct SubjectDetailView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         header(ringSize: 140)
                         periodPicker
-                        GoalCalculator(grades: grades, weighted: book.weighted)
-                        GradeSimulator(book: book, period: period, subjectId: subjectId)
+                        SubjectGradeTools(grades: grades, book: book, period: period, subjectId: subjectId)
                     }
                 } main: {
                     VStack(alignment: .leading, spacing: 20) {
@@ -81,8 +80,7 @@ struct SubjectDetailView: View {
                         header(ringSize: 156)
                         periodPicker
                         chart(height: 170)
-                        GoalCalculator(grades: grades, weighted: book.weighted)
-                        GradeSimulator(book: book, period: period, subjectId: subjectId)
+                        SubjectGradeTools(grades: grades, book: book, period: period, subjectId: subjectId)
                         gradesSection
                     }
                     .pagePadding()
@@ -176,72 +174,112 @@ struct SubjectDetailView: View {
     }
 }
 
-/// "Quanto devo prendere?": voto necessario per raggiungere una media obiettivo.
+/// "Quanto devo prendere?": voto necessario per raggiungere una media obiettivo. Comprimibile e chiusa
+/// all'inizio nella pagina di una materia; da chiusa il sottotitolo riassume il risultato.
 struct GoalCalculator: View {
     @Environment(AppModel.self) private var model
     let grades: [Grade]
     let weighted: Bool
+    var collapsible = false
+    /// Angoli della card (collegata a "E se prendessi…"); `nil` = card a sé.
+    var corners: ListCellCorners?
     @State private var upcoming = 1
+    @State private var isExpanded = false
 
     var body: some View {
         @Bindable var preferences = model.preferences
         let needed = GradeBook.neededGrade(target: preferences.targetAverage, current: grades,
                                            count: upcoming, weighted: weighted)
 
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 12) {
-                Shaped(shape: .cookie9Sided, fill: Theme.tertiaryContainer, size: 40) {
-                    Icon("target", size: 22)
-                        .foregroundStyle(Theme.onTertiaryContainer)
+        // Lo spazio tra intestazione e modulo sta dentro la parte che si comprime (come in
+        // `GradeSimulator`): da chiusa la card ha lo stesso margine sopra e sotto.
+        VStack(alignment: .leading, spacing: 0) {
+            if collapsible {
+                Button {
+                    withAnimation(Motion.spatial) { isExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 12) {
+                        heading(summary: isExpanded ? nil : summary(needed))
+                        Spacer(minLength: 8)
+                        Chevron(collapsed: !isExpanded, rotateUp: true)
+                    }
+                    .contentShape(.rect)
                 }
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Obiettivo")
-                        .font(.m3(18, weight: 550))
-                    Text("Quanto ti serve per arrivarci")
-                        .font(.m3(13))
-                        .foregroundStyle(Theme.secondaryInk)
-                }
+                .buttonStyle(HeaderButtonStyle())
+                .accessibilityHint(isExpanded ? "Nasconde l'obiettivo" : "Apre l'obiettivo")
+            } else {
+                heading(summary: nil)
             }
-
-            HStack {
-                Text("Media desiderata")
-                Spacer()
-                M3Stepper(value: $preferences.targetAverage, range: 4...10, step: 0.25) { GradeFormat.short($0) }
-            }
-            .frame(minHeight: 40)
-
-            HStack {
-                Text("Prossime prove")
-                Spacer()
-                M3Stepper(value: $upcoming, range: 1...5, step: 1) { "\($0)" }
-            }
-            .frame(minHeight: 40)
-
-            M3Divider()
-
-            if let needed {
-                if needed <= 1 {
-                    StatusLine(text: "Hai già raggiunto l'obiettivo, qualunque voto prenderai.", icon: "checkSealFill", color: Theme.good)
-                } else if needed > 10 {
-                    StatusLine(text: "Obiettivo non raggiungibile con \(upcoming == 1 ? "una prova" : "\(upcoming) prove").",
-                               icon: "octagonX", color: Theme.poor)
-                } else {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(upcoming == 1 ? "Ti serve almeno" : "Ti serve in media almeno")
-                            .foregroundStyle(Theme.secondaryInk)
+            CollapsibleContent(isExpanded: !collapsible || isExpanded, spacing: 14) {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Text("Media desiderata")
                         Spacer()
-                        Text(GradeFormat.average(needed))
-                            .font(.numeral(32))
-                            .foregroundStyle(Theme.gradeColor(value: needed))
-                            .contentTransition(.numericText())
+                        M3Stepper(value: $preferences.targetAverage, range: 4...10, step: 0.25) { GradeFormat.short($0) }
+                    }
+                    .frame(minHeight: 40)
+
+                    HStack {
+                        Text("Prossime prove")
+                        Spacer()
+                        M3Stepper(value: $upcoming, range: 1...5, step: 1) { "\($0)" }
+                    }
+                    .frame(minHeight: 40)
+
+                    M3Divider()
+
+                    if let needed {
+                        if needed <= 1 {
+                            StatusLine(text: "Hai già raggiunto l'obiettivo, qualunque voto prenderai.", icon: "checkSealFill", color: Theme.good)
+                        } else if needed > 10 {
+                            StatusLine(text: "Obiettivo non raggiungibile con \(upcoming == 1 ? "una prova" : "\(upcoming) prove").",
+                                       icon: "octagonX", color: Theme.poor)
+                        } else {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(upcoming == 1 ? "Ti serve almeno" : "Ti serve in media almeno")
+                                    .foregroundStyle(Theme.secondaryInk)
+                                Spacer()
+                                Text(GradeFormat.average(needed))
+                                    .font(.numeral(32))
+                                    .foregroundStyle(Theme.gradeColor(value: needed))
+                                    .contentTransition(.numericText())
+                            }
+                        }
                     }
                 }
             }
         }
         .font(.m3(16))
         .foregroundStyle(Theme.ink)
-        .card(padding: 18, color: Theme.surfaceContainerLow, radius: Theme.radii.xl)
+        .connectedCard(corners)
         .animation(Motion.spatial, value: preferences.targetAverage)
         .animation(Motion.spatial, value: upcoming)
+    }
+
+    private func heading(summary: String?) -> some View {
+        HStack(spacing: 12) {
+            Shaped(shape: .cookie9Sided, fill: Theme.tertiaryContainer, size: 40) {
+                Icon("target", size: 22)
+                    .foregroundStyle(Theme.onTertiaryContainer)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Obiettivo")
+                    .font(.m3(18, weight: 550))
+                    .foregroundStyle(Theme.ink)
+                Text(summary ?? "Quanto ti serve per arrivarci")
+                    .font(.m3(13))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .contentTransition(.opacity)
+            }
+        }
+    }
+
+    /// Il risultato in breve, nel sottotitolo della card chiusa.
+    private func summary(_ needed: Double?) -> String? {
+        let target = GradeFormat.short(model.preferences.targetAverage)
+        guard let needed else { return nil }
+        if needed <= 1 { return "Media \(target) già raggiunta" }
+        if needed > 10 { return "Media \(target) non raggiungibile" }
+        return "Per \(target) ti serve almeno \(GradeFormat.average(needed))"
     }
 }

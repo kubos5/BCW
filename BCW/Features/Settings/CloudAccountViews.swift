@@ -19,7 +19,7 @@ struct CloudAccountSection: View {
             if let session = model.cloud {
                 signedIn(session)
             } else {
-                ListGroup("Account BCW", footer: "Con un account BCW abbini i tuoi account Classeviva e ritrovi impostazioni, aspetto e orario su ogni dispositivo, anche nella versione web. Dopo l'accesso potrai abbinare gli account salvati su questo dispositivo.") {
+                ListGroup("Account BCW", footer: "Con un account BCW ritrovi i tuoi account Classeviva, le impostazioni e l'orario su ogni dispositivo e sul web. Dopo l'accesso potrai abbinare gli account di questo dispositivo.") {
                     ButtonRow("Accedi con un account BCW", icon: "cloud") { signingIn = true }
                     ButtonRow("Crea un account BCW", icon: "userPlus") { registering = true }
                     serverRow
@@ -40,7 +40,7 @@ struct CloudAccountSection: View {
     @ViewBuilder
     private func signedIn(_ session: BCWSession) -> some View {
         let sync = model.cloudSync
-        ListGroup("Account BCW", footer: "Si sincronizzano le impostazioni (tranne blocco, promemoria e notifiche, che valgono solo su questo dispositivo), l'aspetto e l'orario di ogni account abbinato, con i file allegati. Sotto scegli cosa sincronizzare.") {
+        ListGroup("Account BCW", footer: "Si sincronizzano impostazioni, aspetto e orario di ogni account abbinato, con i file. Blocco, promemoria e notifiche restano su questo dispositivo.") {
             ListRow(session.user.username, subtitle: "Account BCW") {
                 Avatar(initials: String(session.user.username.prefix(1)).uppercased(), size: 40, shape: .cookie9Sided)
             } trailing: {
@@ -104,7 +104,7 @@ private struct CloudSyncChoicesSection: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        ListGroup("Da sincronizzare", footer: "Vale solo per questo dispositivo. Una voce spenta resta com'è qui e non cambia sugli altri dispositivi. Riaccendendo impostazioni, aspetto, icona o compiti, questo dispositivo prende quelli dell'account BCW; riaccendendo l'orario vince il lato cambiato nel frattempo (se sono cambiati entrambi, questo dispositivo).") {
+        ListGroup("Da sincronizzare", footer: "Vale solo per questo dispositivo: una voce spenta non cambia sugli altri. Riaccendendola arrivano i valori dell'account BCW; per l'orario vince il lato cambiato nel frattempo.") {
             ForEach(SyncCategory.allCases) { category in
                 ToggleRow(category.title, subtitle: category.subtitle, icon: category.icon, isOn: binding(category))
             }
@@ -358,9 +358,9 @@ struct ClassevivaLinksSection: View {
 
     private func footer(_ account: SavedAccount) -> String {
         guard shouldLoad else {
-            return "Puoi vedere a quali account BCW è abbinato \(account.name) e scollegarlo da ognuno. Per verificare l'accesso, il server BCW riceve il token della sessione di Classeviva (non la password)."
+            return "Puoi vedere a quali account BCW è abbinato \(account.name) e scollegarlo. Il server BCW riceve solo il token di Classeviva, non la password."
         }
-        return "Gli account BCW con cui si entra in \(account.name). Scollegandolo da uno, quell'account BCW non potrà più entrarci e l'orario sincronizzato per questo account viene eliminato dal server. Per toglierli basta l'accesso a Classeviva."
+        return "Gli account BCW che possono entrare in \(account.name). Scollegandone uno, non potrà più entrarci e l'orario sincronizzato verrà eliminato dal server."
     }
 
     private func linkRow(_ link: BCWLink) -> some View {

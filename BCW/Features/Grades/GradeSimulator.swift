@@ -11,8 +11,11 @@ struct GradeSimulator: View {
     var subjectId: Int?
     /// Materia del filtro dei Voti, proposta per primo.
     var suggestedSubject: Int?
-    /// Comprimibile (nei Voti, dove starebbe sopra l'elenco); aperto nella pagina di una materia.
+    /// Comprimibile, chiuso all'inizio (nei Voti e, dalla 4.0, nella pagina di una materia).
     var collapsible = false
+    /// Angoli della card: nella pagina di una materia è collegata a "Obiettivo" (angoli piccoli tra
+    /// le due); `nil` = card a sé.
+    var corners: ListCellCorners?
 
     @State private var isExpanded = false
     @State private var grades: [HypotheticalGrade] = []
@@ -88,7 +91,7 @@ struct GradeSimulator: View {
         }
         .font(.m3(16))
         .foregroundStyle(Theme.ink)
-        .card(padding: 18, color: Theme.surfaceContainerLow, radius: Theme.radii.xl)
+        .connectedCard(corners)
         .animation(Motion.spatial, value: grades)
     }
 
@@ -245,5 +248,35 @@ struct GradeSimulator: View {
         Haptics.selection()
         grades.append(HypotheticalGrade(subjectId: subject, subjectName: name(of: subject), value: value,
                                         weight: book.weighted ? weight : 1))
+    }
+}
+
+extension View {
+    /// Card dei calcoli dei Voti (`surfaceContainerLow`): a sé con gli angoli ampi, oppure collegata
+    /// ad altre (angoli ampi all'esterno e piccoli tra l'una e l'altra, come le liste segmentate).
+    func connectedCard(_ corners: ListCellCorners?) -> some View {
+        let shape = (corners ?? ListCellCorners(top: Theme.radii.xl, bottom: Theme.radii.xl)).shape
+        return padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.surfaceContainerLow, in: shape)
+    }
+}
+
+/// "Obiettivo" ed "E se prendessi…" nella pagina di una materia: due card collegate di Material 3
+/// Expressive, una sotto l'altra a 2 punti, angoli ampi all'esterno e piccoli all'interno, entrambe
+/// chiuse all'inizio (richiesta dell'utente, 4.0).
+struct SubjectGradeTools: View {
+    let grades: [Grade]
+    let book: GradeBook
+    let period: Int?
+    let subjectId: Int
+
+    var body: some View {
+        VStack(spacing: 2) {
+            GoalCalculator(grades: grades, weighted: book.weighted, collapsible: true,
+                           corners: ListCellCorners(top: Theme.radii.xl, bottom: Theme.radii.xs))
+            GradeSimulator(book: book, period: period, subjectId: subjectId, collapsible: true,
+                           corners: ListCellCorners(top: Theme.radii.xs, bottom: Theme.radii.xl))
+        }
     }
 }

@@ -144,4 +144,31 @@ extension AppModel {
         return TimetableDraft(entries: result.entries, settings: settings, analyzedDays: result.analyzedDays,
                               from: range.from, to: range.to)
     }
+
+    /// C'è già un orario per l'account attivo: su questo dispositivo o, con l'account BCW, sul server
+    /// (appena entrati la sincronizzazione può non averlo ancora scaricato). L'introduzione salta allora
+    /// il passaggio dell'orario (richiesta dell'utente, 4.0). Al massimo 4 secondi di attesa.
+    func hasTimetableData() async -> Bool {
+        if !timetable.timetable.isEmpty || timetable.draft != nil { return true }
+        guard let cloud, let id = activeAccountID, !isDemo, preferences.syncs(.timetable),
+              accounts.contains(where: { $0.id == id }) else { return false }
+        let token = cloud.token
+        return await withTaskGroup(of: Bool?.self) { group in
+            group.addTask { @MainActor in
+                guard let document = try? await BCWAPI.document(token: token, path: "/sync/timetable/\(id)"),
+                      document.version > 0, let data = document.data,
+                      let remote = try? TimetableBackup.decoder().decode(Timetable.self, from: data) else { return false }
+                return !remote.isEmpty
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(4))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            // Senza risposta in tempo si guarda di nuovo il dispositivo (la sincronizzazione può essere
+            // arrivata nel frattempo).
+            return first ?? !self.timetable.timetable.isEmpty
+        }
+    }
 }

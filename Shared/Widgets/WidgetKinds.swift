@@ -44,6 +44,16 @@ nonisolated enum BCWWidgetKind: String, CaseIterable, Identifiable, Sendable {
 
     @MainActor @ViewBuilder
     func content(snapshot: WidgetSnapshot, now: Date, family: WidgetFamily, palette: WidgetPalette) -> some View {
+        if snapshot.isLocked {
+            // Build dell'App Store senza BCW+: solo l'invito a sbloccarli.
+            LockedWidgetView(snapshot: snapshot, family: family, palette: palette)
+        } else {
+            unlockedContent(snapshot: snapshot, now: now, family: family, palette: palette)
+        }
+    }
+
+    @MainActor @ViewBuilder
+    private func unlockedContent(snapshot: WidgetSnapshot, now: Date, family: WidgetFamily, palette: WidgetPalette) -> some View {
         switch self {
         case .timetable: TimetableWidgetView(snapshot: snapshot, now: now, family: family, palette: palette)
         case .now: NowWidgetView(snapshot: snapshot, now: now, family: family, palette: palette)

@@ -26,7 +26,7 @@
 
 ## Installazione
 
-Finché l'app non sarà disponibile su App Store, consiglio usare [AltStore](https://altstore.io/) per firmare l'IPA.
+Finché l'app non sarà disponibile su App Store, consiglio di usare [AltStore](https://altstore.io/) per firmare l'IPA.
 
 Altrimenti, puoi compilarla in Xcode:
 
@@ -42,6 +42,16 @@ Il progetto usa le cartelle sincronizzate di Xcode 16, quindi qualsiasi file agg
 I widget sono un secondo target (`BCWWidgets`, incorporato nell'app) che condivide con l'app la cartella `Shared/` e l'App Group `group.com.bcw-classeviva.app`: firmando con il proprio team va scelto anche per l'estensione, con un App Group a disposizione del team.
 In alternativa è incluso un `project.yml` per [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
+### Build GitHub e build App Store
+
+Dalla stessa base di codice escono due build:
+
+- build GitHub (schema `BCW`, configurazioni Debug e Release): tutte le funzioni sono sbloccate e all'apertura l'app avvisa se su GitHub è uscita una versione più recente, con le note della release (gli avvisi si spengono in Impostazioni › Generale)
+- build App Store (schema `BCW App Store`, configurazioni Debug-AppStore e Release-AppStore, con la condizione di compilazione `APPSTORE`): orario, attività in diretta e widget si sbloccano con BCW+, un acquisto unico di 2,99 €; niente avvisi delle nuove versioni, perché l'App Store aggiorna da solo
+
+In tutte e due, dopo un aggiornamento l'app mostra le note della release di quella versione (mai alla prima apertura).
+Per provare l'acquisto in Xcode si usa lo schema `BCW App Store`, che carica `Config/BCW.storekit`.
+
 ---
 
 ## Funzioni
@@ -49,6 +59,7 @@ In alternativa è incluso un `project.yml` per [XcodeGen](https://github.com/yon
 BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 
 - puoi segnare i compiti come fatti e, opzionalmente, nasconderli
+- anche i compiti assegnati con il modulo Compiti di Classeviva (non solo come annotazioni dell'agenda) compaiono insieme agli altri
 - puoi ricevere promemoria la sera prima di compiti o verifiche a un orario specificato
 - dato un obiettivo di media, puoi calcolare il voto necessario nelle prossime 1-5 prove
 - puoi vedere come cambierebbe la media (della materia e generale) se prendessi uno o più voti, a tua scelta: "E se prendessi…" nei Voti (con tutte le materie, anche quelle ancora senza voti) e nella pagina di ogni materia
@@ -67,7 +78,8 @@ BCW ha parità di funzioni con il client ufficiale di classeiviva, più extra:
 - toccando di nuovo la scheda aperta si torna in cima alla pagina; se si è già in cima, la Dashboard va a domani, l'Orario al giorno con il prossimo evento, i Voti tornano alla media dell'anno e Tu torna alla pagina principale (senza Liquid Glass: con Liquid Glass Tu fa come le app di sistema)
 - riepilogo per periodo con le insufficienze
 - conto alla rovescia alle prossime vacanze
-- notifiche per nuovi voti, comunicazioni, note, assenze e compiti, da attivare in Impostazioni › Notifiche (anche con l'app chiusa)
+- notifiche per nuovi voti, comunicazioni, note, assenze e compiti, da attivare in Impostazioni › Notifiche (anche con l'app in background: iOS sceglie quando aggiornare, quindi possono arrivare con un po' di ritardo)
+- "Leggi tutto" nella Bacheca segna come lette tutte le comunicazioni, dopo una conferma
 - in cima alla Dashboard la settimana (vista Lista) o il mese (vista Calendario) come fila di pulsanti; toccando il periodo si sceglie una data qualsiasi e scorrendo di lato si passa al giorno prima o dopo
 - in "Nei prossimi giorni" ogni giorno si comprime toccandone il titolo; toccando la data o il resto si va a quel giorno
 - alla prima apertura un'introduzione guida tra colori, stile, vista della Dashboard, preferenze, accesso a Classeviva, account BCW e orario ricavato dalle lezioni; l'app parte in bianco e nero e i colori arrivano con un cerchio che si allarga dal tema scelto. Si rivede da Impostazioni › Generale o dalla schermata di accesso; in Impostazioni › Generale ci sono anche i link a BCW per iOS, Web e Android, al backend e all'autore su GitHub
@@ -166,6 +178,7 @@ BCW usa le stesse API REST usate dall'app ufficiale di Classeviva (`https://web.
 Le credenziali sono salvate nel Portachiavi del dispositivo e inviate ai server di Classeviva.
 Le risposte vengono salvate nella cache dell'app per l'uso offline.
 L'orario è salvato sul dispositivo, separato per ogni account.
+Notifiche delle novità, widget e attività in diretta usano un solo aggiornamento in background di iOS (che ne tiene in sospeso uno per app), alla prima data che serve a uno dei tre.
 Per i widget l'app scrive nel contenitore dell'App Group un riassunto dei dati che mostrano (orario dei prossimi giorni, compiti e verifiche, medie, colori del tema), senza credenziali.
 L'attività in diretta non ha bisogno di un server: l'app la aggiorna quando è aperta, a ogni passaggio di lezione e quando il tempo perde delle cifre, e prova a farlo in background; ogni aggiornamento contiene anche la fase successiva, che iOS mostra da sola quando la lezione finisce, anche se l'app non si è risvegliata. Senza server iOS fa questo passaggio una volta sola: se l'app resta chiusa più a lungo, il conto alla rovescia si ferma alla fine della lezione successiva e l'attività si rimette in pari appena l'app si apre o si aggiorna in background. Quando parte un'attività preparata in anticipo, iOS mostra un avviso con la prima lezione.
 
@@ -192,12 +205,12 @@ BCW/
 ├── App/            Entry point, barra delle schede, barra laterale e pannello dell'iPad, blocco biometrico
 ├── Networking/     Client Classeviva e BCW-api, cache su disco, Portachiavi
 ├── Models/         Modelli decodificati in modo tollerante
-├── Store/          Stato dell'app, sincronizzazione con l'account BCW, orario e sua generazione, calcolo medie, preferenze, promemoria, widget e attività in diretta, server demo
+├── Store/          Stato dell'app, sincronizzazione con l'account BCW, orario e sua generazione, calcolo medie, preferenze, promemoria, widget e attività in diretta, aggiornamento in background, BCW+ e versioni da GitHub, server demo
 ├── Design/         Material 3 Expressive: aspetto, font, forme, controlli, elenchi, menu e pagine
 ├── Theme/          Colori e stili
 ├── Utilities/      Date, decodifica e piccoli adattatori
 ├── Components/     Componenti riutilizzabili (card, badge voto, anelli, righe agenda…)
-└── Features/       Dashboard, Orario, Voti, Tu (e sottosezioni), Cerca, Impostazioni, Login, Introduzione
+└── Features/       Dashboard, Orario, Voti, Tu (e sottosezioni), Cerca, Impostazioni, Login, Introduzione, BCW+, note di rilascio
 Shared/             Codice comune all'app e ai widget: dati dei widget, giorno dell'orario, collegamenti, viste dei widget e dell'attività in diretta
 BCWWidgets/         Estensione dei widget e dell'attività in diretta (elenco dei widget, linea temporale, icone)
 ```

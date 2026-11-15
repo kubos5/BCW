@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 enum HTTPMethod: String {
     case get = "GET"
@@ -277,6 +278,88 @@ final class ClassevivaClient {
         if let fallback { return fallback }
         throw lastError
     }
+
+    // MARK: Compiti del modulo Compiti
+
+    /// Dove si leggono i compiti del modulo Compiti (issue 16): l'API dell'app, il sito con il token
+    /// dell'app o il sito con la sua sessione (`ClassevivaWebSession`). L'API dell'app ha gli stessi
+    /// percorsi di quella del sito, ma non è detto che dia anche questo: si prova in quest'ordine e si
+    /// ricorda la prima strada che risponde, finché il client vive.
+    private enum HomeworkRoute: String { case app, siteToken, siteSession }
+    private var homeworkRoute: HomeworkRoute?
+    private lazy var web = ClassevivaWebSession()
+    static let homeworkPath = "homeworks/index"
+
+    /// Il server vero dell'anno in corso (non la demo, non un archivio): solo lì si prova il sito.
+    private var usesOfficialServer: Bool {
+        (transport as? URLSessionTransport)?.baseURL == Self.officialBaseURL
+    }
+
+    /// I compiti del modulo Compiti. Senza rete, l'ultima copia salvata.
+    func homework() async throws -> (value: HomeworksResponse, fromCache: Bool) {
+        do {
+            let data = try await homeworkData()
+            let value = try JSONDecoder().decode(HomeworksResponse.self, from: data)
+            cache.store(data, for: Self.homeworkPath)
+            return (value, false)
+        } catch let error as URLError {
+            if let value = cached(HomeworksResponse.self, Self.homeworkPath) { return (value, true) }
+            throw error
+        }
+    }
+
+    private func homeworkData() async throws -> Data {
+        try await ensureToken()
+        guard let studentId, let token else { throw APIError.notAuthenticated }
+        let path = "/students/\(studentId)/\(Self.homeworkPath)"
+        var routes: [HomeworkRoute] = homeworkRoute.map { [$0] }
+            ?? (usesOfficialServer ? [.app, .siteToken, .siteSession] : [.app])
+        #if DEBUG
+        // Per le prove con un account vero: `-BCWHomeworkRoute app|siteToken|siteSession` prova solo quella.
+        if let forced = UserDefaults.standard.string(forKey: "BCWHomeworkRoute").flatMap(HomeworkRoute.init) {
+            routes = [forced]
+        }
+        #endif
+        var lastError: Error = APIError.unavailable("I compiti di Classeviva non sono disponibili.")
+        for route in routes {
+            do {
+                var data: Data?
+                switch route {
+                case .app:
+                    let result = try await transport.send(.get, path: path, body: nil, token: token)
+                    if result.status == 200 { data = result.data }
+                case .siteToken:
+                    data = try await web.getWithToken(path, token: token)
+                case .siteSession:
+                    guard let credentials else { continue }
+                    data = try await web.get(path, credentials: credentials)
+                }
+                if let data, HomeworksResponse.isValid(data) {
+                    if homeworkRoute != route {
+                        homeworkRoute = route
+                        Self.homeworkLog.info("Compiti del modulo Compiti da: \(route.rawValue, privacy: .public)")
+                        #if DEBUG
+                        print("BCW-HOMEWORK route=\(route.rawValue)")
+                        #endif
+                    }
+                    return data
+                }
+            } catch let error as URLError {
+                throw error // senza rete le altre strade non vanno meglio
+            } catch {
+                lastError = error
+            }
+        }
+        // La strada ricordata non risponde più: la prossima volta si riprovano tutte.
+        homeworkRoute = nil
+        Self.homeworkLog.error("Compiti del modulo Compiti non disponibili: \(lastError.localizedDescription, privacy: .public)")
+        #if DEBUG
+        print("BCW-HOMEWORK unavailable: \(lastError.localizedDescription)")
+        #endif
+        throw lastError
+    }
+
+    private static let homeworkLog = Logger(subsystem: "com.bcw-classeviva.app", category: "Homework")
 
     /// Ultima risposta salvata, per mostrare subito i dati all'avvio.
     func cached<T: Decodable>(_ type: T.Type, _ studentPath: String) -> T? {

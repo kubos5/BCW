@@ -114,6 +114,12 @@ extension Font {
     static func numeral(_ size: CGFloat, weight: CGFloat = 650) -> Font {
         m3(size, weight: weight, rounded: true).monospacedDigit()
     }
+
+    /// Testi tecnici (versione, codici, indirizzi): carattere monospazio di sistema, che Google Sans
+    /// Flex non ha.
+    static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight, design: .monospaced)
+    }
 }
 
 extension View {

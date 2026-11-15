@@ -446,11 +446,14 @@ struct ValueRow: View {
     let title: String
     let value: String
     var icon: String?
+    /// Valori tecnici (versione, codici): carattere monospazio.
+    var monospaced = false
 
-    init(_ title: String, value: String, icon: String? = nil) {
+    init(_ title: String, value: String, icon: String? = nil, monospaced: Bool = false) {
         self.title = title
         self.value = value
         self.icon = icon
+        self.monospaced = monospaced
     }
 
     var body: some View {
@@ -458,7 +461,7 @@ struct ValueRow: View {
             if let icon { FormIcon(icon) }
         } trailing: {
             Text(value)
-                .font(.m3(14))
+                .font(monospaced ? .mono(13) : .m3(14))
                 .foregroundStyle(Theme.onSurfaceVariant)
                 .multilineTextAlignment(.trailing)
                 .frame(maxWidth: 220, alignment: .trailing)

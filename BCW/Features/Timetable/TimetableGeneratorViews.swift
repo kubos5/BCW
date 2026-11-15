@@ -29,7 +29,7 @@ struct TimetableGeneratorSheet: View {
                         }
                         .buttonStyle(.m3(.filled, size: .m, wide: true))
                         .disabled(isGenerating)
-                        ListFooter("BCW guarda in quale ora della giornata si è svolta ogni materia, settimana per settimana, e tiene quelle che si ripetono (le settimane recenti contano di più, supplenze e recuperi isolati vengono ignorati). Vedrai l'orario in anteprima prima di applicarlo.")
+                        ListFooter("BCW guarda in quale ora si è svolta ogni materia, settimana per settimana, e tiene quelle che si ripetono, ignorando supplenze isolate. Vedrai l'anteprima prima di applicarla.")
                     }
                 }
                 .padding(.horizontal, 20)
@@ -150,7 +150,7 @@ private struct LiveActivitySettingsGroup: View {
         // L'iPad non ha la Dynamic Island: l'attività sta solo nella schermata di blocco.
         let places = WindowClass.isPad ? "nella schermata di blocco" : "nella schermata di blocco e nella Dynamic Island"
         ListGroup("Schermata di blocco", footer: live.areActivitiesEnabled
-            ? "Nei giorni con lezioni la lezione in corso, il tempo che manca e la successiva restano \(places), da mezz'ora prima della prima lezione alla fine dell'ultima. Si avvia e si ferma anche a mano dalla scheda in cima all'orario di oggi. Ogni evento può fare eccezione (modifica dell'evento › Attività in diretta: Mostra o Non mostrare). Vale solo su questo dispositivo."
+            ? "La lezione in corso e il tempo che manca \(places), nei giorni di lezione. Si avvia anche dalla card di oggi, e ogni evento può fare eccezione. Solo su questo dispositivo."
             : "Le attività in diretta di BCW sono spente nelle Impostazioni di iOS (BCW › Attività in diretta).") {
             ToggleRow("Attività in diretta", subtitle: "Si avvia da sola nei giorni di lezione", icon: "lockClock",
                       isOn: Bindable(model.preferences).liveActivities)
@@ -185,23 +185,45 @@ struct TimetableSettingsSection: View {
     private var store: TimetableStore { model.timetable }
 
     var body: some View {
-        ListGroup("Scheda", footer: "Nascosta, la scheda Orario sparisce dalla barra delle schede (e dalla barra di navigazione dell'iPad). L'orario resta: widget e attività in diretta continuano a usarlo, e toccandoli si apre la Dashboard su quel giorno. Per riaverla torna qui (Impostazioni dall'ingranaggio in Tu).") {
+        let locked = !PlusStore.shared.isUnlocked
+        // Build dell'App Store senza BCW+: le impostazioni restano, ma l'orario è bloccato.
+        if locked {
+            ListGroup(footer: "L'orario, con l'attività in diretta e i widget, si sblocca con BCW+: un pagamento unico di \(PlusStore.shared.price).") {
+                Button {
+                    PlusStore.shared.presentPaywall()
+                } label: {
+                    NavigationRow("L'orario richiede BCW+", subtitle: "Scopri BCW+", icon: "lock", tint: Theme.primary)
+                }
+                .buttonStyle(.listRow)
+            }
+        }
+        ListGroup("Scheda", footer: "Nascosta, la scheda sparisce dalla barra, ma widget e attività in diretta continuano a usare l'orario. Per riaverla torna qui.") {
             ToggleRow("Mostra la scheda Orario", icon: "timetable", isOn: Bindable(model.preferences).showsTimetableTab)
         }
 
-        ListGroup("Vista e allineamento", footer: "Di serie la vista Lista segna le verifiche di Classeviva e quelle segnate a mano; spegnendo \"Mostra le verifiche\" restano nel dettaglio dell'evento e nella vista Giorno. Quelle nascoste, e le regole per nasconderle in automatico, sono in Verifiche nascoste (menu ⋯ dell'orario). L'allineamento vale per tutto l'orario e per la modalità di modifica (pulsante + dell'orario › Modifica orario). Automatico: gli eventi iniziano all'ora o alla mezz'ora e durano 30 minuti o un'ora; passando all'automatico gli eventi non allineati vengono allineati, dopo una conferma. Libero: qualsiasi orario e durata. Gli intervalli si posizionano sempre liberamente.") {
+        // Senza BCW+ il resto si vede ma non si tocca (richiesta dell'utente, 4.0): restano attivi solo
+        // l'invito a BCW+ e "Mostra la scheda Orario".
+        timetableOptions
+            .disabled(locked)
+            .opacity(locked ? 0.5 : 1)
+    }
+
+    /// Tutto ciò che riguarda l'orario vero e proprio (spento senza BCW+).
+    @ViewBuilder
+    private var timetableOptions: some View {
+        ListGroup("Vista e allineamento", footer: "Automatico: gli eventi iniziano all'ora o alla mezz'ora e durano 30 o 60 minuti. Libero: qualsiasi orario. Le verifiche nascoste sono nel menu ⋯ dell'orario.") {
             TimetableAlignmentPicker()
             ToggleRow("Mostra le verifiche nella lista", icon: "test", isOn: Bindable(model.preferences).timetableShowsTests)
         }
 
-        ListGroup("Oggi", footer: "La card in cima all'orario di oggi mostra l'evento in corso con il tempo che manca, o il prossimo, e il pulsante per avviare o fermare l'attività in diretta. Nascosta, l'attività in diretta si avvia comunque da sola se è attiva qui sotto.") {
+        ListGroup("Oggi", footer: "La card mostra l'evento in corso o il prossimo, con il pulsante dell'attività in diretta. Nascosta, l'attività si avvia comunque da sola.") {
             ToggleRow("Card dell'evento in corso", subtitle: "In cima all'orario di oggi", icon: "schedule",
                       isOn: Bindable(model.preferences).timetableShowsNowCard)
         }
 
         LiveActivitySettingsGroup()
 
-        ListGroup("Backup dell'orario", footer: "\(model.isCloud && model.preferences.syncs(.timetable) ? "L'orario di ogni account abbinato si sincronizza con il tuo account BCW." : "L'orario è salvato solo su questo dispositivo, separato per ogni account.") Il backup contiene eventi, colori, palette, note, verifiche segnate e file allegati; importandolo sostituisce l'orario attuale. È compatibile con la versione web di BCW.") {
+        ListGroup("Backup dell'orario", footer: "\(model.isCloud && model.preferences.syncs(.timetable) ? "L'orario si sincronizza con il tuo account BCW." : "L'orario è salvato solo su questo dispositivo.") Il backup contiene eventi, colori, note e file; importarlo sostituisce l'orario attuale.") {
             ButtonRow("Esporta un backup dell'orario", icon: "upload") { export() }
                 .disabled(store.owner == nil)
             ButtonRow("Importa un backup…", icon: "download") { importing = true }
@@ -245,7 +267,7 @@ struct TimetableSettingsSection: View {
         .m3Dialog("Sostituire l'orario attuale?", isPresented: $secondConfirmation,
                   message: store.timetable.isEmpty
                   ? "Colori, palette e impostazioni dell'orario di questo account verranno sostituiti da quelli del backup."
-                  : "L'orario attuale, con le sue note, i file, le verifiche segnate, i colori e le palette salvati, verrà eliminato definitivamente e non potrà essere recuperato. Se vuoi conservarlo, annulla ed esportane prima un backup.") {
+                  : "L'orario attuale, con note, file, verifiche, colori e palette, verrà eliminato per sempre. Se vuoi conservarlo, annulla ed esportane prima un backup.") {
             [DialogAction.cancel { pendingBackup = nil },
              DialogAction(title: "Sostituisci", style: .destructive) {
                 if let backup = pendingBackup { restore(backup) }
@@ -273,7 +295,7 @@ struct TimetableSettingsSection: View {
                 .disabled(model.isDemo || model.cloudSync.status == .syncing)
             }
         } else {
-            ListGroup("Sincronizzazione", footer: "Con un account BCW l'orario di ogni account Classeviva abbinato, con i file allegati, si sincronizza tra i tuoi dispositivi (versione web compresa).") {
+            ListGroup("Sincronizzazione", footer: "Con un account BCW l'orario, con i file, si sincronizza su tutti i tuoi dispositivi e sul web.") {
                 ButtonRow("Accedi con un account BCW…", icon: "cloud") { signingIn = true }
             }
             .sheet(isPresented: $signingIn) { CloudLoginSheet(registering: false) }

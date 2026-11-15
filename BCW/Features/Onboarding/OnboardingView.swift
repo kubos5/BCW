@@ -54,6 +54,11 @@ struct OnboardingView: View {
     @State private var forward = true
     @State private var keyboardVisible = false
     @State private var skipFrame = CGRect.zero
+    /// C'è già un orario (sul dispositivo o nell'account BCW appena aperto): il passaggio dell'orario non
+    /// serve. Si decide andando avanti dall'account BCW, così applicando la bozza il passaggio non sparisce.
+    @State private var hasTimetable = false
+    /// Controllo dell'orario in corso (andando avanti dall'account BCW).
+    @State private var checkingTimetable = false
 
     init() {
         var initial = OnboardingStep.welcome
@@ -85,6 +90,9 @@ struct OnboardingView: View {
         .background(Theme.background.ignoresSafeArea())
         // Copre tutto: sotto può esserci già l'app.
         .contentShape(.rect)
+        // Riaprendo l'introduzione con un orario già fatto il passaggio non conta fin dall'inizio
+        // (la barra di avanzamento non si accorcia a metà).
+        .onAppear { hasTimetable = !model.timetable.timetable.isEmpty }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             withAnimation(Motion.spatial) { keyboardVisible = true }
         }
@@ -134,14 +142,34 @@ struct OnboardingView: View {
     }
 
     /// I passaggi che si vedono: l'orario dalle lezioni solo con la scheda Orario (scelta in "Cosa ti
-    /// serve?") e con un account da cui leggere le lezioni.
+    /// serve?"), con un account da cui leggere le lezioni e se un orario non c'è già.
     private var steps: [OnboardingStep] {
         OnboardingStep.allCases.filter { candidate in
-            candidate != .timetable || (model.preferences.showsTimetableTab && model.phase == .signedIn)
+            candidate != .timetable || (timetableAllowed && !hasTimetable)
         }
     }
 
+    private var timetableAllowed: Bool {
+        model.preferences.showsTimetableTab && model.phase == .signedIn
+    }
+
     private func go(by delta: Int) {
+        // Prima del passaggio dell'orario si guarda se l'orario c'è già: con l'account BCW appena aperto
+        // può essere sul server e non ancora su questo dispositivo.
+        if delta > 0, step == .bcw, timetableAllowed {
+            guard !checkingTimetable else { return }
+            checkingTimetable = true
+            Task {
+                hasTimetable = await model.hasTimetableData()
+                checkingTimetable = false
+                advance(by: delta)
+            }
+            return
+        }
+        advance(by: delta)
+    }
+
+    private func advance(by delta: Int) {
         let target = delta > 0 ? steps.first { $0.rawValue > step.rawValue } : steps.last { $0.rawValue < step.rawValue }
         guard let target else { return }
         Haptics.selection()
@@ -1265,17 +1293,30 @@ private struct OnboardingTimetablePage: View {
                 OnboardingError(message: errorMessage)
             }
         } actions: {
+            // Build dell'App Store senza BCW+: il lucchetto al posto della bacchetta, e il tocco apre la
+            // schermata dell'acquisto (dopo il pagamento il pulsante torna quello di sempre).
+            let locked = !PlusStore.shared.isUnlocked
             Button {
-                Task { await generate() }
+                if locked {
+                    PlusStore.shared.presentPaywall()
+                } else {
+                    Task { await generate() }
+                }
             } label: {
                 Label {
                     Text("Crea l'anteprima")
                 } icon: {
-                    if isGenerating { InlineProgress(tint: Theme.onPrimary) } else { Icon("wand") }
+                    if isGenerating {
+                        InlineProgress(tint: Theme.onPrimary)
+                    } else {
+                        Icon(locked ? "lock" : "wand")
+                            .contentTransition(.symbolEffect(.replace))
+                    }
                 }
             }
             .buttonStyle(.m3(.filled, size: .m, wide: true))
             .disabled(isGenerating)
+            .accessibilityHint(locked ? "Richiede BCW+" : "")
             Button("Lo farò dopo", action: next)
                 .buttonStyle(.m3(.text, size: .s, wide: true))
         }
