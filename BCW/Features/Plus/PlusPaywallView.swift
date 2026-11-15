@@ -541,3 +541,39 @@ private struct SheetCornerProbe: UIViewRepresentable {
     }
 }
 #endif
+
+#if DEBUG
+/// Immagine promozionale dell'acquisto in app per App Store Connect (1024 × 1024): il marchio di BCW+ con il
+/// "+" nella forma sotto la scritta. `-BCWGeneratePlusImage <percorso.png>` la scrive ed esce.
+enum PlusPromoImage {
+    static func generateIfRequested() {
+        guard let path = UserDefaults.standard.string(forKey: "BCWGeneratePlusImage") else { return }
+        let view = ZStack {
+            Theme.primaryContainer
+            VStack(spacing: -10) {
+                Text("BCW")
+                    .font(.m3(300, weight: 800, rounded: true))
+                    .tracking(-3)
+                    .foregroundStyle(Theme.onPrimaryContainer)
+                Shaped(shape: .cookie9Sided, fill: Theme.primary, size: 300) {
+                    Icon("plus", size: 260)
+                        .foregroundStyle(Theme.onPrimary)
+                }
+            }
+            .offset(y: 10)
+        }
+        .frame(width: 1024, height: 1024)
+        .environment(\.colorScheme, .light)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 1
+        guard let data = renderer.uiImage?.pngData() else { print("BCW-PLUSIMAGE FAIL"); exit(1) }
+        do {
+            try data.write(to: URL(fileURLWithPath: path))
+            print("BCW-PLUSIMAGE OK \(path)")
+        } catch {
+            print("BCW-PLUSIMAGE FAIL \(error)")
+        }
+        exit(0)
+    }
+}
+#endif

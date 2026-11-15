@@ -1058,6 +1058,10 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   (`TimetableSettingsSection.timetableOptions`) è `.disabled` e al 50% di opacità (richiesta dell'utente).
 - Impostazioni › Generale › Su GitHub ha tutti i collegamenti in tutte e due le build (scelta dell'utente: prima la
   build dell'App Store non aveva BCW per iOS, per le linee guida 3.1.1 di Apple).
+- Immagine promozionale dell'acquisto in app (App Store Connect, 1024 × 1024): `Config/AppStore/BCWPlus-1024.png`, il
+  marchio di BCW+ con il "+" nella forma sotto la scritta, nei colori di Mattone chiaro. Si rigenera con
+  `-BCWGeneratePlusImage <percorso.png>` (solo DEBUG, `PlusPromoImage`). La conferma di pagamento di iOS mostra
+  l'icona dell'app e non si può cambiare dal codice.
 - Testi: BCW è femminile ("Questa è BCW", "un'app non ufficiale … non è affiliata"). Versione e build in Impostazioni ›
   Generale, codici dell'account in carattere monospazio (`Font.mono`, `ValueRow(monospaced:)`).
 

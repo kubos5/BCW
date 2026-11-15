@@ -138,6 +138,7 @@ struct RootView: View {
             #if DEBUG
             // Per le prove: `-BCWPaywall YES` apre la schermata di BCW+ (build dell'App Store).
             if UserDefaults.standard.bool(forKey: "BCWPaywall") { PlusStore.shared.presentPaywall() }
+            PlusPromoImage.generateIfRequested()
             #endif
             UpdateChecker.shared.launch()
             AppIconController.shared.start()
