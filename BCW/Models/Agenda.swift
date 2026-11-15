@@ -12,6 +12,8 @@ struct AgendaEvent: Decodable, Identifiable, Hashable {
     let subjectId: Int?
     let subjectName: String?
     let homeworkId: Int?
+    /// File e link del docente di un compito del modulo Compiti (sono sul sito di Classeviva).
+    let attachments: Int
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: AnyKey.self)
@@ -26,6 +28,32 @@ struct AgendaEvent: Decodable, Identifiable, Hashable {
         subjectName = c.string("subjectDesc")?.nilIfEmpty?.sentenceCased
         homeworkId = c.int("homeworkId")
         id = c.int("evtId") ?? StableID.make(code, notes, CVDate.dayKey(begin))
+        attachments = 0
+    }
+
+    /// Un compito del modulo Compiti come evento dell'agenda (issue 16), nel giorno di consegna.
+    init(homework: Homework) {
+        id = Self.homeworkEventID(homework.id)
+        code = Self.homeworkModuleCode
+        begin = homework.due
+        end = homework.due
+        isFullDay = !homework.hasDueTime
+        notes = homework.text
+        authorName = homework.teacherName
+        classDescription = nil
+        subjectId = homework.subjectId
+        subjectName = homework.subjectName
+        homeworkId = homework.id
+        attachments = homework.attachments
+    }
+
+    /// Eventi di `agenda/all` più i compiti del modulo Compiti, in ordine. Un compito che l'agenda ha già
+    /// (un evento AGHW con il suo `homeworkId`) non viene ripetuto.
+    static func merging(_ events: [AgendaEvent], homework: [AgendaEvent]) -> [AgendaEvent] {
+        guard !homework.isEmpty else { return events.sorted { $0.begin < $1.begin } }
+        let linked = Set(events.lazy.filter { !$0.isFromHomeworkModule }.compactMap(\.homeworkId))
+        let extra = homework.filter { !linked.contains($0.homeworkId ?? 0) }
+        return (events + extra).sorted { $0.begin < $1.begin }
     }
 
     enum Kind: String, CaseIterable, Identifiable {
@@ -58,10 +86,10 @@ struct AgendaEvent: Decodable, Identifiable, Hashable {
         }
     }
 
-    /// Classeviva distingue i compiti (AGHW) dagli altri eventi (AGNT/AGCR);
-    /// le verifiche non hanno un codice dedicato, quindi le riconosciamo dal testo.
+    /// Classeviva distingue i compiti (AGHW, e NEWDC quelli del modulo Compiti) dagli altri eventi
+    /// (AGNT/AGCR); le verifiche non hanno un codice dedicato, quindi le riconosciamo dal testo.
     var kind: Kind {
-        if code == "AGHW" { return .homework }
+        if code == "AGHW" || code == Self.homeworkModuleCode { return .homework }
         let text = notes.lowercased()
         let testWords = ["verifica", "compito in classe", "interrogazion", "test ", "prova scritta",
                          "prova orale", "simulazione", "esame", "compito di", "verifiche"]

@@ -28,8 +28,6 @@ import UIKit
 ///   piano non si vede: la Dynamic Island nasconde le attività dell'app aperta.
 @Observable
 final class LiveActivityManager {
-    /// Aggiornamento in background al prossimo passaggio di fase (`BGTaskSchedulerPermittedIdentifiers`).
-    static let refreshTaskID = "com.bcw.app.liveactivity"
     /// Giorno (`yyyy-MM-dd`) in cui l'attività è stata fermata a mano o tolta dalla schermata di blocco.
     private static let stoppedKey = "liveActivityStoppedDay"
     /// Giorno in cui l'attività è stata avviata a mano.
@@ -60,6 +58,9 @@ final class LiveActivityManager {
     @ObservationIgnored private var endedByApp: Set<String> = []
     /// Istante dell'aggiornamento in background già richiesto.
     @ObservationIgnored private var refreshDate: Date?
+    /// Quando serve un aggiornamento in background (prossimo passaggio di fase), per
+    /// `BackgroundRefresh`, che chiede a iOS una richiesta sola per tutta l'app.
+    var backgroundRefreshDate: Date? { refreshDate }
     /// L'attività di oggi va rifatta da capo al prossimo allineamento (`sceneBecameActive`).
     @ObservationIgnored private var renewalRequested = false
     /// Ultima attività di oggi richiesta (nuova o rinnovata).
@@ -192,6 +193,8 @@ final class LiveActivityManager {
         guard let model, let snapshot else { return nil }
         // La prova vale anche senza account (riaperta da iOS in background, senza la demo).
         guard areActivitiesEnabled, snapshot.signedIn || isDemo else { return ([], nil) }
+        // L'attività in diretta fa parte dell'orario: nella build dell'App Store serve BCW+.
+        guard !snapshot.isLocked, PlusStore.shared.isUnlocked else { return ([], nil) }
         let theme = TimetableActivityTheme(snapshot.theme)
         let calendar = BCWShared.calendar
         let today = calendar.startOfDay(for: now)
@@ -370,17 +373,9 @@ final class LiveActivityManager {
         }
         guard nextPhase != refreshDate else { return }
         refreshDate = nextPhase
-        if let nextPhase {
-            let request = BGAppRefreshTaskRequest(identifier: Self.refreshTaskID)
-            request.earliestBeginDate = nextPhase
-            do {
-                try BGTaskScheduler.shared.submit(request)
-            } catch {
-                log("aggiornamento in background non programmato: \(error)")
-            }
-        } else {
-            BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.refreshTaskID)
-        }
+        // Una richiesta sola per tutta l'app (iOS ne tiene in sospeso una): alla prima data tra questa
+        // e il prossimo controllo delle novità.
+        if let model { BackgroundRefresh.schedule(model: model) }
     }
 
     // MARK: Stati

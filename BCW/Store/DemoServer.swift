@@ -105,6 +105,7 @@ final class DemoTransport: Transport {
                 return notFound()
             }
             return json(["agenda": agenda(from: from, to: to)])
+        case "homeworks": return json(["items": homeworks()])
         case "lessons":
             if route.count >= 3, let from = parseAPIDate(route[1]), let to = parseAPIDate(route[2]) {
                 return json(["lessons": lessons(from: from, to: to)])
@@ -278,6 +279,32 @@ final class DemoTransport: Transport {
             }
         }
         return result
+    }
+
+    /// Compiti del modulo Compiti (`homeworks/index`, issue 16): uno ogni due giorni di scuola dalla
+    /// settimana scorsa alle prossime due, alcuni con un file del docente; quelli passati fatti.
+    private func homeworks() -> [[String: Any]] {
+        let today = referenceDate
+        let days = schoolDays(from: today.adding(days: -7), to: today.adding(days: 14))
+        let tasks = ["Esercizi assegnati con il modulo Compiti: svolgere la scheda allegata",
+                     "Preparare una presentazione di 5 minuti", "Completare il questionario sul libro di testo",
+                     "Scrivere un riassunto di una pagina"]
+        return days.enumerated().compactMap { index, day -> [String: Any]? in
+            guard index % 2 == 0 else { return nil }
+            var rng = SeededRandom(seed: UInt64(day.timeIntervalSince1970 / 86_400) &+ 31)
+            let row = timetable[(calendar.component(.weekday, from: day) + 5) % 7 % 5]
+            let s = subjects[row[rng.next(upTo: row.count)]]
+            let id = 900_000 + Int(day.timeIntervalSince1970 / 86_400)
+            let files: [[String: Any]] = rng.next(upTo: 2) == 0 ? [["fileId": id, "fileName": "scheda.pdf"]] : []
+            return [
+                "evtId": id, "evtCode": "NEWDC", "teacherId": 1_234_567, "teacherName": s.teacher,
+                "homeworkDesc": tasks[rng.next(upTo: tasks.count)], "homeworkDone": false,
+                "homeworkMarkedDone": day < today, "assignmentDate": CVDate.dayKey(day.adding(days: -3)),
+                "assignmentTime": NSNull(), "expiryDate": CVDate.dayKey(day), "expiryTime": NSNull(),
+                "studentAttachmentsAllowed": false, "subjectId": s.id, "subjectDesc": s.name,
+                "teacherFiles": files, "teacherLinks": [] as [Any], "studentFiles": [] as [Any],
+            ]
+        }
     }
 
     private func event(id: Int, code: String, day: Date, hour: Int, notes: String, subject: DemoSubject?) -> [String: Any] {

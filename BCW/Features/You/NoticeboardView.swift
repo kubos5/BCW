@@ -6,7 +6,12 @@ struct NoticeboardView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.windowClass) private var windowClass
     @Environment(\.pageGutter) private var gutter
+    @Environment(OverlayHost.self) private var host: OverlayHost?
     @State private var search = ""
+    /// Conferma di "Leggi tutto".
+    @State private var confirmingReadAll = false
+    /// "Leggi tutto" in corso.
+    @State private var readingAll = false
     @State private var category: String?
     @State private var onlyUnread = false
     /// iPad largo con la pagina larga almeno 792 punti: elenco e comunicazione affiancati.
@@ -72,8 +77,44 @@ struct NoticeboardView: View {
                 collapsedNotice = notice
             }
         }
-        .pageChrome("Bacheca", subtitle: subtitle, style: .inline)
+        .pageChrome("Bacheca", subtitle: subtitle, style: .inline) {
+            BarTextButton(title: "Leggi tutto", icon: "doneAll") { confirmingReadAll = true }
+                .disabled(model.unreadNoticesCount == 0 || readingAll)
+                .accessibilityHint("Segna come lette tutte le comunicazioni")
+        }
         .localSearchable(text: $search, prompt: Self.searchPrompt)
+        .m3Dialog("Segnare tutto come letto?", isPresented: $confirmingReadAll, message: readAllMessage) {
+            [.cancel(), DialogAction(title: "Leggi tutto", style: .strong) { readAll() }]
+        }
+    }
+
+    private var readAllMessage: String {
+        let unread = model.unreadNoticesCount
+        return unread == 1
+            ? "La comunicazione da leggere verrà segnata come letta, anche su Classeviva. Le adesioni e le firme richieste restano da fare."
+            : "Le \(unread) comunicazioni da leggere verranno segnate come lette, anche su Classeviva. Le adesioni e le firme richieste restano da fare."
+    }
+
+    /// Segna tutto come letto, con un avviso mentre lavora e uno con l'esito.
+    private func readAll() {
+        let count = model.unreadNoticesCount
+        guard count > 0, !readingAll else { return }
+        readingAll = true
+        let progress = host?.showToast("Segno le comunicazioni come lette…", inProgress: true, duration: .seconds(60))
+        Task {
+            let failed = await model.markAllNoticesRead()
+            readingAll = false
+            if let progress { host?.dismissToast(progress) }
+            if failed == 0 {
+                Haptics.success()
+                host?.showToast(count == 1 ? "Comunicazione segnata come letta" : "\(count) comunicazioni segnate come lette",
+                                icon: "doneAll")
+            } else {
+                host?.showToast(failed == 1 ? "Una comunicazione non è stata segnata: riprova più tardi"
+                                            : "\(failed) comunicazioni non sono state segnate: riprova più tardi",
+                                icon: "alertCircle")
+            }
+        }
     }
 
     /// Elenco a sinistra (scorre per conto suo) e la comunicazione scelta in un pannello.

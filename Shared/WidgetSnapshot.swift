@@ -29,6 +29,14 @@ nonisolated struct WidgetSnapshot: Codable, Equatable, Sendable {
     var agenda: [AgendaItem] = []
     var grades: Grades?
     var theme = ThemeSnapshot()
+    /// Build dell'App Store senza BCW+: i widget mostrano solo l'invito a sbloccarli (e l'istantanea non
+    /// ha dati). Facoltativo: le istantanee precedenti (e quelle della build GitHub) non ce l'hanno.
+    var locked: Bool?
+    /// Prezzo di BCW+ nella valuta dell'utente, per i widget bloccati.
+    var plusPrice: String?
+
+    /// I widget sono bloccati (BCW+ non acquistata nella build dell'App Store).
+    var isLocked: Bool { locked == true }
 
     // MARK: Tipi
 

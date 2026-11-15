@@ -49,6 +49,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
             SecuritySettingsSection()
             DataSettingsSection()
             AboutSettingsSection()
+            PlusSettingsSection()
             OnboardingSettingsSection()
             LinksSettingsSection()
         case .appearance: AppearanceSettingsSection()
@@ -80,6 +81,7 @@ struct SettingsView: View {
             if isSplit {
                 SplitPage(sideWidth: 320, mainMaxWidth: 640) {
                     VStack(spacing: 24) {
+                        PlusBanner()
                         ListGroup {
                             selectable(.general)
                             selectable(.appearance)
@@ -107,6 +109,8 @@ struct SettingsView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 24) {
+                        // BCW+, il grazie dopo l'acquisto o la build GitHub (`PlusBanner`).
+                        PlusBanner()
                         ListGroup {
                             link(.general)
                             link(.appearance)
@@ -237,6 +241,8 @@ struct GradeSettingsSection: View {
 struct NotificationSettingsSection: View {
     @Environment(AppModel.self) private var model
     @State private var notificationsDenied = false
+    /// "Aggiorna app in background" spento (o limitato) per BCW: le novità arrivano solo aprendola.
+    @State private var backgroundRefreshUnavailable = false
 
     var body: some View {
         @Bindable var preferences = model.preferences
@@ -276,7 +282,22 @@ struct NotificationSettingsSection: View {
             }]
         }
 
-        ListGroup("Novità", footer: "Una notifica per ogni novità trovata aggiornando i dati, anche con BCW chiusa: iOS sceglie quando aggiornare in background, in base a quanto usi l'app, quindi le notifiche possono arrivare con un po' di ritardo.") {
+        ListGroup("Novità", footer: "Una notifica per ogni novità, anche con BCW in secondo piano. È iOS a decidere quando aggiornare: possono arrivare in ritardo, e non arrivano se chiudi BCW dal selettore delle app.") {
+            if !preferences.newsNotifications.isEmpty && backgroundRefreshUnavailable {
+                Button {
+                    Platform.openNotificationSettings()
+                } label: {
+                    ListRow("Aggiornamento in background spento",
+                            subtitle: "Le notifiche arrivano solo aprendo BCW. Tocca per attivarlo nelle Impostazioni di iOS.",
+                            titleColor: Theme.error) {
+                        FormIcon("alertTriangle", color: Theme.error)
+                    } trailing: {
+                        Icon("externalLink", size: 18)
+                            .foregroundStyle(Theme.onSurfaceVariant)
+                    }
+                }
+                .buttonStyle(.listRow)
+            }
             ForEach(NewsKind.allCases) { kind in
                 ToggleRow(kind.title, icon: kind.icon, isOn: Binding {
                     preferences.newsNotifications.contains(kind)
@@ -287,6 +308,10 @@ struct NotificationSettingsSection: View {
         }
         .onChange(of: preferences.newsNotifications) {
             NewsNotifications.scheduleBackgroundRefresh(model: model)
+        }
+        .onAppear { backgroundRefreshUnavailable = BackgroundRefresh.isUnavailable }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.backgroundRefreshStatusDidChangeNotification)) { _ in
+            backgroundRefreshUnavailable = BackgroundRefresh.isUnavailable
         }
     }
 
@@ -335,13 +360,32 @@ struct DataSettingsSection: View {
 
 struct AboutSettingsSection: View {
     @Environment(AppModel.self) private var model
+    @Environment(OverlayHost.self) private var host: OverlayHost?
     @Environment(\.openURL) private var openURL
+    @State private var loadingNotes = false
 
     var body: some View {
         ListGroup("Informazioni", footer: model.isCloud
-                  ? "BCW (Better ClasseViVa) è un client non ufficiale e non è affiliato a Gruppo Spaggiari Parma S.p.A. Le credenziali degli account abbinati sono salvate cifrate nel tuo account BCW e nel Portachiavi di questo dispositivo, e inviate ai server di Classeviva per accedere."
-                  : "BCW (Better ClasseViVa) è un client non ufficiale e non è affiliato a Gruppo Spaggiari Parma S.p.A. Le credenziali sono salvate solo nel Portachiavi di questo dispositivo e inviate esclusivamente ai server di Classeviva.") {
-            ValueRow("Versione", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
+                  ? "BCW (Better ClasseViVa) è un'app non ufficiale, non affiliata a Gruppo Spaggiari Parma S.p.A. Le credenziali sono salvate cifrate nel tuo account BCW e nel Portachiavi."
+                  : "BCW (Better ClasseViVa) è un'app non ufficiale, non affiliata a Gruppo Spaggiari Parma S.p.A. Le credenziali restano nel Portachiavi e vanno solo ai server di Classeviva.") {
+            ValueRow("Versione", value: AppVersion.installed, monospaced: true)
+            ValueRow("Build", value: BuildVariant.current.title, monospaced: true)
+            // Le note della release su GitHub (richiesta dell'utente, 4.0), nello stesso foglio che si apre
+            // dopo un aggiornamento.
+            Button(action: showReleaseNotes) {
+                ListRow("Note di rilascio", subtitle: "Le novità dell'ultima versione di BCW") {
+                    FormIcon("newReleases")
+                } trailing: {
+                    if loadingNotes {
+                        InlineProgress(tint: Theme.primary, size: 18)
+                    } else {
+                        Icon("chevronRight", size: 18)
+                            .foregroundStyle(Theme.onSurfaceVariant)
+                    }
+                }
+            }
+            .buttonStyle(.listRow)
+            .disabled(loadingNotes)
             Button {
                 openURL(URL(string: "https://web.spaggiari.eu")!)
             } label: {
@@ -353,6 +397,20 @@ struct AboutSettingsSection: View {
                 }
             }
             .buttonStyle(.listRow)
+        }
+    }
+
+    private func showReleaseNotes() {
+        Haptics.tap()
+        loadingNotes = true
+        Task {
+            let result = await UpdateChecker.shared.showLatestNotes()
+            loadingNotes = false
+            switch result {
+            case .shown: break
+            case .unavailable: host?.showToast("Non ci sono ancora note di rilascio su GitHub", icon: "info")
+            case .failed: host?.showToast("Non riesco a contattare GitHub: riprova più tardi", icon: "wifiOff")
+            }
         }
     }
 }
@@ -368,9 +426,9 @@ struct OnboardingSettingsSection: View {
     }
 }
 
-/// Il codice di BCW su GitHub (le versioni e il backend) e il profilo dell'autore, come Impostazioni ›
-/// Generale › Su GitHub della versione web (3.3.1): le tre versioni di BCW, poi backend e autore in gruppi
-/// a parte.
+/// Il codice di BCW su GitHub (le versioni e il backend) e i profili, come Impostazioni › Generale › Su
+/// GitHub della versione web (3.3.1): le tre versioni di BCW, poi backend e persone in gruppi a parte
+/// (l'autore e, accanto, mikqsdev, che contribuisce a BCW per Android; richiesta dell'utente, 4.0).
 struct LinksSettingsSection: View {
     private struct Item: Identifiable {
         let title: String
@@ -387,11 +445,17 @@ struct LinksSettingsSection: View {
             Item(title: "BCW-android", subtitle: "BCW per Android", icon: "android", url: "https://github.com/kubos5/BCW-android"),
         ],
         [Item(title: "BCW-api", subtitle: "Backend", icon: "api", url: "https://github.com/kubos5/BCW-api")],
-        [Item(title: "kubos5", subtitle: "Autore di BCW <3", icon: "favorite", url: "https://github.com/kubos5")],
+        [
+            Item(title: "kubos5", subtitle: "Autore di BCW <3", icon: "favorite", url: "https://github.com/kubos5"),
+            Item(title: "mikqsdev", subtitle: "Contributore di BCW per Android", icon: "volunteer",
+                 url: "https://github.com/mikqsdev"),
+        ],
     ]
 
     @Environment(\.openURL) private var openURL
 
+    /// Tutti i collegamenti in tutte e due le build (scelta dell'utente, 4.0: prima la build dell'App Store
+    /// non aveva BCW per iOS).
     var body: some View {
         ForEach(Array(Self.groups.enumerated()), id: \.offset) { index, items in
             group(items, header: index == 0 ? "Su GitHub" : nil)
@@ -435,11 +499,11 @@ struct AppearanceSettingsSection: View {
                       options: AppearanceMode.allCases.map { ($0, $0.title, nil) })
         }
 
-        ListGroup("Interfaccia", footer: "Con Liquid Glass la barra di navigazione, la barra delle schede e i pulsanti dei menu sono quelli di sistema, in vetro. Senza, tutta l'interfaccia è in Material 3 Expressive, come la versione web di BCW.") {
+        ListGroup("Interfaccia", footer: "Con Liquid Glass barre e menu sono quelli di sistema, in vetro. Senza, tutta l'interfaccia è in Material 3 Expressive, come BCW per il web.") {
             ToggleRow("Liquid Glass", subtitle: theme.liquidGlass ? "Sì" : "No", icon: "sparkles", isOn: $theme.liquidGlass)
         }
 
-        ListGroup("Colore d'accento", footer: "Tutti i colori di BCW (pulsanti, superfici, schede) sono generati dal colore scelto con i colori dinamici di Material 3, nel tema chiaro e in quello scuro. I colori di materie, voti e assenze non cambiano.") {
+        ListGroup("Colore d'accento", footer: "Tutti i colori di BCW nascono da quello scelto, con i colori dinamici di Material 3. Materie, voti e assenze tengono i loro colori.") {
             AccentPicker()
             SelectRow("Stile dei colori", subtitle: theme.colorStyle.subtitle, icon: "colorStyle", selection: $theme.colorStyle,
                       options: ColorStyle.allCases.map { ($0, $0.title, nil) })
@@ -451,7 +515,7 @@ struct AppearanceSettingsSection: View {
             AppIconSettingsLink()
         }
 
-        ListGroup("Forme e movimento", footer: "Espressive: animazioni a molla con un piccolo rimbalzo, come in Material 3 Expressive. Standard: senza rimbalzo. Ridotte: brevi e senza movimenti ampi. I caratteri arrotondati usano l'asse ROND di Google Sans Flex.") {
+        ListGroup("Forme e movimento", footer: "Espressive: molle con un piccolo rimbalzo. Standard: senza rimbalzo. Ridotte: animazioni brevi, senza movimenti ampi.") {
             SelectRow("Angoli", icon: "corners", selection: $theme.corners,
                       options: CornerStyle.allCases.map { ($0, $0.title, nil) })
             SelectRow("Animazioni", icon: "motion", selection: $theme.motion,
@@ -734,13 +798,13 @@ struct AccountContent: View {
 
             if let card = model.card {
                 ListGroup("Profilo") {
-                    ValueRow("Codice utente", value: card.ident)
+                    ValueRow("Codice utente", value: card.ident, monospaced: true)
                     ValueRow("Tipo di account", value: card.userTypeDescription)
                     if let birth = card.birthDate {
                         ValueRow("Data di nascita", value: birth.shortDayWithYear)
                     }
                     if let fiscal = card.fiscalCode?.nilIfEmpty {
-                        ValueRow("Codice fiscale", value: fiscal)
+                        ValueRow("Codice fiscale", value: fiscal, monospaced: true)
                             .textSelection(.enabled)
                     }
                 }
@@ -753,7 +817,7 @@ struct AccountContent: View {
                         ValueRow("Città", value: "\(city.nameCased)\(card.schoolProvince.map { " (\($0))" } ?? "")")
                     }
                     if let code = card.miurSchoolCode?.nilIfEmpty {
-                        ValueRow("Codice meccanografico", value: code)
+                        ValueRow("Codice meccanografico", value: code, monospaced: true)
                     }
                 }
             }

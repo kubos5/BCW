@@ -359,8 +359,10 @@ extension View {
 
     /// Aspetto dei fogli di Material 3: sfondo `surface-container-low`, angoli del sistema (in basso
     /// seguono quelli dello schermo). Sull'iPad il foglio è centrato, della misura indicata.
-    func m3Sheet(size: M3SheetSize = .form) -> some View {
-        modifier(M3SheetPresentation(size: size))
+    /// `dragIndicator: false` toglie la maniglia anche sull'iPhone (il foglio si chiude comunque
+    /// trascinandolo in basso): la usa BCW+, con la card in alto alla stessa distanza dal bordo e dai lati.
+    func m3Sheet(size: M3SheetSize = .form, dragIndicator: Bool = true) -> some View {
+        modifier(M3SheetPresentation(size: size, dragIndicator: dragIndicator))
     }
 
     /// Misura di un foglio sull'iPad (sull'iPhone non cambia nulla: il foglio sale dal basso).
@@ -538,6 +540,7 @@ struct SheetBar: View {
 
 private struct M3SheetPresentation: ViewModifier {
     let size: M3SheetSize
+    var dragIndicator = true
 
     func body(content: Content) -> some View {
         content
@@ -551,7 +554,7 @@ private struct M3SheetPresentation: ViewModifier {
             // Angoli del sistema: un raggio fisso varrebbe anche per quelli in basso, che così non
             // seguirebbero più la curva dello schermo.
             // Sull'iPad il foglio è centrato e non si trascina: niente maniglia.
-            .presentationDragIndicator(WindowClass.isPad ? .hidden : .visible)
+            .presentationDragIndicator(WindowClass.isPad || !dragIndicator ? .hidden : .visible)
             .m3SheetSizing(size)
     }
 }

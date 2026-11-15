@@ -169,6 +169,9 @@ struct MainTabView: View {
             case .grades:
                 selection = .grades
                 model.openedLink = nil
+            case .plus:
+                model.openedLink = nil
+                PlusStore.shared.presentPaywall()
             case nil: break
             }
         }
@@ -301,13 +304,24 @@ struct MainTabView: View {
                 tabLabel(.dashboard)
             }
             Tab(value: AppTab.timetable) {
-                TimetableView(reselection: reselections[.timetable, default: 0])
-                    .modifier(MaterialTab(reselection: reselections[.timetable, default: 0]))
+                Group {
+                    // Build dell'App Store senza BCW+: al posto dell'orario l'invito a sbloccarlo (dopo
+                    // l'acquisto l'orario compare subito: `isUnlocked` è osservabile).
+                    if PlusStore.shared.isUnlocked {
+                        TimetableView(reselection: reselections[.timetable, default: 0])
+                    } else {
+                        TimetableLockedView()
+                    }
+                }
+                .modifier(MaterialTab(reselection: reselections[.timetable, default: 0]))
             } label: {
                 tabLabel(.timetable)
             }
-            // Impostazioni › Orario › Mostra la scheda Orario.
-            .hidden(!model.preferences.showsTimetableTab)
+            // Impostazioni › Orario › Mostra la scheda Orario. Se è la scheda aperta si nasconde solo dopo
+            // il passaggio alla Dashboard (`onChange(of: showsTimetable)`): nascosta mentre era selezionata,
+            // UIKit lanciava un'eccezione ("Attempt to select tab … that is not in the current tabs") e
+            // l'app si chiudeva, per esempio con "Nascondi la scheda" della scheda bloccata.
+            .hidden(!model.preferences.showsTimetableTab && selection != .timetable)
             Tab(value: AppTab.grades) {
                 GradesView(reselection: reselections[.grades, default: 0])
                     .modifier(MaterialTab(reselection: reselections[.grades, default: 0]))
@@ -510,8 +524,16 @@ private struct MaterialTab: ViewModifier {
 }
 
 /// Barra di navigazione flottante di Material 3 Expressive: una pillola sospesa sul contenuto con i
-/// nomi delle schede; quella aperta è una pillola piena nel colore primario con l'icona, che scivola
-/// da una scheda all'altra allargandosi con una molla.
+/// nomi delle schede; quella aperta è piena nel colore primario con l'icona.
+///
+/// Animazione come la versione Android (richiesta dell'utente, 4.0; `FloatingNavBar` in `Shell.kt`):
+/// cambiando scheda la disposizione nuova vale subito, le schede scivolano dal posto di prima al
+/// nuovo, e **una sola** pillola va dalla scheda di prima a quella nuova cambiando posizione e
+/// larghezza con la stessa molla spaziale; l'icona della scheda aperta compare ingrandendosi da 0,4
+/// (con il piccolo rimbalzo della molla espressiva), quella della scheda lasciata sparisce subito.
+/// Prima la pillola era un `matchedGeometryEffect` tra due forme, una che usciva e una che entrava:
+/// a metà animazione si vedevano due pillole semitrasparenti sovrapposte (verificato registrando il
+/// simulatore), mentre su Android resta piena per tutto il movimento.
 private struct M3NavigationBar: View {
     /// Spazio che le pagine lasciano libero sopra il bordo dello spazio sicuro.
     static let height: CGFloat = 64
@@ -526,7 +548,6 @@ private struct M3NavigationBar: View {
     let badge: Int
     let select: (MainTabView.AppTab) -> Void
     let longPress: (MainTabView.AppTab) -> Void
-    @Namespace private var namespace
     @State private var safeBottom: CGFloat = 0
 
     var body: some View {
@@ -534,7 +555,21 @@ private struct M3NavigationBar: View {
             // La ricerca sta nella barra in cima alla Dashboard, come nelle app Google.
             ForEach(tabs, id: \.self) { tab in
                 NavigationBarItem(tab: tab, selected: tab == selection, badge: tab == .you ? badge : 0,
-                                  namespace: namespace, select: { select(tab) }, longPress: { longPress(tab) })
+                                  select: { select(tab) }, longPress: { longPress(tab) })
+            }
+        }
+        // La pillola della scheda aperta: una forma sola, sotto le schede, nella posizione e nella
+        // larghezza della scheda scelta (letta con le ancore nello stesso passaggio di impaginazione,
+        // quindi anima con la stessa molla delle schede).
+        .backgroundPreferenceValue(NavigationBarItemBounds.self) { bounds in
+            GeometryReader { proxy in
+                if let anchor = bounds[selection] {
+                    let rect = proxy[anchor]
+                    Capsule(style: .continuous)
+                        .fill(Theme.primary)
+                        .frame(width: rect.width, height: rect.height)
+                        .offset(x: rect.minX, y: rect.minY)
+                }
             }
         }
         .padding(6)
@@ -549,6 +584,18 @@ private struct M3NavigationBar: View {
         .offset(y: safeBottom > Self.minimumMargin + Self.safeAreaOverlap ? Self.safeAreaOverlap : -Self.minimumMargin)
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { safeBottom = $0 }
         .animation(Motion.spatial, value: selection)
+        .animation(Motion.spatial, value: badge)
+        .animation(Motion.spatial, value: tabs)
+    }
+}
+
+/// Posizione di ogni scheda nella barra, per la pillola della scheda aperta.
+private struct NavigationBarItemBounds: PreferenceKey {
+    static let defaultValue: [MainTabView.AppTab: Anchor<CGRect>] = [:]
+
+    static func reduce(value: inout [MainTabView.AppTab: Anchor<CGRect>],
+                       nextValue: () -> [MainTabView.AppTab: Anchor<CGRect>]) {
+        value.merge(nextValue()) { $1 }
     }
 }
 
@@ -556,7 +603,6 @@ private struct NavigationBarItem: View {
     let tab: MainTabView.AppTab
     let selected: Bool
     let badge: Int
-    let namespace: Namespace.ID
     let select: () -> Void
     let longPress: () -> Void
     @State private var pressed = false
@@ -574,8 +620,11 @@ private struct NavigationBarItem: View {
         } label: {
             HStack(spacing: 6) {
                 if selected {
+                    // Occupa subito il suo posto e compare ingrandendosi; lasciando la scheda sparisce
+                    // quasi subito, come su Android (dove sparisce di colpo).
                     Icon(tab.selectedIcon, size: 20)
-                        .transition(.scale(scale: 0.4).combined(with: .opacity))
+                        .transition(.asymmetric(insertion: .scale(scale: 0.4).combined(with: .opacity),
+                                                removal: .opacity.animation(Motion.effectsFast)))
                 }
                 Text(tab.title)
                     .font(.m3(14, weight: selected ? 650 : 550))
@@ -585,18 +634,17 @@ private struct NavigationBarItem: View {
                     CountBadge(count: badge)
                 }
             }
-            .foregroundStyle(selected ? Theme.onPrimary : Theme.onSurfaceVariant)
+            // Il colore cambia con la molla degli effetti, senza rimbalzo (come su Android).
+            .animation(Motion.effects) {
+                $0.foregroundStyle(selected ? Theme.onPrimary : Theme.onSurfaceVariant)
+            }
             .padding(.horizontal, selected ? 16 : 13)
             .frame(maxHeight: .infinity)
+            .anchorPreference(key: NavigationBarItemBounds.self, value: .bounds) { [tab: $0] }
             .background {
-                if selected {
-                    Capsule(style: .continuous)
-                        .fill(Theme.primary)
-                        .matchedGeometryEffect(id: "selected", in: namespace)
-                } else {
-                    Capsule(style: .continuous)
-                        .fill(Theme.onSurfaceVariant.opacity(pressed ? 0.12 : 0))
-                }
+                // Velo della pressione sulle schede non aperte (la pillola sta sotto, nella barra).
+                Capsule(style: .continuous)
+                    .fill(Theme.onSurfaceVariant.opacity(pressed && !selected ? 0.12 : 0))
             }
             .contentShape(.capsule)
             .scaleEffect(pressed ? 0.95 : 1)

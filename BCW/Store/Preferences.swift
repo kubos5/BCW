@@ -187,6 +187,12 @@ final class Preferences {
     var showsTimetableTab: Bool {
         didSet { defaults.set(showsTimetableTab, forKey: "showsTimetableTab"); syncedChanged() }
     }
+    /// Banner di BCW+ (o della build GitHub) in cima alle Impostazioni. Si nasconde solo dopo
+    /// l'acquisto o nella build GitHub; si rimostra da Impostazioni › Generale (solo su questo dispositivo).
+    var showsPlusBanner: Bool { didSet { defaults.set(showsPlusBanner, forKey: "showsPlusBanner") } }
+    /// Build GitHub: avviso quando su GitHub c'è una versione nuova (Impostazioni › Generale, solo su
+    /// questo dispositivo). La build dell'App Store non avvisa: si aggiorna da sola.
+    var updateAlerts: Bool { didSet { defaults.set(updateAlerts, forKey: "updateAlerts") } }
     /// Voci che non si sincronizzano con l'account BCW (solo su questo dispositivo).
     private(set) var unsyncedCategories: Set<SyncCategory> {
         didSet { defaults.set(unsyncedCategories.map(\.rawValue).sorted(), forKey: "unsyncedCategories") }
@@ -217,6 +223,8 @@ final class Preferences {
         liveActivities = defaults.object(forKey: "liveActivities") == nil || defaults.bool(forKey: "liveActivities")
         liveActivityCompactTime = defaults.bool(forKey: "liveActivityCompactTime")
         showsTimetableTab = defaults.object(forKey: "showsTimetableTab") == nil || defaults.bool(forKey: "showsTimetableTab")
+        showsPlusBanner = defaults.object(forKey: "showsPlusBanner") == nil || defaults.bool(forKey: "showsPlusBanner")
+        updateAlerts = defaults.object(forKey: "updateAlerts") == nil || defaults.bool(forKey: "updateAlerts")
         // La barra di avanzamento della giornata (3.2.1) non c'è più.
         defaults.removeObject(forKey: "showsDayProgress")
         unsyncedCategories = Set((defaults.stringArray(forKey: "unsyncedCategories") ?? []).compactMap(SyncCategory.init(rawValue:)))
@@ -307,6 +315,20 @@ final class Preferences {
     }
 
     func isCompleted(_ event: AgendaEvent) -> Bool { completedHomework.contains(event.id) }
+
+    /// Compiti del modulo Compiti segnati come fatti su Classeviva: diventano fatti anche in BCW, una
+    /// volta sola. Se poi si segnano da fare in BCW restano da fare (`classevivaDoneHomework`, solo su
+    /// questo dispositivo, ricorda quelli già presi).
+    func importDoneHomework(_ ids: [Int]) {
+        guard !ids.isEmpty else { return }
+        var imported = Set(defaults.array(forKey: "classevivaDoneHomework") as? [Int] ?? [])
+        let fresh = ids.filter { !imported.contains($0) }
+        guard !fresh.isEmpty else { return }
+        imported.formUnion(fresh)
+        defaults.set(Array(imported), forKey: "classevivaDoneHomework")
+        let missing = fresh.filter { !completedHomework.contains($0) }
+        if !missing.isEmpty { completedHomework.formUnion(missing) }
+    }
 
     func toggleCompleted(_ event: AgendaEvent) {
         if completedHomework.contains(event.id) {

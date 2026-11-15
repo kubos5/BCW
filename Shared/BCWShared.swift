@@ -98,6 +98,8 @@ nonisolated enum DeepLink: Equatable, Sendable {
     case dashboard(Date?)
     case timetable(Date?)
     case grades
+    /// BCW+ (dai widget bloccati della build per l'App Store): apre la schermata dell'acquisto.
+    case plus
 
     var url: URL {
         var components = URLComponents()
@@ -111,6 +113,8 @@ nonisolated enum DeepLink: Equatable, Sendable {
             if let day { components.queryItems = [URLQueryItem(name: "giorno", value: BCWShared.dayKey(day))] }
         case .grades:
             components.host = "voti"
+        case .plus:
+            components.host = "plus"
         }
         return components.url ?? URL(string: "\(BCWShared.urlScheme)://dashboard")!
     }
@@ -123,6 +127,7 @@ nonisolated enum DeepLink: Equatable, Sendable {
         case "dashboard": self = .dashboard(day)
         case "orario": self = .timetable(day)
         case "voti": self = .grades
+        case "plus": self = .plus
         default: return nil
         }
     }

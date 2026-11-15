@@ -89,6 +89,13 @@ final class WidgetExporter {
     /// aggiornamento o cambio di sessione in corso).
     static func makeSnapshot(model: AppModel, now: Date = Date()) -> WidgetSnapshot? {
         let theme = themeSnapshot()
+        // Build dell'App Store senza BCW+: niente dati, i widget invitano a sbloccarli (e l'attività in
+        // diretta non ha eventi). Letto qui, l'acquisto rifà l'istantanea e ricarica i widget da sé.
+        let plus = PlusStore.shared
+        if !plus.isUnlocked, model.phase != .launching {
+            return WidgetSnapshot(generatedAt: now, signedIn: model.phase == .signedIn, isDemo: model.isDemo,
+                                  theme: theme, locked: true, plusPrice: plus.price)
+        }
         switch model.phase {
         case .launching:
             return nil

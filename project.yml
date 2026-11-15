@@ -5,6 +5,37 @@ options:
   deploymentTarget:
     iOS: "26.0"
   developmentLanguage: it
+# Due build (4.0): GitHub (Debug, Release: tutto sbloccato) e App Store (Debug-AppStore, Release-AppStore:
+# condizione APPSTORE, orario e widget con BCW+).
+configs:
+  Debug: debug
+  Release: release
+  Debug-AppStore: debug
+  Release-AppStore: release
+settings:
+  configs:
+    Debug-AppStore:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG APPSTORE"
+    Release-AppStore:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: APPSTORE
+schemes:
+  BCW:
+    build:
+      targets:
+        BCW: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+  BCW App Store:
+    build:
+      targets:
+        BCW: all
+    run:
+      config: Debug-AppStore
+      storeKitConfiguration: Config/BCW.storekit
+    archive:
+      config: Release-AppStore
 targets:
   BCW:
     type: application
@@ -20,7 +51,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.bcw.app
         # App Group condiviso con i widget (group.com.bcw-classeviva.app).
         CODE_SIGN_ENTITLEMENTS: Config/BCW.entitlements
-        MARKETING_VERSION: "3.3.1"
+        MARKETING_VERSION: "4.0"
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "5.0"
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
@@ -50,7 +81,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.bcw.app.widgets
-        MARKETING_VERSION: "3.3.1"
+        MARKETING_VERSION: "4.0"
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "5.0"
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor

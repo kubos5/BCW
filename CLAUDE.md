@@ -19,6 +19,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   capo su due righe (`SelectButton(expands:lineLimit:)`): prima l'etichetta "Materia" veniva schiacciata lettera per
   lettera. Lo spazio tra intestazione e modulo sta dentro `CollapsibleContent`: da chiusa la card ha lo stesso margine
   sopra e sotto (prima lo spazio del `VStack` restava sotto l'intestazione).
+  Nella pagina di una materia (4.0, richiesta dell'utente) "Obiettivo" (`GoalCalculator`) ed "E se prendessi…" sono
+  comprimibili, chiusi all'inizio, e collegati (`SubjectGradeTools`: due card a 2 punti, angoli ampi all'esterno e
+  `radii.xs` all'interno, `connectedCard`); da chiuso il sottotitolo di "Obiettivo" riassume il risultato.
 - **Orario** (scheda tra Dashboard e Voti): orario settimanale dell'utente in tre viste (Lista, Calendario,
   Giorno), con note/file/verifiche per giorno o ricorrenza, verifiche automatiche da Classeviva (nascondibili),
   modifiche estese agli eventi con lo stesso nome, gruppi di eventi uguali accostati, eventi contemporanei
@@ -61,7 +64,12 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `#if os(macOS)` per il Mac.
 - Per provare le modifiche visive usare "Prova la demo" (`DemoServer.swift`). Si avvia anche con l'argomento
   `-demoMode YES`.
-- Argomenti di avvio per le prove (solo DEBUG, con `simctl launch … <argomenti>`): `-BCWTab timetable|grades|you|search`
+- Argomenti di avvio per le prove (solo DEBUG, con `simctl launch … <argomenti>`): `-BCWVariant appStore|github` fa da
+  build dell'App Store (o GitHub) con qualsiasi schema, `-BCWPlus locked|unlocked` forza BCW+ (non salvato),
+  `-BCWPlusSimulate YES` simula acquisto e ripristino senza StoreKit (salva l'acquisto in `plusPurchased`),
+  `-BCWPaywall YES` apre la schermata di BCW+ (con `-BCWVariant appStore`), `-BCWReleaseNotes YES` mostra le note di rilascio come dopo un aggiornamento (anche di una release più vecchia),
+  `-BCWInstalledVersion 3.3` finge quella versione installata (per l'avviso della versione nuova; resta in
+  `lastRunVersion`, da togliere dopo), `-BCWTab timetable|grades|you|search`
   apre una scheda, `-BCWLiquidGlass YES|NO` (resta salvato), `-BCWAccent #RRGGBB` (non salvato), `-BCWTimetableDemo YES` crea l'orario della demo
   dalle lezioni se è vuoto, `-BCWHideTests YES` aggiunge una regola e una verifica nascosta,
   `-BCWTimetableSheet generator|shift|hidden|date|editor|detail` apre il generatore (con `-BCWGeneratorBreaks N` intervalli), lo spostamento degli orari, le verifiche
@@ -122,7 +130,10 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   di Material e barra di navigazione dell'iPad con `AppTab.mainTabs(timetable:)`; con Liquid Glass le schede nascoste
   non sono nella `UITabBar`, quindi la pressione su Tu usa l'indice di `barTabs(timetable:)` (verificato: con l'Orario
   nascosto Tu è la terza, icone piene giuste). I collegamenti all'orario aprono la Dashboard su quel giorno; se la
-  scheda viene nascosta mentre è aperta si passa alla Dashboard.
+  scheda viene nascosta mentre è aperta si passa alla Dashboard, e solo dopo la scheda diventa `.hidden`
+  (`!showsTimetableTab && selection != .timetable`): nascosta mentre era selezionata UIKit lanciava "Attempt to select
+  tab … that is not in the current tabs" e l'app si chiudeva ("Nascondi la scheda" della scheda bloccata, segnalato
+  dall'utente, 4.0; verificato con e senza Liquid Glass).
 - Lato Classeviva: `ClassevivaLinksSection` (Impostazioni › Account) con `model.classevivaLinks()` e
   `removeClassevivaLink(_:)`, che inviano a BCW-api ident e token di Classeviva (`ClassevivaClient.currentSession()`);
   senza account BCW l'elenco si carica solo toccando "Mostra gli account BCW abbinati".
@@ -234,6 +245,23 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   `noticeboard` (+ `read/{evtCode}/{pubId}/101`, `attach/{evtCode}/{pubId}/{n}`), `notes/all`
   (+ `notes/{code}/read/{id}`), `didactics` (+ `didactics/item/{contentId}`), `documents` (POST, + `check/{hash}`,
   `read/{hash}`), `calendar/all`, `schoolbooks`.
+- Compiti del modulo Compiti (issue 16, novembre 2026): i docenti possono assegnare i compiti come compiti (codice
+  NEWDC) invece che come annotazioni dell'agenda; non sono in `agenda/all` e arrivano da `homeworks/index`
+  (`{items: [{evtId, homeworkDesc, teacherName, subjectId, subjectDesc, assignmentDate, expiryDate, expiryTime,
+  homeworkDone, homeworkMarkedDone, teacherFiles, teacherLinks…}]}`, https://github.com/open-viva/endpoints#compiti).
+  È documentato per l'API del sito (`rest/w1`, stessi percorsi di `rest/v1` ma con il cookie PHPSESSID), non per
+  quella dell'app. `ClassevivaClient.homework()` prova in ordine `rest/v1` con il token, `rest/w1` con il token e
+  `rest/w1` con la sessione del sito (`ClassevivaWebSession`: accesso a `auth-p7/app/default/AuthApi4.php?a=aLoginPwd`
+  con le credenziali salvate, `aLoginSam` con l'ident per più profili; cookie solo in memoria, una sessione per
+  client) e ricorda la prima che risponde (`BCW-HOMEWORK route=…` nella console in DEBUG; `-BCWHomeworkRoute
+  app|siteToken|siteSession` ne prova una sola). Ogni compito diventa un `AgendaEvent(homework:)` di tipo compito
+  nel giorno di consegna, con id negativo (`homeworkEventID`: gli id dei compiti e degli eventi sono numerati a parte
+  e i compiti fatti sincronizzati sono un elenco di id); `AppModel.updateAgenda` unisce le due fonti (`agenda` ha
+  `private(set)`) senza ripetere un compito che l'agenda ha già con il suo `homeworkId`. Gli errori non vanno nel
+  banner. Quelli segnati come fatti su Classeviva diventano fatti in BCW una volta sola
+  (`Preferences.importDoneHomework`, `classevivaDoneHomework` locale). File e link del docente non si aprono in BCW:
+  la riga dice "N allegati su Classeviva". La demo ha `homeworks/index`. BCW non segna i compiti come fatti su
+  Classeviva (`setHomeworkMarkedDone`, solo sul sito).
 
 ## Punti NON verificati con un account reale
 - Anni precedenti (verificato): tutti i `webYY.spaggiari.eu` puntano a `storico.spaggiari.eu`. `web22`–`web24`
@@ -244,6 +272,8 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   Gli archivi vivono in `AppModel.archive(for:)` e si azzerano a ogni cambio di sessione.
 - Endpoint voti: si prova `grades`, poi `grades2324`, poi `grades2`.
 - Verifiche riconosciute con euristica sul testo (`AgendaEvent.kind`), Classeviva non ha un codice dedicato.
+- Compiti del modulo Compiti (issue 16): provati solo con la demo. Non si sa quale delle tre strade risponda con un
+  account vero, né se l'accesso al sito funzioni per tutti (account genitore, credenziali con email).
 
 ## Layout e comportamenti
 - Orario: solo viste Lista e Giorno (`TimetableMode.available`; il mese c'è nella Dashboard). Nella Lista: giorno in
@@ -923,8 +953,9 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 ## Introduzione (onboarding)
 - Richiesta dell'utente (3.3): alla prima apertura, poi da Impostazioni › Generale › Rivedi l'introduzione e (3.3.1)
   dalle note della schermata di accesso. Impostazioni › Generale › Su GitHub (`LinksSettingsSection`, 3.3.1 come il
-  web): BCW per iOS, Web e Android, poi Backend e "Autore di BCW <3" in gruppi a parte (icone `m.ios`, `m.android`,
-  `m.api`, `m.favorite`, dagli stessi tracciati di `js/icons.js`).
+  web): BCW per iOS, Web e Android, poi Backend e le persone in gruppi a parte: "Autore di BCW <3" e, accanto,
+  mikqsdev "Contributore di BCW per Android" (4.0, icona `m.volunteer`) (icone `m.ios`, `m.android`, `m.api`,
+  `m.favorite`, dagli stessi tracciati di `js/icons.js`).
 - Introduzione a ogni riavvio del dispositivo (segnalato dall'utente sull'iPhone): dopo un riavvio iOS può avviare l'app in
   background prima del primo sblocco (attività in diretta programmata, aggiornamento in background); fino ad allora
   preferenze e Portachiavi non si leggono (`UserDefaults` risponde vuoto), quindi `isFirstRun` era vero e restava tale per
@@ -964,6 +995,76 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   al riavvio), riapertura dalle Impostazioni e "Salta" (si torna lì con i colori di prima), chiaro e scuro, orario dalle lezioni con la demo (30 eventi applicati) e pagina saltata con la scheda Orario spenta; sull'iPad la
   disposizione; sull'iPhone 15 il cerchio dei colori riaprendola dalle Impostazioni, fluido per l'utente. Non provati con un account vero: accesso a Classeviva e account BCW dall'introduzione (stesse chiamate di `LoginView`).
 
+## Build, BCW+ e versioni (4.0)
+- Richiesta dell'utente (novembre 2026): pubblicare su App Store con orario e widget a pagamento (2,99 €, acquisto
+  unico) e tenere su GitHub una build con tutto sbloccato. Una base di codice, due build: schema `BCW` (Debug,
+  Release) = GitHub; schema `BCW App Store` (Debug-AppStore, Release-AppStore, condizione `APPSTORE` nelle impostazioni
+  del progetto, quindi anche per l'estensione) = App Store, con `Config/BCW.storekit` nel Run per provare l'acquisto.
+  `BuildVariant.current` (in `Store/PlusStore.swift`) dice quale. Stesso identificativo dell'app nelle due build.
+  Le configurazioni nuove sono copie di Debug e Release (id `BC…A1`–`A6` nel pbxproj): cambiando un'impostazione di
+  Debug o Release va cambiata anche nella copia.
+- `PlusStore.shared` (StoreKit 2, prodotto `com.bcw-classeviva.app.plus`, non consumabile): `isUnlocked` (sempre vero
+  nella build GitHub), `isPurchased` anche in UserDefaults (`plusPurchased`) per l'avvio senza rete,
+  `Transaction.updates` e `currentEntitlements` (rimborsi, "Chiedi di acquistare"), acquisto con
+  `@Environment(\.purchase)`, `restore()` con `AppStore.sync()`. Tutto ciò che dipende dall'acquisto legge
+  `isUnlocked` (osservabile): scheda Orario (`TimetableLockedView` al posto di `TimetableView` in `MainTabView`),
+  pulsante "Crea l'anteprima" dell'introduzione (lucchetto, apre l'acquisto), Impostazioni › Orario, istantanea dei
+  widget (`WidgetSnapshot.locked`/`plusPrice`: senza BCW+ niente dati, `LockedWidgetView` con `bcw://plus`, anche
+  nella galleria di iOS) e attività in diretta (`currentWishes`). `WidgetExporter` legge `isUnlocked` dentro
+  `withObservationTracking`: l'acquisto rifà l'istantanea e ricarica i widget da sé (verificato con
+  `-BCWPlusSimulate`: dopo "Sblocca" l'orario compare subito).
+- Schermata dell'acquisto `PlusPaywallView` (foglio in `RootView`, `PlusStore.presentPaywall()`): due widget veri con i
+  dati di esempio e i colori del tema, marchio `PlusWordmark`, funzioni, pulsante fisso in basso, ripristino. Il foglio
+  non ha la maniglia (`m3Sheet(dragIndicator: false)`) e la card in alto sta a 6 punti dal bordo in alto, a destra e a
+  sinistra (`sheetInset`, richiesta dell'utente), con gli angoli in alto concentrici con il foglio: raggio del foglio
+  letto da UIKit (`SheetCornerReader`: `effectiveRadius(corner:)` della prima vista sopra la card che ritaglia, con iOS
+  26/27 `_UIDropShadowClippingView`, 38 punti sull'iPhone 17) meno il margine, curva continua; prima della lettura
+  `ConcentricRectangle(uniformTopCorners: .concentric(minimum:))`. Con margini diversi in alto e ai lati (prima, con la
+  maniglia) gli angoli non possono essere concentrici; con margini uguali la distanza tra le due curve è 6 punti ±0,1
+  lungo tutto l'angolo (misurato al pixel su iPhone 17 e 17e, iOS 27.0 e 27.2, con e senza Liquid Glass, e sull'iPhone
+  dell'utente in tema scuro, novembre 2026; `-BCWPaywall YES` apre BCW+ all'avvio; in DEBUG `BCW-SHEET` nella
+  console elenca le viste sopra la card con i raggi). La X sta sul centro dell'arco della card (`closeInset`). Testi delle
+  funzioni scelti dall'utente. Dopo l'acquisto `PlusThanksView` (forma che diventa un cuore) con, in un gruppo,
+  "Mostra scheda orario" e "Mostra attività in diretta" (sempre visibili e accesi all'arrivo, anche se la scheda era
+  nascosta: `showsTimetableTab` e `liveActivities` diventano veri) e "Aggiungi i widget". Banner in cima alle Impostazioni (`PlusBanner`): "Acquista
+  BCW+" (non nascondibile), "Grazie per il supporto" con il cuore come immagine modello dentro il testo
+  (`MaterialShape.templateImage`, spazio indivisibile prima: non va a capo da solo), "Build GitHub"; gli ultimi due si
+  nascondono (`Preferences.showsPlusBanner`, locale) e si rimostrano da Impostazioni › Generale (`PlusSettingsSection`).
+- `UpdateChecker` (`Store/UpdateChecker.swift`, foglio `ReleaseSheet`): `lastRunVersion` in UserDefaults; dopo un
+  aggiornamento (non alla prima apertura, `Onboarding.isFirstRun`; chi arriva dalla 3.3.1 non ha la versione salvata e
+  vede le note) le note della release con il tag della versione installata (o l'ultima, se non più vecchia), da
+  `api.github.com/repos/kubos5/BCW/releases`. Solo build GitHub: ogni 12 ore l'ultima release; se più recente, il foglio
+  con "Scarica da GitHub", "Più tardi" (3 giorni) e "Non avvisarmi più" (`Preferences.updateAlerts`). Mai sopra
+  l'introduzione o il blocco. Markdown della release: `ReleaseNotesText` (titoli, elenchi, citazioni, testo in riga).
+  Impostazioni › Generale › Informazioni › "Note di rilascio" (richiesta dell'utente, `showLatestNotes`): le note della
+  versione installata o, se la sua release non c'è, dell'ultima pubblicata; nella build GitHub con una versione più
+  recente il foglio della versione nuova.
+- Notifiche in ritardo (segnalato dall'utente, 4.0): iOS tiene in sospeso **una** `BGAppRefreshTaskRequest` per app, e
+  quella dell'attività in diretta (a ogni passaggio di fase) faceva fallire in silenzio quella delle novità (`try?`):
+  le notifiche arrivavano solo aprendo l'app. Ora `BackgroundRefresh` chiede una richiesta sola (`com.bcw.app.refresh`)
+  alla prima data tra le novità (15 minuti) e il passaggio di fase (`LiveActivityManager.backgroundRefreshDate`), ed
+  esegue tutto (attività, `refreshAll` con le notifiche, widget). `com.bcw.app.liveactivity` resta permesso e con il
+  gestore per le richieste in sospeso dalla 3.3.1. In Impostazioni › Notifiche un avviso se "Aggiorna app in
+  background" è spento. Senza un server di notifiche push resta iOS a decidere quando: chiusa dal selettore delle app
+  l'app non viene aggiornata. Non provato sul telefono (sul simulatore l'aggiornamento in background non c'è).
+- Barra di navigazione come Android (`FloatingNavBar` in `Shell.kt` di BCW-android): una sola pillola sotto le schede,
+  posizione e larghezza dalle ancore delle schede (`NavigationBarItemBounds`, `backgroundPreferenceValue`) con
+  `Motion.spatial`; schede che scivolano, icona che compare da 0,4, colore con `Motion.effects`. Prima un
+  `matchedGeometryEffect` tra due forme: a metà animazione due pillole semitrasparenti (visto registrando il simulatore).
+- Bacheca: "Leggi tutto" (`AppModel.markAllNoticesRead`, quattro `noticeboard/read` alla volta) dopo una conferma.
+- Introduzione: andando avanti dall'account BCW `AppModel.hasTimetableData()` guarda l'orario sul dispositivo e, con
+  l'account BCW, sul server (al massimo 4 s); se c'è il passaggio dell'orario si salta.
+- Impostazioni › Orario senza BCW+: attivi solo "L'orario richiede BCW+" e "Mostra la scheda Orario"; il resto
+  (`TimetableSettingsSection.timetableOptions`) è `.disabled` e al 50% di opacità (richiesta dell'utente).
+- Impostazioni › Generale › Su GitHub ha tutti i collegamenti in tutte e due le build (scelta dell'utente: prima la
+  build dell'App Store non aveva BCW per iOS, per le linee guida 3.1.1 di Apple).
+- Immagine promozionale dell'acquisto in app (App Store Connect, 1024 × 1024): `Config/AppStore/BCWPlus-1024.png`, il
+  marchio di BCW+ con il "+" nella forma sotto la scritta, nei colori di Mattone chiaro. Si rigenera con
+  `-BCWGeneratePlusImage <percorso.png>` (solo DEBUG, `PlusPromoImage`). La conferma di pagamento di iOS mostra
+  l'icona dell'app e non si può cambiare dal codice.
+- Testi: BCW è femminile ("Questa è BCW", "un'app non ufficiale … non è affiliata"). Versione e build in Impostazioni ›
+  Generale, codici dell'account in carattere monospazio (`Font.mono`, `ValueRow(monospaced:)`).
+
 ## Convenzioni
 - Testi UI e commenti in italiano. Stile: liste segmentate, `StatusChip`, `FilterChip`, `StatTile` (anche in griglie
   collegate con `corners`), `GradeBadge`, `AverageRing`,
@@ -980,5 +1081,7 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   indietro). Dashboard e Orario hanno inoltre il giorno in grande sotto la settimana.
 - Pagine lunghe (Tu, Account, Impostazioni): margine in fondo `Theme.bottomInset`. iOS rimpicciolisce la tab bar
   scorrendo solo se la pagina è abbastanza lunga (verificato: Tu con 24 punti non lo faceva, con 120 sì).
+- Descrizioni (piè delle liste, sottotitoli) brevi: al massimo 5 righe sull'iPhone, meglio 3–4 (richiesta dell'utente,
+  4.0: le descrizioni delle Impostazioni sono state accorciate tutte). I dettagli tecnici vanno qui, non nell'app.
 - README: niente trattini lunghi, niente grassetto/corsivo nelle parti aggiunte, tabelle solo se indispensabili.
 - Non usare nero/bianco puri come sfondo; usare sempre i colori di `Theme`.
