@@ -566,12 +566,12 @@ enum PlusPromoImage {
         .environment(\.colorScheme, .light)
         let renderer = ImageRenderer(content: view)
         renderer.scale = 1
-        guard let data = renderer.uiImage?.pngData() else { print("BCW-PLUSIMAGE FAIL"); exit(1) }
-        do {
-            try data.write(to: URL(fileURLWithPath: path))
+        renderer.isOpaque = true
+        // Senza canale alfa: App Store Connect vuole l'immagine "flattened".
+        if let image = renderer.cgImage, StoreAssets.writeOpaquePNG(image, to: URL(fileURLWithPath: path)) {
             print("BCW-PLUSIMAGE OK \(path)")
-        } catch {
-            print("BCW-PLUSIMAGE FAIL \(error)")
+        } else {
+            print("BCW-PLUSIMAGE FAIL")
         }
         exit(0)
     }

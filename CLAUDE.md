@@ -1062,6 +1062,24 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
   marchio di BCW+ con il "+" nella forma sotto la scritta, nei colori di Mattone chiaro. Si rigenera con
   `-BCWGeneratePlusImage <percorso.png>` (solo DEBUG, `PlusPromoImage`). La conferma di pagamento di iOS mostra
   l'icona dell'app e non si può cambiare dal codice.
+- Pagina dell'App Store (richiesta dell'utente, novembre 2026): tutto in `Config/AppStore/`. Testi (nome, sottotitolo,
+  parole chiave, descrizione, note per la revisione) in `Testi della pagina.md`. Misure di Apple (novembre 2026):
+  obbligatori iPhone "Dynamic Island media" (1206 × 2622) e iPad 13" (2064 × 2752); facoltativi 6,9" (1320 × 2868),
+  evento in-app (1920 × 1080 e 1080 × 1920), video. Niente canale alfa (`StoreAssets.writeOpaquePNG`, usato anche
+  da `PlusPromoImage`). Screenshot composti in stile M3 Expressive da `StoreAssets` (solo DEBUG,
+  `Features/StoreAssets/StoreAssets.swift`): etichetta, titolo e sottotitolo, telefono o iPad disegnati con la cattura,
+  forme di Material dietro, dettagli ingranditi sopra la cattura (`StoreCallout`, centrati dove stanno nella cattura),
+  Home con i widget e schermata di blocco con l'attività in diretta disegnate dalle viste vere. Si rigenerano così:
+  catture della demo a 1320 × 2868 (iPhone 18 Pro Max) e 2064 × 2752 (iPad Pro 13") in `<cartella>/raw` con
+  `simctl io … screenshot` (barra di stato con `simctl status_bar … override`, `-demoMode YES -BCWOnboarding NO
+  -BCWVariant appStore -BCWPlus unlocked -appIconColor mattone`: senza l'icona fissa, cambiando accento compare l'avviso
+  del cambio d'icona; aspettare 15–20 s, i Voti della demo arrivano tardi), poi
+  `simctl launch … -BCWGenerateStoreAssets <cartella>` (`-BCWStoreAssetsOnly <testo>` per una parte). Nomi delle
+  catture in `StoreSlide.phone`/`pad`. Per widget e attività `FrozenClock` (`Shared/FrozenClock.swift`, solo DEBUG)
+  ferma l'ora alle 10:20 del lunedì: `Text.timer` e `TimerProgress` al posto di `Text(timerInterval:)` e
+  `ProgressView(timerInterval:)` (in Release sono le stesse chiamate di prima). `pauseTime` non basta (il testo si
+  ferma solo quando l'ora vera l'ha superata) e `ImageRenderer` non disegna la barra di UIKit (`UIProgressView`: al
+  suo posto un rettangolo giallo con un segno di divieto).
 - Testi: BCW è femminile ("Questa è BCW", "un'app non ufficiale … non è affiliata"). Versione e build in Impostazioni ›
   Generale, codici dell'account in carattere monospazio (`Font.mono`, `ValueRow(monospaced:)`).
 
