@@ -127,6 +127,16 @@ Note per la revisione dell'acquisto
 - `iPhone 6,3 pollici`: gli stessi a 1206 × 2622 (iPhone con Dynamic Island di misura media: la misura
   obbligatoria).
 - `iPad 13 pollici`: 5 screenshot 2064 × 2752 (obbligatori, BCW gira anche sull'iPad).
+- `Header e ricerca`: gli asset creativi di iOS e iPadOS 27 (facoltativi), da caricare in App Store
+  Connect › versione › Informazioni sulla pagina del prodotto › Header e risultati della ricerca (o
+  nella Libreria degli asset). `header-3840x1646.png` è il banner in cima alla pagina (21:9): il
+  colore dell'icona e il logo grande (come quello di Duolingo), con forme di Material attorno;
+  `risultati-ricerca-3840x2560.png` l'immagine nei risultati della ricerca (3:2). Da caricare tutti e
+  due. `universale-5244x2950.png` (16:9, logo con frase e telefoni) è un'alternativa che vale per
+  tutti e due insieme ("Usa l'asset dell'header nei risultati della ricerca"): non serve se si
+  caricano gli altri due. L'essenziale sta nella zona sicura di Apple,
+  il resto si vede solo sugli schermi larghi; controllare con l'anteprima di App Store Connect. Senza
+  l'immagine per la ricerca l'App Store mostra screenshot ed eventi.
 - `Evento in-app`: scheda 1920 × 1080 e pagina dei dettagli 1080 × 1920, per un evento facoltativo
   (per esempio "Aggiornamento importante" per BCW 4.0). In basso niente testo: lì l'App Store scrive
   nome e descrizione dell'evento.

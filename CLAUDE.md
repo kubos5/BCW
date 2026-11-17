@@ -1065,7 +1065,13 @@ Nome: **BCW** = Better ClasseViVa (W al posto di VV). Ispirata a https://github.
 - Pagina dell'App Store (richiesta dell'utente, novembre 2026): tutto in `Config/AppStore/`. Testi (nome, sottotitolo,
   parole chiave, descrizione, note per la revisione) in `Testi della pagina.md`. Misure di Apple (novembre 2026):
   obbligatori iPhone "Dynamic Island media" (1206 × 2622) e iPad 13" (2064 × 2752); facoltativi 6,9" (1320 × 2868),
-  evento in-app (1920 × 1080 e 1080 × 1920), video. Niente canale alfa (`StoreAssets.writeOpaquePNG`, usato anche
+  evento in-app (1920 × 1080 e 1080 × 1920), video, e gli asset creativi di iOS 27 (`StoreCreativeArt`: header della
+  pagina 3840 × 1646, risultati della ricerca 3840 × 2560, universale 5244 × 2950 solo PNG, ognuno con la sua zona
+  sicura; `-BCWStoreAssetsGuides YES` la disegna, per l'header anche ciò che si vede sull'iPhone in verticale,
+  circa 1,51:1). L'header (richiesta dell'utente, come quello di Duolingo) è il logo dell'icona
+  (`StoreBrandLogo`, tracciati di `AppIconLogo`) sul colore di sfondo dell'icona, grande quanto la zona sicura, con
+  forme di Material attorno (fuori dalla zona sicura; quelle vicine al logo nella parte visibile sull'iPhone). Nei
+  risultati della ricerca e nell'universale i testi sono grandi (richiesta dell'utente: prima troppo piccoli). Niente canale alfa (`StoreAssets.writeOpaquePNG`, usato anche
   da `PlusPromoImage`). Screenshot composti in stile M3 Expressive da `StoreAssets` (solo DEBUG,
   `Features/StoreAssets/StoreAssets.swift`): etichetta, titolo e sottotitolo, telefono o iPad disegnati con la cattura,
   forme di Material dietro, dettagli ingranditi sopra la cattura (`StoreCallout`, centrati dove stanno nella cattura),

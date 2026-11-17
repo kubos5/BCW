@@ -79,6 +79,11 @@ enum StoreAssets {
                 AnyView(StorePadSlide(slide: slide, size: $1, images: $0))
             })
         }
+        for kind in StoreCreativeArt.Kind.allCases {
+            jobs.append(Job(path: "Header e ricerca/\(kind.fileName)", size: kind.pixelSize) {
+                AnyView(StoreCreativeArt(kind: kind, size: $1, images: $0))
+            })
+        }
         let card = CGSize(width: 1920, height: 1080), details = CGSize(width: 1080, height: 1920)
         jobs.append(Job(path: "Evento in-app/scheda-1920x1080.png", size: card) {
             AnyView(StoreEventArt(size: $1, images: $0))
@@ -905,6 +910,325 @@ struct StoreLockScreen: View {
             .foregroundStyle(.white)
             .frame(width: 52, height: 52)
             .background(.black.opacity(0.28), in: .circle)
+    }
+}
+
+// MARK: - Asset creativi (iOS 27)
+
+/// Asset creativi della pagina dell'App Store (iOS e iPadOS 27): header della pagina (21:9), risultati della
+/// ricerca (3:2) e l'asset universale (16:9) che vale per tutti e due. Misure e zone sicure dalle specifiche
+/// di Apple ("Creative assets specifications", novembre 2026): l'essenziale sta nella zona sicura, che si
+/// vede su ogni dispositivo; il resto della tela (forme, telefoni ai lati) si vede solo sugli schermi
+/// larghi. `-BCWStoreAssetsGuides YES` disegna zona sicura e ritagli (per le prove).
+struct StoreCreativeArt: View {
+    enum Kind: CaseIterable {
+        case header, search, universal
+
+        var fileName: String {
+            switch self {
+            case .header: "header-3840x1646.png"
+            case .search: "risultati-ricerca-3840x2560.png"
+            case .universal: "universale-5244x2950.png"
+            }
+        }
+
+        var pixelSize: CGSize {
+            switch self {
+            case .header: CGSize(width: 3840, height: 1646)
+            case .search: CGSize(width: 3840, height: 2560)
+            case .universal: CGSize(width: 5244, height: 2950)
+            }
+        }
+
+        /// Zona sicura in pixel della tela.
+        var safeArea: CGRect {
+            switch self {
+            case .header: CGRect(x: 1097, y: 493, width: 1646, height: 661)
+            case .search: CGRect(x: 836, y: 765, width: 2168, height: 1030)
+            case .universal: CGRect(x: 1921, y: 660, width: 1402, height: 962)
+            }
+        }
+    }
+
+    let kind: Kind
+    let size: CGSize
+    let images: StoreImages
+
+    var body: some View {
+        let k = size.width / kind.pixelSize.width
+        let safe = CGRect(x: kind.safeArea.minX * k, y: kind.safeArea.minY * k,
+                          width: kind.safeArea.width * k, height: kind.safeArea.height * k)
+        ZStack(alignment: .topLeading) {
+            switch kind {
+            case .header: StoreHeaderLogoArt(size: size, safe: safe)
+            case .search: StoreSearchArt(size: size, safe: safe, images: images)
+            case .universal: StoreHeaderArt(size: size, safe: safe, images: images)
+            }
+            if UserDefaults.standard.bool(forKey: "BCWStoreAssetsGuides") { guides(safe: safe) }
+        }
+        .frame(width: size.width, height: size.height)
+        .clipped()
+    }
+
+    /// Zona sicura (verde) e, per l'asset universale, i ritagli 21:9 e 3:2 (blu).
+    @ViewBuilder private func guides(safe: CGRect) -> some View {
+        Rectangle().stroke(Color.green, lineWidth: 3)
+            .frame(width: safe.width, height: safe.height)
+            .offset(x: safe.minX, y: safe.minY)
+        if kind == .header {
+            // Circa ciò che si vede sull'iPhone in verticale (misurato su una pagina vera: 1,51:1).
+            let phone = CGSize(width: size.height * 1.51, height: size.height)
+            Rectangle().stroke(Color.blue, lineWidth: 3)
+                .frame(width: phone.width, height: phone.height)
+                .offset(x: (size.width - phone.width) / 2)
+        }
+        if kind == .universal {
+            let wide = CGSize(width: size.width, height: size.width * 9 / 21)
+            let photo = CGSize(width: size.height * 3 / 2, height: size.height)
+            Rectangle().stroke(Color.blue, lineWidth: 3)
+                .frame(width: wide.width, height: wide.height)
+                .offset(y: (size.height - wide.height) / 2)
+            Rectangle().stroke(Color.blue, lineWidth: 3)
+                .frame(width: photo.width, height: photo.height)
+                .offset(x: (size.width - photo.width) / 2)
+        }
+    }
+}
+
+/// Logo di BCW (scritta e barra) nei colori dati.
+struct StoreLogo: View {
+    let size: CGFloat
+    let ink: Color
+    let bar: Color
+
+    var body: some View {
+        VStack(spacing: size * 0.02) {
+            Text("BCW")
+                .font(.m3(size, weight: 800, rounded: true))
+                .tracking(-size * 0.01)
+                .foregroundStyle(ink)
+                .padding(.top, -size * 0.27)
+            Capsule(style: .continuous)
+                .fill(bar)
+                .frame(width: size * 1.1, height: size * 0.15)
+        }
+        .fixedSize()
+    }
+}
+
+/// Header della pagina (richiesta dell'utente, come quello di Duolingo): il colore di sfondo dell'icona e il
+/// logo grande al centro della zona sicura, senza altro.
+struct StoreHeaderLogoArt: View {
+    let size: CGSize
+    let safe: CGRect
+
+    /// Forme di Material attorno al logo: centro in frazioni della tela, lato in frazioni dell'altezza.
+    /// Quelle vicine al logo stanno nella parte che si vede sull'iPhone in verticale (dal 18% all'82%
+    /// della larghezza), le grandi ai bordi si vedono sugli schermi larghi; nessuna tocca la zona sicura.
+    private static let decor: [(MaterialShapeName, x: CGFloat, y: CGFloat, size: CGFloat, angle: Double, fill: StoreDecor.Fill)] = [
+        (.cookie12Sided, 0.03, 0.86, 0.9, 12, .soft),
+        (.flower, 0.985, 0.12, 0.8, -10, .soft),
+        (.verySunny, 0.095, 0.24, 0.48, 8, .container),
+        (.cookie4Sided, 0.86, 0.94, 0.4, 20, .soft),
+        (.puffy, 0.93, 0.62, 0.13, 0, .strong),
+        (.sunny, 0.215, 0.2, 0.25, -6, .container),
+        (.softBurst, 0.225, 0.8, 0.17, 10, .strong),
+        (.gem, 0.775, 0.22, 0.11, -14, .strong),
+        (.clover4Leaf, 0.785, 0.78, 0.16, 18, .container),
+    ]
+
+    var body: some View {
+        let icon = AppIconPalette.colors(for: .primary, mode: .light)
+        let tone = StoreTone.primary
+        ZStack(alignment: .topLeading) {
+            if case .solid(let background) = icon.background { background } else { Theme.primaryContainer }
+            ForEach(Self.decor.indices, id: \.self) { index in
+                let item = Self.decor[index]
+                MaterialShape(item.0)
+                    .fill(item.fill == .strong ? Theme.brand : tone.fill(item.fill))
+                    .frame(width: item.size * size.height, height: item.size * size.height)
+                    .rotationEffect(.degrees(item.angle))
+                    .position(x: item.x * size.width, y: item.y * size.height)
+            }
+            StoreBrandLogo(fitting: CGSize(width: safe.width * 0.94, height: safe.height * 0.96),
+                           text: icon.text, bar: icon.bar)
+                .position(x: safe.midX, y: safe.midY)
+        }
+        .frame(width: size.width, height: size.height)
+    }
+}
+
+/// Il logo dell'icona dell'app (stessi tracciati di `AppIconLogo`: scritta e barra), piatto, grande quanto
+/// entra nella misura data.
+struct StoreBrandLogo: View {
+    let fitting: CGSize
+    let text: Color
+    let bar: Color
+
+    var body: some View {
+        let shapes = AppIconLogo.shapes
+        let box = shapes.text.boundingBoxOfPath.union(shapes.bar)
+        let scale = min(fitting.width / box.width, fitting.height / box.height)
+        let transform = CGAffineTransform(scaleX: scale, y: scale).translatedBy(x: -box.minX, y: -box.minY)
+        let barRect = shapes.bar.applying(transform)
+        ZStack(alignment: .topLeading) {
+            Path(shapes.text.copy(using: [transform]) ?? shapes.text).fill(text)
+            Path(roundedRect: barRect, cornerRadius: barRect.height / 2, style: .continuous).fill(bar)
+        }
+        .frame(width: box.width * scale, height: box.height * scale)
+    }
+}
+
+/// Asset universale: al centro il logo e una frase su una grande forma, ai lati
+/// (fuori dalla zona sicura) due telefoni inclinati con i widget e altre forme.
+struct StoreHeaderArt: View {
+    let size: CGSize
+    let safe: CGRect
+    let images: StoreImages
+
+    var body: some View {
+        let colors = StoreTone.primary.colors
+        let h = safe.height
+        let phone = h * 0.95
+        let phoneHeight = StoreDevice<EmptyView>.height(model: .phone, width: phone)
+        let snapshot = StoreWidgets.snapshot
+        ZStack {
+            colors.background
+            // Forme dello sfondo, su tutta la tela.
+            MaterialShape(.sunny)
+                .fill(colors.container)
+                .frame(width: h * 1.3, height: h * 1.3)
+                .rotationEffect(.degrees(-10))
+                .position(x: size.width * 0.02, y: size.height * 0.92)
+            MaterialShape(.clover8Leaf)
+                .fill(colors.soft)
+                .frame(width: h * 1.5, height: h * 1.5)
+                .rotationEffect(.degrees(14))
+                .position(x: size.width * 0.99, y: size.height * 0.1)
+            MaterialShape(.flower)
+                .fill(colors.soft)
+                .frame(width: h * 0.9, height: h * 0.9)
+                .position(x: size.width * 0.1, y: size.height * 0.08)
+            MaterialShape(.cookie9Sided)
+                .fill(colors.container)
+                .frame(width: h * 0.7, height: h * 0.7)
+                .rotationEffect(.degrees(20))
+                .position(x: size.width * 0.95, y: size.height * 0.95)
+            // Al centro: grande forma, logo e frase.
+            MaterialShape(.cookie12Sided)
+                .fill(colors.soft)
+                .frame(width: h * 1.75, height: h * 1.75)
+                .rotationEffect(.degrees(8))
+                .position(x: safe.midX, y: safe.midY)
+            MaterialShape(.gem)
+                .fill(colors.strong)
+                .frame(width: h * 0.14, height: h * 0.14)
+                .rotationEffect(.degrees(-12))
+                .position(x: safe.midX + h * 0.78, y: safe.midY - h * 0.5)
+            MaterialShape(.clover4Leaf)
+                .fill(Theme.tertiary)
+                .frame(width: h * 0.11, height: h * 0.11)
+                .rotationEffect(.degrees(15))
+                .position(x: safe.midX - h * 0.8, y: safe.midY + h * 0.46)
+            VStack(spacing: h * 0.08) {
+                StoreLogo(size: h * 0.3, ink: colors.ink, bar: Theme.brand)
+                Text("Il tuo registro,\nfinalmente bello")
+                    .font(.m3(h * 0.15, weight: 720, rounded: true))
+                    .tracking(-h * 0.002)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(colors.ink)
+                    .fixedSize()
+            }
+            .position(x: safe.midX, y: safe.midY)
+            // Ai lati: Voti e Orario, con i widget.
+            StoreDevice(model: .phone, width: phone, shadow: colors.ink) {
+                Image(uiImage: images.image("grades")).resizable().interpolation(.high)
+            }
+            .rotationEffect(.degrees(-12))
+            .position(x: safe.minX - phone * 0.95, y: safe.midY + phoneHeight * 0.3)
+            StoreDevice(model: .phone, width: phone, shadow: colors.ink) {
+                Image(uiImage: images.image("timetable")).resizable().interpolation(.high)
+            }
+            .rotationEffect(.degrees(12))
+            .position(x: safe.maxX + phone * 0.95, y: safe.midY + phoneHeight * 0.3)
+            StoreWidgets.widget(.average, .systemSmall, snapshot: snapshot)
+                .scaleEffect(h / 430)
+                .shadow(color: colors.ink.opacity(0.25), radius: h * 0.04, y: h * 0.02)
+                .rotationEffect(.degrees(-6))
+                .position(x: safe.minX - phone * 0.32, y: safe.midY + h * 0.36)
+            StoreWidgets.widget(.now, .systemSmall, snapshot: snapshot)
+                .scaleEffect(h / 430)
+                .shadow(color: colors.ink.opacity(0.25), radius: h * 0.04, y: h * 0.02)
+                .rotationEffect(.degrees(6))
+                .position(x: safe.maxX + phone * 0.32, y: safe.midY + h * 0.36)
+        }
+        .frame(width: size.width, height: size.height)
+    }
+}
+
+/// Risultati della ricerca: lo scopo dell'app a colpo d'occhio, cioè una frase breve e l'interfaccia
+/// (Dashboard davanti, Orario dietro, la media in un widget), su uno sfondo vivace.
+struct StoreSearchArt: View {
+    let size: CGSize
+    let safe: CGRect
+    let images: StoreImages
+
+    var body: some View {
+        let colors = StoreTone.vivid.colors
+        let h = safe.height
+        let phone = h * 0.66
+        let phoneHeight = StoreDevice<EmptyView>.height(model: .phone, width: phone)
+        let front = CGPoint(x: safe.maxX - phone * 0.5, y: safe.minY - h * 0.06 + phoneHeight / 2)
+        ZStack {
+            colors.background
+            MaterialShape(.cookie12Sided)
+                .fill(colors.soft)
+                .frame(width: h * 1.6, height: h * 1.6)
+                .rotationEffect(.degrees(6))
+                .position(x: front.x + phone * 0.3, y: safe.midY + h * 0.1)
+            MaterialShape(.sunny)
+                .fill(colors.soft)
+                .frame(width: h * 1.1, height: h * 1.1)
+                .position(x: size.width * 0.04, y: size.height * 0.95)
+            MaterialShape(.flower)
+                .fill(colors.container)
+                .frame(width: h * 0.6, height: h * 0.6)
+                .rotationEffect(.degrees(12))
+                .position(x: size.width * 0.06, y: size.height * 0.1)
+            MaterialShape(.clover4Leaf)
+                .fill(Theme.tertiaryContainer)
+                .frame(width: h * 0.13, height: h * 0.13)
+                .rotationEffect(.degrees(15))
+                .position(x: safe.minX - h * 0.02, y: safe.minY - h * 0.1)
+            VStack(alignment: .leading, spacing: h * 0.06) {
+                Text("Voti, compiti\ne orario")
+                    .font(.m3(h * 0.2, weight: 780, rounded: true))
+                    .tracking(-h * 0.003)
+                    .lineSpacing(-h * 0.02)
+                    .foregroundStyle(colors.ink)
+                Text("Il registro elettronico, ridisegnato")
+                    .font(.m3(h * 0.075, weight: 550))
+                    .foregroundStyle(colors.ink.opacity(0.88))
+            }
+            .fixedSize()
+            .frame(width: safe.width * 0.6, alignment: .leading)
+            .position(x: safe.minX + safe.width * 0.33, y: safe.midY + h * 0.03)
+            StoreDevice(model: .phone, width: phone, shadow: .black) {
+                Image(uiImage: images.image("timetable")).resizable().interpolation(.high)
+            }
+            .rotationEffect(.degrees(9))
+            .position(x: front.x + phone * 0.62, y: front.y + h * 0.08)
+            StoreDevice(model: .phone, width: phone, shadow: .black) {
+                Image(uiImage: images.image("dashboard")).resizable().interpolation(.high)
+            }
+            .position(front)
+            StoreWidgets.widget(.average, .systemSmall, snapshot: StoreWidgets.snapshot)
+                .scaleEffect(h / 600)
+                .shadow(color: .black.opacity(0.3), radius: h * 0.04, y: h * 0.02)
+                .rotationEffect(.degrees(7))
+                .position(x: front.x + phone * 1.15, y: safe.maxY + h * 0.05)
+        }
+        .frame(width: size.width, height: size.height)
     }
 }
 
