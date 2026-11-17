@@ -139,7 +139,7 @@ struct ActivityPhaseText {
 
     /// Con un'ora o più alla fine della fase, al posto del conto alla rovescia l'ora d'arrivo
     /// ("alle 08:00", "fino alle 10:00"): "2:10:--" toglieva spazio all'aula e al docente.
-    func longWait(now: Date = Date()) -> (label: String, time: String)? {
+    func longWait(now: Date = FrozenClock.now) -> (label: String, time: String)? {
         guard phase.kind != .finished, phase.countdownEnd.timeIntervalSince(now) >= 3600 else { return nil }
         return (phase.kind == .before ? "alle" : "fino alle", time(phase.countdownEnd))
     }
@@ -222,7 +222,7 @@ struct ActivityTimer: View {
     var alignment: Alignment = .trailing
 
     var body: some View {
-        let now = Date()
+        let now = FrozenClock.now
         let end = phase.countdownEnd
         // Prima dell'inizio della fase (avvio a mano molto presto) conta comunque fino alla fine.
         let interval = min(now, phase.start)...max(now, end)
@@ -232,7 +232,7 @@ struct ActivityTimer: View {
             .lineLimit(1)
             .hidden()
             .overlay(alignment: alignment) {
-                Text(timerInterval: interval, countsDown: true)
+                Text.timer(interval)
                     .font(font)
                     .foregroundStyle(color)
                     .multilineTextAlignment(alignment == .leading ? .leading : alignment == .center ? .center : .trailing)
@@ -294,7 +294,20 @@ struct ActivityIslandTimer: View {
     private var source: TimeDataSource<Duration> { .durationOffset(to: phase.countdownEnd) }
 
     var body: some View {
-        let remaining = phase.countdownEnd.timeIntervalSince(Date())
+        #if DEBUG
+        if FrozenClock.date != nil {
+            // Immagini dell'App Store: tempo fermo (i formati di sistema seguono l'ora vera).
+            ActivityTimer(phase: phase, font: font, color: color, alignment: .center)
+        } else {
+            live
+        }
+        #else
+        live
+        #endif
+    }
+
+    @ViewBuilder private var live: some View {
+        let remaining = phase.countdownEnd.timeIntervalSince(FrozenClock.now)
         Group {
             if isStale || remaining <= 0 {
                 // Non arriverà più nulla: deve fermarsi a zero.
@@ -415,11 +428,7 @@ struct ActivityProgressRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(WidgetDates.time(phase.start))
-            ProgressView(timerInterval: phase.interval, countsDown: false) {
-                EmptyView()
-            } currentValueLabel: {
-                EmptyView()
-            }
+            TimerProgress(phase.interval, countsDown: false)
             .progressViewStyle(.linear)
             .tint(palette.accent(phase))
             Text(WidgetDates.time(phase.end))
@@ -597,9 +606,7 @@ struct TimetableActivityIsland {
                 WidgetIcon("checkCircleFill", size: 18)
                     .foregroundStyle(accent)
             } else {
-                ProgressView(timerInterval: phase.interval, countsDown: false) {
-                    EmptyView()
-                } currentValueLabel: {
+                TimerProgress(phase.interval, countsDown: false) {
                     minimalLabel(phase)
                 }
                 .progressViewStyle(.circular)

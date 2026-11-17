@@ -104,17 +104,13 @@ private struct NowSmallView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("ancora")
                         .font(palette.font(11.5, weight: 500))
-                    Text(timerInterval: interval, countsDown: true)
+                    Text.timer(interval)
                         .font(palette.timer(15, weight: 700))
                         .contentTransition(.numericText(countsDown: true))
                 }
                 .foregroundStyle(ink)
                 .lineLimit(1)
-                ProgressView(timerInterval: interval, countsDown: false) {
-                    EmptyView()
-                } currentValueLabel: {
-                    EmptyView()
-                }
+                TimerProgress(interval, countsDown: false)
                 .progressViewStyle(.linear)
                 .tint(palette.isFullColor ? ink : palette.accent)
                 .widgetAccentable()
@@ -123,7 +119,7 @@ private struct NowSmallView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("tra")
                         .font(palette.font(11.5, weight: 500))
-                    Text(timerInterval: day.now...max(day.now, interval.lowerBound), countsDown: true)
+                    Text.timer(day.now...max(day.now, interval.lowerBound))
                         .font(palette.timer(15, weight: 700))
                 }
                 .foregroundStyle(ink)
@@ -186,11 +182,7 @@ private struct NowRectangularView: View {
                      : "\(current.room) · fino alle \(TimeOfDay.string(current.end))")
                     .font(palette.font(13))
                     .lineLimit(1)
-                ProgressView(timerInterval: day.interval(current), countsDown: false) {
-                    EmptyView()
-                } currentValueLabel: {
-                    EmptyView()
-                }
+                TimerProgress(day.interval(current), countsDown: false)
                 .progressViewStyle(.linear)
                 .widgetAccentable()
                 .padding(.top, 3)
@@ -236,9 +228,7 @@ private struct NowCircularView: View {
 
     var body: some View {
         if let current = day.current, snapshot.signedIn {
-            ProgressView(timerInterval: day.interval(current), countsDown: true) {
-                EmptyView()
-            } currentValueLabel: {
+            TimerProgress(day.interval(current), countsDown: true) {
                 Text(Self.abbreviation(current.title))
                     .font(palette.font(14, weight: 750, rounded: true))
             }

@@ -60,7 +60,7 @@ nonisolated struct TimetableActivityState: Codable, Hashable, Sendable {
     /// scaduto (iOS lo segna scaduto non prima di 120 s dall'ultimo aggiornamento: un disegno più tardi
     /// del previsto mostrava la fase già finita, con "0:00"). Scaduto il contenuto, almeno la seconda
     /// (iOS può disegnare un attimo prima del suo inizio).
-    func phase(isStale: Bool, now: Date = Date()) -> TimetableActivityPhase? {
+    func phase(isStale: Bool, now: Date = FrozenClock.now) -> TimetableActivityPhase? {
         guard !phases.isEmpty else { return nil }
         let current = phases.indices.last { phases[$0].start <= now } ?? 0
         return phases[isStale ? max(current, min(1, phases.count - 1)) : current]
