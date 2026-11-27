@@ -27,7 +27,7 @@
 
 ## Installazione
 
-Finché l'app non sarà disponibile su App Store, consiglio di usare [AltStore](https://altstore.io/) per firmare l'IPA.
+Puoi installare BCW direttamente dall'[App Store](https://apps.apple.com/us/app/bcw-better-classeviva/id6835258008)!
 
 Altrimenti, puoi compilarla in Xcode:
 
@@ -52,6 +52,10 @@ Dalla stessa base di codice escono due build:
 
 In tutte e due, dopo un aggiornamento l'app mostra le note della release di quella versione (mai alla prima apertura).
 Per provare l'acquisto in Xcode si usa lo schema `BCW App Store`, che carica `Config/BCW.storekit`.
+
+### Altre piattaforme
+
+Per istruzioni su come installare BCW per altre piattaforme, controlla i rispettivi repository menzionati all'inizio del README.
 
 ---
 
