@@ -45,7 +45,7 @@ final class PlusStore {
     static let shared = PlusStore()
 
     /// Identificativo del prodotto in App Store Connect (non consumabile).
-    static let productID = "com.bcw-classeviva.app.plus"
+    static let productID = "com.bcw_classeviva.app.plus"
     /// Prezzo mostrato finché l'App Store non risponde (quello di listino in Italia).
     static let fallbackPrice = "2,99\u{00A0}€"
     private static let purchasedKey = "plusPurchased"
